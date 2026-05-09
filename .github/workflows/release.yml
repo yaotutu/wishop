@@ -37,33 +37,20 @@ jobs:
 
       - run: npm run build
 
-      - name: Build Electron app (Linux)
+      - name: Build & Publish (Linux)
         if: matrix.platform == 'linux'
-        run: npx electron-builder --linux
+        run: npx electron-builder --linux --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Electron app (macOS)
+      - name: Build & Publish (macOS)
         if: matrix.platform == 'mac'
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Electron app (Windows)
+      - name: Build & Publish (Windows)
         if: matrix.platform == 'win'
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: wishop-${{ matrix.platform }}
-          path: release/**/*
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/**/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
