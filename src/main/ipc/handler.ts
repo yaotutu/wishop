@@ -21,6 +21,9 @@ import {
 import { startScheduler, stopScheduler } from '../scheduler/listing-scheduler';
 import { Config, SchedulerConfig, LogEntry } from '../store';
 
+let draftsNextKey = '';
+let draftsHasMore = true;
+
 export function registerHandlers(): void {
   ipcMain.handle('config:get', (): Config => {
     return getConfig();
@@ -37,34 +40,48 @@ export function registerHandlers(): void {
     }
   });
 
-  ipcMain.handle('drafts:fetch', async (_, editStatus: number | null): Promise<DraftProduct[]> => {
-    console.log('[Drafts] 开始获取草稿箱, 筛选editStatus:', editStatus);
+  ipcMain.handle('drafts:fetch', async (_, reset?: boolean): Promise<{ products: DraftProduct[]; hasMore: boolean }> => {
+    if (reset) {
+      draftsNextKey = '';
+      draftsHasMore = true;
+    }
+
+    if (!draftsHasMore) {
+      return { products: [], hasMore: false };
+    }
+
+    const need = 10;
+    console.log('[Drafts] 获取未上架商品, 续取:', !reset);
 
     const products: DraftProduct[] = [];
-    let nextKey = '';
-    const maxProducts = 10;
+    let nextKey = draftsNextKey;
 
-    while (products.length < maxProducts) {
-      const result = await getDraftProducts(10, nextKey);
+    while (products.length < need) {
+      const result = await getDraftProducts(30, nextKey);
       console.log('[Drafts] 获取到商品IDs:', result.productIds.length, '个');
 
       for (const productId of result.productIds) {
-        if (products.length >= maxProducts) break;
+        if (products.length >= need) break;
         try {
           const detail = await getProductDetail(productId);
-          console.log('[Drafts] 商品:', productId, 'status:', detail.status, 'editStatus:', detail.editStatus);
-          products.push(detail);
+          if (detail.editStatus === 72) {
+            products.push(detail);
+          }
         } catch (error) {
           console.error(`获取商品 ${productId} 详情失败:`, error);
         }
       }
 
       nextKey = result.nextKey;
-      if (!result.hasMore || !nextKey) break;
+      if (!result.hasMore || !nextKey) {
+        draftsHasMore = false;
+        break;
+      }
     }
 
-    console.log('[Drafts] 返回商品:', products.length, '个');
-    return products;
+    draftsNextKey = nextKey;
+    console.log('[Drafts] 返回商品:', products.length, '个, 还有更多:', draftsHasMore);
+    return { products, hasMore: draftsHasMore };
   });
 
   ipcMain.handle('drafts:list', async (_, productId: string): Promise<{ success: boolean; error?: string }> => {

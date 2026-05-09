@@ -46,7 +46,11 @@ const store = new Store<StoreSchema>({
 });
 
 export function getConfig(): Config {
-  return store.get('config');
+  const config = store.get('config');
+  return {
+    appId: config.appId || process.env.WECHAT_APP_ID || '',
+    appSecret: config.appSecret || process.env.WECHAT_APP_SECRET || '',
+  };
 }
 
 export function setConfig(config: Config): void {

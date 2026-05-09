@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Layout as AntLayout, Menu } from 'antd';
 import Listing from '../pages/Listing';
+import Logs from '../pages/Logs';
 import Orders from '../pages/Orders';
 import Settings from '../pages/Settings';
 
 const { Sider, Content } = AntLayout;
 
-type PageType = 'listing' | 'orders' | 'settings';
+type PageType = 'listing' | 'logs' | 'orders' | 'settings';
 
 const Layout: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageType>('listing');
@@ -15,6 +16,8 @@ const Layout: React.FC = () => {
     switch (currentPage) {
       case 'listing':
         return <Listing />;
+      case 'logs':
+        return <Logs />;
       case 'orders':
         return <Orders />;
       case 'settings':
@@ -45,13 +48,14 @@ const Layout: React.FC = () => {
           onClick={({ key }) => setCurrentPage(key as PageType)}
           items={[
             { key: 'listing', label: '上架' },
+            { key: 'logs', label: '上架记录' },
             { key: 'orders', label: '订单管理' },
             { key: 'settings', label: '设置' },
           ]}
         />
       </Sider>
       <AntLayout>
-        <Content style={{ padding: 24, overflow: 'auto' }}>
+        <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {renderPage()}
         </Content>
       </AntLayout>

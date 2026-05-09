@@ -1,8 +1,11 @@
+import dotenv from 'dotenv';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
 import { startScheduler, stopScheduler } from './scheduler/listing-scheduler';
 import { cleanOldLogs, getScheduler } from './store';
+
+dotenv.config();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -18,6 +21,8 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
+
+  mainWindow.maximize();
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173');

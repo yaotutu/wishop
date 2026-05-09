@@ -132,13 +132,19 @@ export function useQuota() {
 
 export function useDrafts() {
   const [drafts, setDrafts] = useState<DraftProduct[]>([]);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const fetchDrafts = useCallback(async (editStatus: number | null = null) => {
+  const fetchDrafts = useCallback(async (reset = true) => {
     setLoading(true);
     try {
-      const data = await window.electronAPI.drafts.fetch(editStatus);
-      setDrafts(data);
+      const { products, hasMore: more } = await window.electronAPI.drafts.fetch(reset);
+      if (reset) {
+        setDrafts(products);
+      } else {
+        setDrafts(prev => [...prev, ...products]);
+      }
+      setHasMore(more);
     } finally {
       setLoading(false);
     }
@@ -148,5 +154,5 @@ export function useDrafts() {
     return window.electronAPI.drafts.list(productId);
   }, []);
 
-  return { drafts, loading, fetchDrafts, listProduct };
+  return { drafts, hasMore, loading, fetchDrafts, listProduct };
 }
