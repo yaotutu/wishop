@@ -66,7 +66,6 @@ export async function getDraftProducts(pageSize = 30, nextKey = ''): Promise<Pro
   });
 
   const data = response.data;
-  console.log('[WeChat API] getDraftProducts 响应:', JSON.stringify(data).substring(0, 500));
 
   if (data.errcode && data.errcode !== 0) {
     throw new Error(data.errmsg || `获取草稿列表失败: ${data.errcode}`);
@@ -107,7 +106,6 @@ export async function getProductDetail(productId: string): Promise<DraftProduct>
   });
 
   const data = response.data;
-  console.log('[WeChat API] getProductDetail', productId, '响应:', JSON.stringify(data).substring(0, 500));
 
   if (data.errcode && data.errcode !== 0) {
     throw new Error(data.errmsg || `获取商品详情失败: ${data.errcode}`);
@@ -118,8 +116,6 @@ export async function getProductDetail(productId: string): Promise<DraftProduct>
   if (!product) {
     throw new Error(`商品 ${productId} 详情为空`);
   }
-
-  console.log('[WeChat API] 商品', productId, 'edit_status:', product.edit_status);
 
   return {
     productId: product.product_id,
@@ -171,6 +167,13 @@ export async function getAuditQuota(): Promise<QuotaResult> {
     quota: data.audit_quota.avail_quota,
     total: data.audit_quota.total_quota,
   };
+}
+
+export async function deleteProduct(productId: string): Promise<ListingResult> {
+  const token = await getAccessToken();
+  const url = `${BASE_URL}/channels/ec/product/delete?access_token=${token}`;
+  const response = await axios.post(url, { product_id: productId });
+  return response.data;
 }
 
 export function clearTokenCache(): void {

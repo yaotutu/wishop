@@ -36,6 +36,23 @@ export interface QuotaResult {
   total: number;
 }
 
+export interface TaskConfig {
+  deleteFailed: boolean;
+  listUnreviewed: boolean;
+  deleteFailedQuantity: number;
+  listUnreviewedQuantity: number;
+}
+
+export interface TaskCycleResult {
+  scanned: number;
+  deleted: number;
+  listed: number;
+  errors: number;
+  skipped: number;
+  stopped: boolean;
+  reason?: string;
+}
+
 export function useConfig() {
   const [config, setConfig] = useState<Config>({ appId: '', appSecret: '' });
   const [loading, setLoading] = useState(false);
@@ -155,4 +172,35 @@ export function useDrafts() {
   }, []);
 
   return { drafts, hasMore, loading, fetchDrafts, listProduct };
+}
+
+export function useTaskConfig() {
+  const [taskConfig, setTaskConfigState] = useState<TaskConfig>({
+    deleteFailed: false,
+    listUnreviewed: true,
+    deleteFailedQuantity: 2,
+    listUnreviewedQuantity: 2,
+  });
+  const [loading, setLoading] = useState(false);
+
+  const fetchTaskConfig = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await window.electronAPI.taskConfig.get();
+      setTaskConfigState(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const saveTaskConfig = useCallback(async (config: TaskConfig) => {
+    await window.electronAPI.taskConfig.set(config);
+    setTaskConfigState(config);
+  }, []);
+
+  const runTask = useCallback(async (config: TaskConfig): Promise<TaskCycleResult> => {
+    return window.electronAPI.task.run(config);
+  }, []);
+
+  return { taskConfig, loading, fetchTaskConfig, saveTaskConfig, runTask };
 }

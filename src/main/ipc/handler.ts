@@ -2,13 +2,17 @@ import { ipcMain } from 'electron';
 import {
   getConfig,
   setConfig,
-} from '../store';
-import {
   getScheduler,
   setScheduler,
+  getTaskConfig,
+  setTaskConfig,
   getLogs,
   clearLogs,
   addLog,
+  Config,
+  SchedulerConfig,
+  TaskConfig,
+  LogEntry,
 } from '../store';
 import {
   getDraftProducts,
@@ -19,7 +23,7 @@ import {
   DraftProduct,
 } from './wechat-api';
 import { startScheduler, stopScheduler } from '../scheduler/listing-scheduler';
-import { Config, SchedulerConfig, LogEntry } from '../store';
+import { runTaskCycle, TaskCycleResult } from '../modules/task-cycle';
 
 let draftsNextKey = '';
 let draftsHasMore = true;
@@ -31,7 +35,6 @@ export function registerHandlers(): void {
 
   ipcMain.handle('config:set', async (_, config: Config): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 先验证 credentials，获取 token
       await getAccessToken();
       setConfig(config);
       return { success: true };
@@ -51,14 +54,11 @@ export function registerHandlers(): void {
     }
 
     const need = 10;
-    console.log('[Drafts] 获取未上架商品, 续取:', !reset);
-
     const products: DraftProduct[] = [];
     let nextKey = draftsNextKey;
 
     while (products.length < need) {
       const result = await getDraftProducts(30, nextKey);
-      console.log('[Drafts] 获取到商品IDs:', result.productIds.length, '个');
 
       for (const productId of result.productIds) {
         if (products.length >= need) break;
@@ -68,7 +68,7 @@ export function registerHandlers(): void {
             products.push(detail);
           }
         } catch (error) {
-          console.error(`获取商品 ${productId} 详情失败:`, error);
+          console.error(`[Drafts] 获取商品 ${productId} 详情失败:`, error);
         }
       }
 
@@ -80,7 +80,6 @@ export function registerHandlers(): void {
     }
 
     draftsNextKey = nextKey;
-    console.log('[Drafts] 返回商品:', products.length, '个, 还有更多:', draftsHasMore);
     return { products, hasMore: draftsHasMore };
   });
 
@@ -88,29 +87,14 @@ export function registerHandlers(): void {
     try {
       const result = await listProduct(productId);
       if (result.errcode === 0) {
-        addLog({
-          productId,
-          productTitle: '',
-          status: 'success',
-        });
+        addLog({ productId, productTitle: '', status: 'success' });
         return { success: true };
       } else {
-        addLog({
-          productId,
-          productTitle: '',
-          status: 'failed',
-          errorCode: result.errcode,
-          errorMsg: result.errmsg,
-        });
+        addLog({ productId, productTitle: '', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
         return { success: false, error: result.errmsg };
       }
     } catch (error: any) {
-      addLog({
-        productId,
-        productTitle: '',
-        status: 'failed',
-        errorMsg: error.message,
-      });
+      addLog({ productId, productTitle: '', status: 'failed', errorMsg: error.message });
       return { success: false, error: error.message };
     }
   });
@@ -146,5 +130,17 @@ export function registerHandlers(): void {
 
   ipcMain.handle('scheduler:stop', (): void => {
     stopScheduler();
+  });
+
+  ipcMain.handle('taskConfig:get', (): TaskConfig => {
+    return getTaskConfig();
+  });
+
+  ipcMain.handle('taskConfig:set', (_, config: TaskConfig): void => {
+    setTaskConfig(config);
+  });
+
+  ipcMain.handle('task:run', async (_, config: TaskConfig): Promise<TaskCycleResult> => {
+    return runTaskCycle(config);
   });
 }

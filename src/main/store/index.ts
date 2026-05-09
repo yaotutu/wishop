@@ -23,9 +23,17 @@ export interface LogEntry {
   errorMsg?: string;
 }
 
+export interface TaskConfig {
+  deleteFailed: boolean;
+  listUnreviewed: boolean;
+  deleteFailedQuantity: number;
+  listUnreviewedQuantity: number;
+}
+
 export interface StoreSchema {
   config: Config;
   scheduler: SchedulerConfig;
+  taskConfig: TaskConfig;
   logs: LogEntry[];
 }
 
@@ -41,6 +49,7 @@ const store = new Store<StoreSchema>({
   defaults: {
     config: { appId: '', appSecret: '' },
     scheduler: defaultScheduler,
+    taskConfig: { deleteFailed: false, listUnreviewed: true, deleteFailedQuantity: 2, listUnreviewedQuantity: 2 },
     logs: [],
   },
 });
@@ -63,6 +72,14 @@ export function getScheduler(): SchedulerConfig {
 
 export function setScheduler(scheduler: SchedulerConfig): void {
   store.set('scheduler', scheduler);
+}
+
+export function getTaskConfig(): TaskConfig {
+  return store.get('taskConfig');
+}
+
+export function setTaskConfig(taskConfig: TaskConfig): void {
+  store.set('taskConfig', taskConfig);
 }
 
 export function getLogs(): LogEntry[] {

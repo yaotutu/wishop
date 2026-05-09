@@ -36,6 +36,13 @@ export interface QuotaResult {
   total: number;
 }
 
+export interface TaskConfig {
+  deleteFailed: boolean;
+  listUnreviewed: boolean;
+  deleteFailedQuantity: number;
+  listUnreviewedQuantity: number;
+}
+
 const electronAPI = {
   config: {
     get: (): Promise<Config> => ipcRenderer.invoke('config:get'),
@@ -59,6 +66,13 @@ const electronAPI = {
     set: (config: SchedulerConfig): Promise<void> => ipcRenderer.invoke('scheduler:set', config),
     start: (): Promise<void> => ipcRenderer.invoke('scheduler:start'),
     stop: (): Promise<void> => ipcRenderer.invoke('scheduler:stop'),
+  },
+  taskConfig: {
+    get: (): Promise<TaskConfig> => ipcRenderer.invoke('taskConfig:get'),
+    set: (config: TaskConfig): Promise<void> => ipcRenderer.invoke('taskConfig:set', config),
+  },
+  task: {
+    run: (config: TaskConfig): Promise<any> => ipcRenderer.invoke('task:run', config),
   },
 };
 

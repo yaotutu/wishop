@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Input, Switch, Button, Space, InputNumber, message, Tabs } from 'antd';
-import { useConfig, useScheduler } from '../hooks/useIpc';
+import { Card, Form, Input, Switch, Button, Space, InputNumber, message, Tabs, Checkbox } from 'antd';
+import { useConfig, useScheduler, useTaskConfig } from '../hooks/useIpc';
 
 const Settings: React.FC = () => {
   const { config, loading: configLoading, fetchConfig, saveConfig } = useConfig();
   const { scheduler, loading: schedulerLoading, fetchScheduler, saveScheduler } = useScheduler();
+  const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig();
   const [configForm] = Form.useForm();
   const [schedulerForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -12,7 +13,8 @@ const Settings: React.FC = () => {
   useEffect(() => {
     fetchConfig();
     fetchScheduler();
-  }, [fetchConfig, fetchScheduler]);
+    fetchTaskConfig();
+  }, [fetchConfig, fetchScheduler, fetchTaskConfig]);
 
   useEffect(() => {
     if (config) configForm.setFieldsValue(config);
@@ -56,6 +58,16 @@ const Settings: React.FC = () => {
     }
   };
 
+  const handleTaskConfigSave = async () => {
+    setSaving(true);
+    try {
+      await saveTaskConfig(taskConfig);
+      message.success('任务配置已保存');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabItems = [
     {
       key: 'api',
@@ -88,35 +100,54 @@ const Settings: React.FC = () => {
       key: 'scheduler',
       label: '定时任务',
       children: (
-        <Form form={schedulerForm} layout="vertical" style={{ maxWidth: 400 }}>
-          <Form.Item
-            name="enabled"
-            label="启用定时上架"
-            valuePropName="checked"
-          >
-            <Switch />
-          </Form.Item>
-          <Form.Item
-            name="cronExpression"
-            label="执行时间 (Cron 表达式)"
-            rules={[{ required: true, message: '请输入 Cron 表达式' }]}
-            extra="例如: 0 9 * * * 表示每天 9:00 执行"
-          >
-            <Input placeholder="0 9 * * *" />
-          </Form.Item>
-          <Form.Item
-            name="dailyLimit"
-            label="每日上架上限"
-            rules={[{ required: true, message: '请输入每日上限' }]}
-          >
-            <InputNumber min={1} max={1000} style={{ width: 200 }} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" onClick={handleSchedulerSave} loading={saving}>
-              保存设置
-            </Button>
-          </Form.Item>
-        </Form>
+        <>
+          <Form form={schedulerForm} layout="vertical" style={{ maxWidth: 400 }}>
+            <Form.Item
+              name="enabled"
+              label="启用定时任务"
+              valuePropName="checked"
+            >
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="cronExpression"
+              label="执行时间 (Cron 表达式)"
+              rules={[{ required: true, message: '请输入 Cron 表达式' }]}
+              extra="例如: 0 9 * * * 表示每天 9:00 执行"
+            >
+              <Input placeholder="0 9 * * *" />
+            </Form.Item>
+            <Form.Item
+              name="dailyLimit"
+              label="每日上限"
+              rules={[{ required: true, message: '请输入每日上限' }]}
+            >
+              <InputNumber min={1} max={1000} style={{ width: 200 }} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" onClick={handleSchedulerSave} loading={saving}>
+                保存设置
+              </Button>
+            </Form.Item>
+          </Form>
+          <div style={{ maxWidth: 400, marginTop: 24, padding: 16, background: '#fafafa', borderRadius: 8 }}>
+            <div style={{ marginBottom: 12, fontWeight: 500 }}>任务配置</div>
+            <Space direction="vertical">
+              <Checkbox
+                checked={taskConfig.deleteFailed}
+                onChange={e => saveTaskConfig({ ...taskConfig, deleteFailed: e.target.checked })}
+              >
+                自动删除审核失败商品
+              </Checkbox>
+              <Checkbox
+                checked={taskConfig.listUnreviewed}
+                onChange={e => saveTaskConfig({ ...taskConfig, listUnreviewed: e.target.checked })}
+              >
+                自动提交未审核商品
+              </Checkbox>
+            </Space>
+          </div>
+        </>
       ),
     },
   ];
