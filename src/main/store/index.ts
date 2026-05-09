@@ -1,4 +1,7 @@
 import Store from 'electron-store';
+import { EventEmitter } from 'events';
+
+export const logEmitter = new EventEmitter();
 
 export interface Config {
   appId: string;
@@ -16,8 +19,10 @@ export interface SchedulerConfig {
 export interface LogEntry {
   id: string;
   timestamp: number;
+  runId: string;
   productId: string;
   productTitle: string;
+  action: 'list' | 'delete' | 'check';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
@@ -26,7 +31,6 @@ export interface LogEntry {
 export interface TaskConfig {
   deleteFailed: boolean;
   listUnreviewed: boolean;
-  deleteFailedQuantity: number;
   listUnreviewedQuantity: number;
 }
 
@@ -49,7 +53,7 @@ const store = new Store<StoreSchema>({
   defaults: {
     config: { appId: '', appSecret: '' },
     scheduler: defaultScheduler,
-    taskConfig: { deleteFailed: false, listUnreviewed: true, deleteFailedQuantity: 2, listUnreviewedQuantity: 2 },
+    taskConfig: { deleteFailed: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
     logs: [],
   },
 });
@@ -88,14 +92,19 @@ export function getLogs(): LogEntry[] {
   return logs.filter(log => log.timestamp > sevenDaysAgo);
 }
 
+let logCounter = 0;
+
 export function addLog(log: Omit<LogEntry, 'id' | 'timestamp'>): void {
-  const logs = getLogs();
-  logs.push({
+  logCounter++;
+  const entry: LogEntry = {
     ...log,
-    id: Date.now().toString(),
+    id: `${Date.now()}-${logCounter}`,
     timestamp: Date.now(),
-  });
+  };
+  const logs = getLogs();
+  logs.push(entry);
   store.set('logs', logs);
+  logEmitter.emit('log-added', entry);
 }
 
 export function clearLogs(): void {

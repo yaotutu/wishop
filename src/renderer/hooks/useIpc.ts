@@ -16,8 +16,10 @@ export interface SchedulerConfig {
 export interface LogEntry {
   id: string;
   timestamp: number;
+  runId: string;
   productId: string;
   productTitle: string;
+  action: 'list' | 'delete' | 'check';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
@@ -39,7 +41,6 @@ export interface QuotaResult {
 export interface TaskConfig {
   deleteFailed: boolean;
   listUnreviewed: boolean;
-  deleteFailedQuantity: number;
   listUnreviewedQuantity: number;
 }
 
@@ -178,7 +179,6 @@ export function useTaskConfig() {
   const [taskConfig, setTaskConfigState] = useState<TaskConfig>({
     deleteFailed: false,
     listUnreviewed: true,
-    deleteFailedQuantity: 2,
     listUnreviewedQuantity: 2,
   });
   const [loading, setLoading] = useState(false);

@@ -5,7 +5,6 @@ import { listOne } from './list-unreviewed-products';
 export interface TaskConfig {
   deleteFailed: boolean;
   listUnreviewed: boolean;
-  deleteFailedQuantity: number;
   listUnreviewedQuantity: number;
 }
 
@@ -19,36 +18,40 @@ export interface TaskCycleResult {
   reason?: string;
 }
 
-export async function runTaskCycle(config: TaskConfig): Promise<TaskCycleResult> {
-  console.log(`[TaskCycle] 开始: 删除失败=${config.deleteFailed}(${config.deleteFailedQuantity}), 提交未审核=${config.listUnreviewed}(${config.listUnreviewedQuantity})`);
+export async function runTaskCycle(config: TaskConfig, runId: string): Promise<TaskCycleResult> {
+  console.log(`[TaskCycle] 开始 (runId=${runId}): 删除失败=${config.deleteFailed}, 提交未审核=${config.listUnreviewed}(${config.listUnreviewedQuantity})`);
 
   const result: TaskCycleResult = { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: false };
-  let deleteCount = 0;
   let listCount = 0;
-  const deleteDone = () => !config.deleteFailed || deleteCount >= config.deleteFailedQuantity;
+  let consecutiveMiss = 0;
   const listDone = () => !config.listUnreviewed || listCount >= config.listUnreviewedQuantity;
-  const allDone = () => deleteDone() && listDone();
+  // 只勾删除时，连续未匹配上限防止扫全量
+  const needConsecutiveCheck = config.deleteFailed && !config.listUnreviewed;
 
   for await (const product of streamDraftProducts()) {
     result.scanned++;
+    console.log(`[TaskCycle] 扫描 #${result.scanned}: ${product.title} (edit_status=${product.editStatus})`);
 
-    if (allDone()) break;
+    if (config.listUnreviewed && listDone()) break;
 
-    // edit_status=3 且开启了删除任务
-    if (product.editStatus === 3 && !deleteDone()) {
-      const ok = await deleteOne(product);
-      if (ok) {
-        deleteCount++;
+    if (product.editStatus === 3 && config.deleteFailed) {
+      consecutiveMiss = 0;
+      const res = await deleteOne(product, runId);
+      if (res === 'success') {
         result.deleted++;
+      } else if (res === 'stopped') {
+        result.stopped = true;
+        result.reason = '删除操作被限制';
+        break;
       } else {
         result.errors++;
       }
       continue;
     }
 
-    // edit_status=72 且开启了提交任务
-    if (product.editStatus === 72 && !listDone()) {
-      const res = await listOne(product);
+    if (product.editStatus === 72 && config.listUnreviewed && !listDone()) {
+      consecutiveMiss = 0;
+      const res = await listOne(product, runId);
       if (res === 'success') {
         listCount++;
         result.listed++;
@@ -62,6 +65,16 @@ export async function runTaskCycle(config: TaskConfig): Promise<TaskCycleResult>
         result.errors++;
       }
       continue;
+    }
+
+    // 不匹配任何任务
+    console.log(`[TaskCycle] 跳过: edit_status=${product.editStatus}, 不匹配当前任务`);
+    if (needConsecutiveCheck) {
+      consecutiveMiss++;
+      if (consecutiveMiss >= 5) {
+        console.log(`[TaskCycle] 连续 ${consecutiveMiss} 条未匹配，停止扫描`);
+        break;
+      }
     }
   }
 

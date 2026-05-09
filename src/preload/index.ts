@@ -16,8 +16,10 @@ export interface SchedulerConfig {
 export interface LogEntry {
   id: string;
   timestamp: number;
+  runId: string;
   productId: string;
   productTitle: string;
+  action: 'list' | 'delete' | 'check';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
@@ -39,7 +41,6 @@ export interface QuotaResult {
 export interface TaskConfig {
   deleteFailed: boolean;
   listUnreviewed: boolean;
-  deleteFailedQuantity: number;
   listUnreviewedQuantity: number;
 }
 
@@ -73,6 +74,11 @@ const electronAPI = {
   },
   task: {
     run: (config: TaskConfig): Promise<any> => ipcRenderer.invoke('task:run', config),
+    onLog: (callback: (log: LogEntry) => void) => {
+      const handler = (_: any, log: LogEntry) => callback(log);
+      ipcRenderer.on('log:added', handler);
+      return () => ipcRenderer.removeListener('log:added', handler);
+    },
   },
 };
 

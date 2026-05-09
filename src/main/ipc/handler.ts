@@ -9,6 +9,7 @@ import {
   getLogs,
   clearLogs,
   addLog,
+  logEmitter,
   Config,
   SchedulerConfig,
   TaskConfig,
@@ -87,14 +88,14 @@ export function registerHandlers(): void {
     try {
       const result = await listProduct(productId);
       if (result.errcode === 0) {
-        addLog({ productId, productTitle: '', status: 'success' });
+        addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'success' });
         return { success: true };
       } else {
-        addLog({ productId, productTitle: '', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
+        addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
         return { success: false, error: result.errmsg };
       }
     } catch (error: any) {
-      addLog({ productId, productTitle: '', status: 'failed', errorMsg: error.message });
+      addLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorMsg: error.message });
       return { success: false, error: error.message };
     }
   });
@@ -140,7 +141,39 @@ export function registerHandlers(): void {
     setTaskConfig(config);
   });
 
-  ipcMain.handle('task:run', async (_, config: TaskConfig): Promise<TaskCycleResult> => {
-    return runTaskCycle(config);
+  ipcMain.handle('task:run', async (event, config: TaskConfig): Promise<TaskCycleResult> => {
+    const runId = Date.now().toString();
+
+    // 前置配额检查
+    if (config.listUnreviewed) {
+      try {
+        const quota = await getAuditQuota();
+        console.log(`[TaskRun] 配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
+        if (quota.quota > 0) {
+          addLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: 'success' });
+        } else {
+          addLog({ runId, productId: '', productTitle: `今日提审配额已用完 (${quota.quota}/${quota.total})，请明天再试`, action: 'check', status: 'failed' });
+          console.warn(`[TaskRun] 配额为0，跳过执行`);
+          return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `提审配额已用完 (剩余${quota.quota}/${quota.total})` };
+        }
+      } catch (error: any) {
+        addLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
+        console.error(`[TaskRun] 配额检查失败:`, error.message);
+        return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}` };
+      }
+    }
+
+    const win = event.sender;
+    const onLog = (log: LogEntry) => {
+      if (!win.isDestroyed()) {
+        win.send('log:added', log);
+      }
+    };
+    logEmitter.on('log-added', onLog);
+    try {
+      return await runTaskCycle(config, runId);
+    } finally {
+      logEmitter.off('log-added', onLog);
+    }
   });
 }

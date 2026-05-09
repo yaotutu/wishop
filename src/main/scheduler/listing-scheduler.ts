@@ -28,7 +28,7 @@ async function executeListing(): Promise<void> {
     }
 
     const taskConfig = getTaskConfig();
-    const result = await runTaskCycle(taskConfig);
+    const result = await runTaskCycle(taskConfig, Date.now().toString());
 
     scheduler.todayListedCount += result.listed;
     setScheduler(scheduler);
