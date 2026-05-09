@@ -4,7 +4,6 @@ release/
 *.log
 .DS_Store
 Thumbs.db
-package-lock.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
 .env
