@@ -21,6 +21,7 @@ import {
   listProduct,
   getAuditQuota,
   getAccessToken,
+  clearTokenCache,
   DraftProduct,
 } from './wechat-api';
 import { startScheduler, stopScheduler } from '../scheduler/listing-scheduler';
@@ -35,9 +36,10 @@ export function registerHandlers(): void {
   });
 
   ipcMain.handle('config:set', async (_, config: Config): Promise<{ success: boolean; error?: string }> => {
+    setConfig(config);
     try {
+      clearTokenCache();
       await getAccessToken();
-      setConfig(config);
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
