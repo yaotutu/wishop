@@ -37,19 +37,33 @@ export function registerHandlers(): void {
     }
   });
 
-  ipcMain.handle('drafts:fetch', async (): Promise<DraftProduct[]> => {
-    const result = await getDraftProducts(5); // 先只获取5个测试
-    const products: DraftProduct[] = [];
+  ipcMain.handle('drafts:fetch', async (_, editStatus: number | null): Promise<DraftProduct[]> => {
+    console.log('[Drafts] 开始获取草稿箱, 筛选editStatus:', editStatus);
 
-    for (const productId of result.productIds) {
-      try {
-        const detail = await getProductDetail(productId);
-        products.push(detail);
-      } catch (error) {
-        console.error(`获取商品 ${productId} 详情失败:`, error);
+    const products: DraftProduct[] = [];
+    let nextKey = '';
+    const maxProducts = 10;
+
+    while (products.length < maxProducts) {
+      const result = await getDraftProducts(10, nextKey);
+      console.log('[Drafts] 获取到商品IDs:', result.productIds.length, '个');
+
+      for (const productId of result.productIds) {
+        if (products.length >= maxProducts) break;
+        try {
+          const detail = await getProductDetail(productId);
+          console.log('[Drafts] 商品:', productId, 'status:', detail.status, 'editStatus:', detail.editStatus);
+          products.push(detail);
+        } catch (error) {
+          console.error(`获取商品 ${productId} 详情失败:`, error);
+        }
       }
+
+      nextKey = result.nextKey;
+      if (!result.hasMore || !nextKey) break;
     }
 
+    console.log('[Drafts] 返回商品:', products.length, '个');
     return products;
   });
 

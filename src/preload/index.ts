@@ -43,7 +43,7 @@ const electronAPI = {
       ipcRenderer.invoke('config:set', config),
   },
   drafts: {
-    fetch: (): Promise<DraftProduct[]> => ipcRenderer.invoke('drafts:fetch'),
+    fetch: (editStatus: number | null = null): Promise<DraftProduct[]> => ipcRenderer.invoke('drafts:fetch', editStatus),
     list: (productId: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('drafts:list', productId),
   },

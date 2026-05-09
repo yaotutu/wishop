@@ -59,22 +59,29 @@ export async function getDraftProducts(pageSize = 50, nextKey = ''): Promise<Pro
   const token = await getAccessToken();
   const url = `${BASE_URL}/channels/ec/product/list/get?access_token=${token}`;
 
+  // status: 0=初始(草稿), 5=已上架, 6=回收站, 9=彻底删除, 11=自主下架, 13=违规下架, 14=保证金不足下架, 15=品牌过期下架, 20=商品被禁
   const response = await axios.post(url, {
     page_size: pageSize,
     next_key: nextKey || undefined,
-    status: 2,
+    status: 0, // 获取草稿/初始状态的商品
   });
 
   const data = response.data;
+  console.log('[WeChat API] getDraftProducts 响应 keys:', Object.keys(data));
+  console.log('[WeChat API] getDraftProducts 响应:', JSON.stringify(data).substring(0, 500));
 
   if (data.errcode && data.errcode !== 0) {
     throw new Error(data.errmsg || `获取草稿列表失败: ${data.errcode}`);
   }
 
+  // 响应是 data.product_id_list
+  const productIds = data.product_ids || [];
+  console.log('[WeChat API] 解析到 productIds:', productIds);
+
   return {
-    productIds: data.product_ids || [],
+    productIds: productIds,
     nextKey: data.next_key || '',
-    hasMore: !!data.next_key,
+    hasMore: !!data.has_more,
   };
 }
 
@@ -103,6 +110,7 @@ export async function getProductDetail(productId: string): Promise<DraftProduct>
   });
 
   const data = response.data;
+  console.log('[WeChat API] getProductDetail', productId, '响应:', JSON.stringify(data).substring(0, 500));
 
   if (data.errcode && data.errcode !== 0) {
     throw new Error(data.errmsg || `获取商品详情失败: ${data.errcode}`);
@@ -113,6 +121,8 @@ export async function getProductDetail(productId: string): Promise<DraftProduct>
   if (!product) {
     throw new Error(`商品 ${productId} 详情为空`);
   }
+
+  console.log('[WeChat API] 商品', productId, 'edit_status:', product.edit_status);
 
   return {
     productId: product.product_id,

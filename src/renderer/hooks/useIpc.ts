@@ -134,10 +134,10 @@ export function useDrafts() {
   const [drafts, setDrafts] = useState<DraftProduct[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchDrafts = useCallback(async () => {
+  const fetchDrafts = useCallback(async (editStatus: number | null = null) => {
     setLoading(true);
     try {
-      const data = await window.electronAPI.drafts.fetch();
+      const data = await window.electronAPI.drafts.fetch(editStatus);
       setDrafts(data);
     } finally {
       setLoading(false);
