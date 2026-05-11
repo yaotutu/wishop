@@ -1,22 +1,25 @@
 import cron from 'node-cron';
-import { getAccounts, getScheduler, setScheduler, getTaskConfig, getConfig, createScopedAddLog } from '../store';
+import { getAccounts, getSchedulers, updateScheduler, getTaskConfig, getConfig, createScopedAddLog } from '../store';
+import type { ScheduledTask } from '../../shared/types';
 import { createWeChatClient } from '../wechat/client';
 import { runTaskCycle } from '../modules/task-cycle';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
-async function executeListing(accountId: string): Promise<void> {
-  const scheduler = getScheduler(accountId);
+async function executeTask(accountId: string, taskId: string): Promise<void> {
+  const schedulers = getSchedulers(accountId);
+  const task = schedulers.find(t => t.id === taskId);
+  if (!task) return;
 
   const today = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
-  if (scheduler.lastRunDate !== today) {
-    scheduler.todayListedCount = 0;
-    scheduler.lastRunDate = today;
-    setScheduler(accountId, scheduler);
+  let count = task.todayListedCount;
+  if (task.lastRunDate !== today) {
+    count = 0;
+    updateScheduler(accountId, taskId, { lastRunDate: today, todayListedCount: 0 });
   }
 
-  if (scheduler.todayListedCount >= scheduler.dailyLimit) {
-    console.log(`[Scheduler:${accountId}] 今日上架次数已达上限，停止执行`);
+  if (count >= task.dailyLimit) {
+    console.log(`[Scheduler:${accountId}:${taskId}] 今日上架次数已达上限，停止执行`);
     return;
   }
 
@@ -27,65 +30,64 @@ async function executeListing(accountId: string): Promise<void> {
     const quota = await api.getAuditQuota();
 
     if (quota.quota <= 0) {
-      console.log(`[Scheduler:${accountId}] 配额已用完，停止执行`);
+      console.log(`[Scheduler:${accountId}:${taskId}] 配额已用完，停止执行`);
       return;
     }
 
-    const taskConfig = getTaskConfig(accountId);
-    const result = await runTaskCycle(api, scopedAddLog, taskConfig, Date.now().toString());
+    const result = await runTaskCycle(api, scopedAddLog, task.taskConfig, `cron-${taskId}-${Date.now()}`);
 
-    scheduler.todayListedCount += result.listed;
-    setScheduler(accountId, scheduler);
-    console.log(`[Scheduler:${accountId}] 执行完毕: 提交=${result.listed}, 删除=${result.deleted}`);
+    const newCount = count + result.listed;
+    updateScheduler(accountId, taskId, { todayListedCount: newCount });
+    console.log(`[Scheduler:${accountId}:${taskId}] 执行完毕: 提交=${result.listed}, 删除=${result.deleted}`);
   } catch (error) {
-    console.error(`[Scheduler:${accountId}] 执行失败:`, error);
+    console.error(`[Scheduler:${accountId}:${taskId}] 执行失败:`, error);
   }
 }
 
-export function startScheduler(accountId: string): void {
-  const scheduler = getScheduler(accountId);
+export function startTask(accountId: string, task: ScheduledTask): void {
+  const key = `${accountId}:${task.id}`;
 
-  if (scheduledTasks.has(accountId)) {
-    scheduledTasks.get(accountId)!.stop();
-    scheduledTasks.delete(accountId);
+  if (scheduledTasks.has(key)) {
+    scheduledTasks.get(key)!.stop();
+    scheduledTasks.delete(key);
   }
 
-  if (!scheduler.enabled) {
-    console.log(`[Scheduler:${accountId}] 未启用`);
+  if (!task.enabled) return;
+
+  if (!cron.validate(task.cronExpression)) {
+    console.error(`[Scheduler:${accountId}:${task.id}] 无效的 cron 表达式: ${task.cronExpression}`);
     return;
   }
 
-  const cronExpression = scheduler.cronExpression;
-  if (!cron.validate(cronExpression)) {
-    console.error(`[Scheduler:${accountId}] 无效的 cron 表达式: ${cronExpression}`);
-    return;
-  }
-
-  const task = cron.schedule(cronExpression, () => executeListing(accountId));
-  scheduledTasks.set(accountId, task);
-  console.log(`[Scheduler:${accountId}] 已启动, cron: ${cronExpression}`);
+  const cronTask = cron.schedule(task.cronExpression, () => executeTask(accountId, task.id));
+  scheduledTasks.set(key, cronTask);
+  console.log(`[Scheduler:${accountId}:${task.id}] 已启动 "${task.name}", cron: ${task.cronExpression}`);
 }
 
-export function stopScheduler(accountId: string): void {
-  const task = scheduledTasks.get(accountId);
-  if (task) {
-    task.stop();
-    scheduledTasks.delete(accountId);
-    console.log(`[Scheduler:${accountId}] 已停止`);
+export function stopTask(accountId: string, taskId: string): void {
+  const key = `${accountId}:${taskId}`;
+  const cronTask = scheduledTasks.get(key);
+  if (cronTask) {
+    cronTask.stop();
+    scheduledTasks.delete(key);
+    console.log(`[Scheduler:${accountId}:${taskId}] 已停止`);
   }
 }
 
-export function startAllSchedulers(): void {
+export function startAllTasks(): void {
   const accounts = getAccounts();
   for (const account of accounts) {
-    if (account.scheduler.enabled) {
-      startScheduler(account.id);
+    for (const task of account.schedulers) {
+      if (task.enabled) {
+        startTask(account.id, task);
+      }
     }
   }
 }
 
-export function stopAllSchedulers(): void {
-  for (const [accountId] of scheduledTasks) {
-    stopScheduler(accountId);
+export function stopAllTasks(): void {
+  for (const [key, cronTask] of scheduledTasks) {
+    cronTask.stop();
+    scheduledTasks.delete(key);
   }
 }

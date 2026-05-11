@@ -5,10 +5,13 @@ export interface Config {
   appSecret: string;
 }
 
-export interface SchedulerConfig {
+export interface ScheduledTask {
+  id: string;
+  name: string;
   enabled: boolean;
   cronExpression: string;
   dailyLimit: number;
+  taskConfig: TaskConfig;
   lastRunDate: string;
   todayListedCount: number;
 }
@@ -70,7 +73,7 @@ export interface FullAccount {
   id: string;
   name: string;
   config: Config;
-  scheduler: SchedulerConfig;
+  schedulers: ScheduledTask[];
   taskConfig: TaskConfig;
   logs: LogEntry[];
   createdAt: number;

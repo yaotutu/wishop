@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
-import { startAllSchedulers, stopAllSchedulers } from './scheduler/listing-scheduler';
+import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall } from './updater';
 
@@ -52,7 +52,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   cleanOldLogs();
   registerHandlers();
-  startAllSchedulers();
+  startAllTasks();
   createWindow();
 
   app.on('activate', () => {
@@ -63,7 +63,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  stopAllSchedulers();
+  stopAllTasks();
   if (process.platform !== 'darwin') {
     app.quit();
   }

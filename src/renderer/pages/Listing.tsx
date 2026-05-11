@@ -1,25 +1,51 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, Form } from 'antd';
-import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
-import { useTaskConfig, useLogs, useQuota, useScheduler } from '../hooks/useIpc';
-import type { TaskConfig, TaskCycleResult, LogEntry, DraftProduct, SchedulerConfig } from '../../shared/types';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Switch, Input, message, Empty, Popconfirm } from 'antd';
+import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
+import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../hooks/useIpc';
+import type { TaskConfig, TaskCycleResult, LogEntry, DraftProduct, ScheduledTask } from '../../shared/types';
 
 interface ListingProps {
   accountId: string;
 }
 
+const cronPresets = [
+  { label: '每天 6:00', value: '0 6 * * *' },
+  { label: '每天 9:00', value: '0 9 * * *' },
+  { label: '每天 12:00', value: '0 12 * * *' },
+  { label: '每天 14:00', value: '0 14 * * *' },
+  { label: '每天 18:00', value: '0 18 * * *' },
+  { label: '每天 21:00', value: '0 21 * * *' },
+  { label: '每 2 小时', value: '0 */2 * * *' },
+  { label: '每 4 小时', value: '0 */4 * * *' },
+];
+
+const defaultTaskConfig: TaskConfig = {
+  deleteFailed: false,
+  deleteFailedConfirm: false,
+  listUnreviewed: true,
+  listUnreviewedQuantity: 2,
+};
+
 const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
-  const { scheduler, fetchScheduler, saveScheduler } = useScheduler(accountId);
+  const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const [running, setRunning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DraftProduct[]>([]);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
-  const [schedulerForm] = Form.useForm();
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    cronExpression: '0 9 * * *',
+    dailyLimit: 100,
+    enabled: true,
+    taskConfig: { ...defaultTaskConfig },
+  });
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,15 +53,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchTaskConfig();
     fetchLogs();
     fetchQuota();
-    fetchScheduler();
+    fetchTasks();
     return () => {
       unsubscribeRef.current?.();
     };
   }, [accountId]);
-
-  useEffect(() => {
-    if (scheduler) schedulerForm.setFieldsValue(scheduler);
-  }, [scheduler, schedulerForm]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,7 +67,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     setRunning(true);
     setResult(null);
     setPendingDelete([]);
-    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, (log: LogEntry) => {
+    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, () => {
       fetchLogs();
     });
     try {
@@ -86,12 +108,43 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     saveTaskConfig({ ...taskConfig, ...patch });
   };
 
-  const handleSchedulerSave = async () => {
-    try {
-      const values = await schedulerForm.validateFields();
-      await saveScheduler(values);
-      setSchedulerOpen(false);
-    } catch {}
+  const openAddModal = () => {
+    setEditingTask(null);
+    setFormData({ name: '', cronExpression: '0 9 * * *', dailyLimit: 100, enabled: true, taskConfig: { ...defaultTaskConfig } });
+    setEditModalOpen(true);
+  };
+
+  const openEditModal = (task: ScheduledTask) => {
+    setEditingTask(task);
+    setFormData({
+      name: task.name,
+      cronExpression: task.cronExpression,
+      dailyLimit: task.dailyLimit,
+      enabled: task.enabled,
+      taskConfig: { ...task.taskConfig },
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleSaveTask = async () => {
+    if (!formData.name.trim()) {
+      message.error('请输入任务名称');
+      return;
+    }
+    if (editingTask) {
+      await updateTask(editingTask.id, {
+        name: formData.name,
+        cronExpression: formData.cronExpression,
+        dailyLimit: formData.dailyLimit,
+        enabled: formData.enabled,
+        taskConfig: formData.taskConfig,
+      });
+      message.success('任务已更新');
+    } else {
+      await addTask(formData);
+      message.success('任务已创建');
+    }
+    setEditModalOpen(false);
   };
 
   const quotaExhausted = quota.quota <= 0 && quota.total > 0;
@@ -142,7 +195,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               type={schedulerOpen ? 'primary' : 'default'}
               ghost={schedulerOpen}
             >
-              定时任务
+              定时任务{tasks.length > 0 ? ` (${tasks.length})` : ''}
             </Button>
             {quota.total > 0 && (
               <Tag color={quotaExhausted ? 'red' : 'green'}>
@@ -200,28 +253,43 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         />
       )}
 
-      {/* 定时任务配置 */}
+      {/* 定时任务列表 */}
       {schedulerOpen && (
-        <Card size="small" title="定时任务配置" extra={<Button size="small" onClick={() => setSchedulerOpen(false)}>收起</Button>}>
-          <Form form={schedulerForm} layout="vertical" style={{ maxWidth: 400 }}>
-            <Form.Item name="enabled" label="启用定时任务" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-            <Form.Item
-              name="cronExpression"
-              label="执行时间 (Cron 表达式)"
-              rules={[{ required: true, message: '请输入 Cron 表达式' }]}
-              extra="例如: 0 9 * * * 表示每天 9:00 执行"
-            >
-              <Input placeholder="0 9 * * *" />
-            </Form.Item>
-            <Form.Item name="dailyLimit" label="每日上限" rules={[{ required: true, message: '请输入每日上限' }]}>
-              <InputNumber min={1} max={1000} style={{ width: 200 }} />
-            </Form.Item>
-            <Form.Item>
-              <Button type="primary" onClick={handleSchedulerSave}>保存设置</Button>
-            </Form.Item>
-          </Form>
+        <Card
+          size="small"
+          title="定时任务"
+          extra={<Button size="small" type="primary" icon={<PlusOutlined />} onClick={openAddModal}>添加任务</Button>}
+        >
+          {tasks.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无定时任务" style={{ padding: '12px 0' }}>
+              <Button size="small" type="primary" onClick={openAddModal}>创建第一个任务</Button>
+            </Empty>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {tasks.map(task => (
+                <div key={task.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '8px 12px', background: '#fafafa', borderRadius: 6,
+                }}>
+                  <Switch
+                    size="small"
+                    checked={task.enabled}
+                    onChange={checked => updateTask(task.id, { enabled: checked })}
+                  />
+                  <span style={{ fontWeight: 500, minWidth: 80 }}>{task.name}</span>
+                  <Tag color={task.enabled ? 'blue' : 'default'}>{task.cronExpression}</Tag>
+                  <span style={{ color: '#999', fontSize: 12 }}>
+                    今日 {task.todayListedCount}/{task.dailyLimit}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)} />
+                  <Popconfirm title="确认删除此任务？" onConfirm={() => removeTask(task.id)} okText="删除" cancelText="取消">
+                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       )}
 
@@ -258,24 +326,24 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                 <React.Fragment key={log.id}>
                   {showDivider && <Divider style={{ margin: '8px 0' }} />}
                   <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {log.status === 'success'
-                  ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                  : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />}
-                <Tag color={log.action === 'delete' ? 'orange' : log.action === 'check' ? 'green' : 'blue'} style={{ margin: 0, fontSize: 11 }}>
-                  {log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架'}
-                </Tag>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {log.productTitle || log.productId || log.errorMsg || ''}
-                </span>
-                {log.errorMsg && log.productId && (
-                  <span style={{ color: '#ff4d4f', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {log.errorMsg}
-                  </span>
-                )}
-                <span style={{ color: '#bbb', fontSize: 11, whiteSpace: 'nowrap' }}>
-                  {new Date(log.timestamp).toLocaleTimeString('zh-CN')}
-                </span>
-              </div>
+                    {log.status === 'success'
+                      ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+                      : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />}
+                    <Tag color={log.action === 'delete' ? 'orange' : log.action === 'check' ? 'green' : 'blue'} style={{ margin: 0, fontSize: 11 }}>
+                      {log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架'}
+                    </Tag>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {log.productTitle || log.productId || log.errorMsg || ''}
+                    </span>
+                    {log.errorMsg && log.productId && (
+                      <span style={{ color: '#ff4d4f', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {log.errorMsg}
+                      </span>
+                    )}
+                    <span style={{ color: '#bbb', fontSize: 11, whiteSpace: 'nowrap' }}>
+                      {new Date(log.timestamp).toLocaleTimeString('zh-CN')}
+                    </span>
+                  </div>
                 </React.Fragment>
               );
             })}
@@ -283,6 +351,106 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           </div>
         )}
       </Card>
+
+      {/* 新建/编辑定时任务弹窗 */}
+      <Modal
+        title={editingTask ? '编辑定时任务' : '新建定时任务'}
+        open={editModalOpen}
+        onOk={handleSaveTask}
+        onCancel={() => setEditModalOpen(false)}
+        okText="保存"
+        cancelText="取消"
+        width={520}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
+          <div>
+            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>任务名称</div>
+            <Input
+              placeholder="如：早间上架、午间清理"
+              value={formData.name}
+              onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>执行时间</div>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Input
+                placeholder="Cron 表达式"
+                value={formData.cronExpression}
+                onChange={e => setFormData(prev => ({ ...prev, cronExpression: e.target.value }))}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {cronPresets.map(preset => (
+                  <Tag
+                    key={preset.value}
+                    color={formData.cronExpression === preset.value ? 'blue' : 'default'}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setFormData(prev => ({ ...prev, cronExpression: preset.value }))}
+                  >
+                    {preset.label}
+                  </Tag>
+                ))}
+              </div>
+            </Space>
+          </div>
+          <div>
+            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>每日上限</div>
+            <InputNumber min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
+          </div>
+          <div>
+            <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>任务配置</div>
+            <Space direction="vertical">
+              <Checkbox
+                checked={formData.taskConfig.listUnreviewed}
+                onChange={e => setFormData(prev => ({
+                  ...prev,
+                  taskConfig: { ...prev.taskConfig, listUnreviewed: e.target.checked },
+                }))}
+              >
+                提交未审核商品
+              </Checkbox>
+              {formData.taskConfig.listUnreviewed && (
+                <Space style={{ marginLeft: 24 }}>
+                  <span style={{ color: '#666', fontSize: 12 }}>每次</span>
+                  <InputNumber size="small" min={1} max={100} value={formData.taskConfig.listUnreviewedQuantity}
+                    onChange={v => setFormData(prev => ({
+                      ...prev,
+                      taskConfig: { ...prev.taskConfig, listUnreviewedQuantity: v || 2 },
+                    }))}
+                    style={{ width: 60 }}
+                  />
+                  <span style={{ color: '#666', fontSize: 12 }}>条</span>
+                </Space>
+              )}
+              <Checkbox
+                checked={formData.taskConfig.deleteFailed}
+                onChange={e => setFormData(prev => ({
+                  ...prev,
+                  taskConfig: { ...prev.taskConfig, deleteFailed: e.target.checked },
+                }))}
+              >
+                删除审核失败商品
+              </Checkbox>
+              {formData.taskConfig.deleteFailed && (
+                <Checkbox
+                  checked={formData.taskConfig.deleteFailedConfirm}
+                  onChange={e => setFormData(prev => ({
+                    ...prev,
+                    taskConfig: { ...prev.taskConfig, deleteFailedConfirm: e.target.checked },
+                  }))}
+                  style={{ marginLeft: 24 }}
+                >
+                  删除前二次确认
+                </Checkbox>
+              )}
+            </Space>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Switch checked={formData.enabled} onChange={checked => setFormData(prev => ({ ...prev, enabled: checked }))} />
+            <span>{formData.enabled ? '创建后立即启用' : '创建后不启用'}</span>
+          </div>
+        </div>
+      </Modal>
 
       {/* 二次确认弹窗 */}
       <Modal
@@ -314,18 +482,8 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           pagination={false}
           scroll={{ y: 300 }}
           columns={[
-            {
-              title: '商品名称',
-              dataIndex: 'title',
-              key: 'title',
-              ellipsis: true,
-            },
-            {
-              title: '商品ID',
-              dataIndex: 'productId',
-              key: 'productId',
-              width: 160,
-            },
+            { title: '商品名称', dataIndex: 'title', key: 'title', ellipsis: true },
+            { title: '商品ID', dataIndex: 'productId', key: 'productId', width: 160 },
           ]}
         />
       </Modal>

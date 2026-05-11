@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, SchedulerConfig, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account } from '../shared/types';
+import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account } from '../shared/types';
 
-export type { Config, SchedulerConfig, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account };
+export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account };
 
 const electronAPI = {
   accounts: {
@@ -39,14 +39,14 @@ const electronAPI = {
       ipcRenderer.invoke('logs:clear', accountId),
   },
   scheduler: {
-    get: (accountId: string): Promise<SchedulerConfig> =>
-      ipcRenderer.invoke('scheduler:get', accountId),
-    set: (accountId: string, config: SchedulerConfig): Promise<void> =>
-      ipcRenderer.invoke('scheduler:set', accountId, config),
-    start: (accountId: string): Promise<void> =>
-      ipcRenderer.invoke('scheduler:start', accountId),
-    stop: (accountId: string): Promise<void> =>
-      ipcRenderer.invoke('scheduler:stop', accountId),
+    list: (accountId: string): Promise<ScheduledTask[]> =>
+      ipcRenderer.invoke('scheduler:list', accountId),
+    add: (accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): Promise<ScheduledTask> =>
+      ipcRenderer.invoke('scheduler:add', accountId, task),
+    update: (accountId: string, taskId: string, patch: Partial<ScheduledTask>): Promise<void> =>
+      ipcRenderer.invoke('scheduler:update', accountId, taskId, patch),
+    remove: (accountId: string, taskId: string): Promise<void> =>
+      ipcRenderer.invoke('scheduler:remove', accountId, taskId),
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> =>

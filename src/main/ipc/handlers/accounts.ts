@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { getAccounts, addAccount, removeAccount, updateAccount, getActiveAccountId, setActiveAccountId } from '../../store';
 import type { Config, Account } from '../../../shared/types';
-import { stopScheduler } from '../../scheduler/listing-scheduler';
+import { stopAllTasks } from '../../scheduler/listing-scheduler';
 
 export function registerAccountHandlers(context: { draftPaginationMap: Map<string, unknown> }): void {
   ipcMain.handle('accounts:list', (): Account[] => {
@@ -13,7 +13,7 @@ export function registerAccountHandlers(context: { draftPaginationMap: Map<strin
   });
 
   ipcMain.handle('accounts:remove', (_, accountId: string): void => {
-    stopScheduler(accountId);
+    stopAllTasks();
     removeAccount(accountId);
     context.draftPaginationMap.delete(accountId);
   });

@@ -1,9 +1,9 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, SchedulerConfig, LogEntry, TaskConfig, AddLogFn, FullAccount } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount } from '../../shared/types';
 
-export type { Config, SchedulerConfig, LogEntry, TaskConfig, AddLogFn };
+export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
@@ -16,18 +16,10 @@ export interface StoreSchema {
   accounts: FullAccount[];
   activeAccountId: string;
   config?: Config;
-  scheduler?: SchedulerConfig;
+  scheduler?: { enabled: boolean; cronExpression: string; dailyLimit: number; lastRunDate: string; todayListedCount: number };
   taskConfig?: TaskConfig;
   logs?: LogEntry[];
 }
-
-const defaultScheduler: SchedulerConfig = {
-  enabled: false,
-  cronExpression: '0 9 * * *',
-  dailyLimit: 100,
-  lastRunDate: '',
-  todayListedCount: 0,
-};
 
 const store = new Store<StoreSchema>({
   defaults: {
@@ -39,18 +31,58 @@ const store = new Store<StoreSchema>({
 // --- Migration ---
 
 function migrateIfNeeded(): void {
-  const accounts = store.get('accounts');
-  if (accounts && accounts.length > 0) return;
+  const rawAccounts: any[] = store.get('accounts') as any[];
+
+  // Migrate old single-account data to multi-account
+  if (rawAccounts && rawAccounts.length > 0) {
+    // Migrate existing accounts: scheduler (single) → schedulers (array)
+    let changed = false;
+    for (const account of rawAccounts) {
+      if ('scheduler' in account && !('schedulers' in account)) {
+        const oldScheduler = (account as any).scheduler;
+        if (oldScheduler) {
+          account.schedulers = [{
+            id: uuidv4(),
+            name: '默认任务',
+            enabled: oldScheduler.enabled,
+            cronExpression: oldScheduler.cronExpression,
+            dailyLimit: oldScheduler.dailyLimit,
+            taskConfig: account.taskConfig || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+            lastRunDate: oldScheduler.lastRunDate,
+            todayListedCount: oldScheduler.todayListedCount,
+          }];
+        } else {
+          account.schedulers = [];
+        }
+        delete (account as any).scheduler;
+        changed = true;
+      }
+    }
+    if (changed) store.set('accounts', rawAccounts as FullAccount[]);
+    return;
+  }
 
   const oldConfig = store.get('config');
   if (!oldConfig || (!oldConfig.appId && !oldConfig.appSecret)) return;
 
-  const account: Account = {
+  const oldScheduler = store.get('scheduler');
+  const oldTaskConfig = store.get('taskConfig') || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 };
+
+  const account: FullAccount = {
     id: uuidv4(),
     name: '默认店铺',
     config: oldConfig,
-    scheduler: store.get('scheduler') || { ...defaultScheduler },
-    taskConfig: store.get('taskConfig') || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+    schedulers: oldScheduler ? [{
+      id: uuidv4(),
+      name: '默认任务',
+      enabled: oldScheduler.enabled,
+      cronExpression: oldScheduler.cronExpression,
+      dailyLimit: oldScheduler.dailyLimit,
+      taskConfig: oldTaskConfig,
+      lastRunDate: oldScheduler.lastRunDate,
+      todayListedCount: oldScheduler.todayListedCount,
+    }] : [],
+    taskConfig: oldTaskConfig,
     logs: store.get('logs') || [],
     createdAt: Date.now(),
   };
@@ -82,7 +114,7 @@ export function addAccount(name: string, config: Config): FullAccount {
     id: uuidv4(),
     name,
     config,
-    scheduler: { ...defaultScheduler },
+    schedulers: [],
     taskConfig: { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
     logs: [],
     createdAt: Date.now(),
@@ -135,18 +167,43 @@ export function setConfig(accountId: string, config: Config): void {
   updateAccount(accountId, { config });
 }
 
-// --- Per-account scheduler ---
+// --- Per-account schedulers ---
 
-export function getScheduler(accountId: string): SchedulerConfig {
+export function getSchedulers(accountId: string): ScheduledTask[] {
   const account = getAccount(accountId);
-  return account?.scheduler || { ...defaultScheduler };
+  return account?.schedulers || [];
 }
 
-export function setScheduler(accountId: string, scheduler: SchedulerConfig): void {
+export function addScheduler(accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): ScheduledTask {
+  const newTask: ScheduledTask = {
+    ...task,
+    id: uuidv4(),
+    lastRunDate: '',
+    todayListedCount: 0,
+  };
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return newTask;
+  accounts[idx].schedulers.push(newTask);
+  store.set('accounts', accounts);
+  return newTask;
+}
+
+export function updateScheduler(accountId: string, taskId: string, patch: Partial<ScheduledTask>): void {
   const accounts = store.get('accounts');
   const idx = accounts.findIndex(a => a.id === accountId);
   if (idx === -1) return;
-  accounts[idx].scheduler = scheduler;
+  const taskIdx = accounts[idx].schedulers.findIndex(t => t.id === taskId);
+  if (taskIdx === -1) return;
+  accounts[idx].schedulers[taskIdx] = { ...accounts[idx].schedulers[taskIdx], ...patch };
+  store.set('accounts', accounts);
+}
+
+export function removeScheduler(accountId: string, taskId: string): void {
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return;
+  accounts[idx].schedulers = accounts[idx].schedulers.filter(t => t.id !== taskId);
   store.set('accounts', accounts);
 }
 

@@ -1,33 +1,43 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { SchedulerConfig } from '../../shared/types';
+import { useState, useCallback } from 'react';
+import type { ScheduledTask, TaskConfig } from '../../shared/types';
 
-export function useScheduler(accountId: string) {
-  const [scheduler, setScheduler] = useState<SchedulerConfig>({
-    enabled: false,
-    cronExpression: '0 9 * * *',
-    dailyLimit: 100,
-    lastRunDate: '',
-    todayListedCount: 0,
-  });
+const defaultTaskConfig: TaskConfig = {
+  deleteFailed: false,
+  deleteFailedConfirm: false,
+  listUnreviewed: true,
+  listUnreviewedQuantity: 2,
+};
+
+export function useSchedulers(accountId: string) {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchScheduler = useCallback(async () => {
+  const fetchTasks = useCallback(async () => {
     if (!accountId) return;
     setLoading(true);
     try {
-      const data = await window.electronAPI.scheduler.get(accountId);
-      setScheduler(data);
+      const data = await window.electronAPI.scheduler.list(accountId);
+      setTasks(data);
     } finally {
       setLoading(false);
     }
   }, [accountId]);
 
-  const saveScheduler = useCallback(async (newScheduler: SchedulerConfig) => {
-    await window.electronAPI.scheduler.set(accountId, newScheduler);
-    setScheduler(newScheduler);
+  const addTask = useCallback(async (task: { name: string; enabled: boolean; cronExpression: string; dailyLimit: number; taskConfig: TaskConfig }): Promise<ScheduledTask> => {
+    const newTask = await window.electronAPI.scheduler.add(accountId, task);
+    setTasks(prev => [...prev, newTask]);
+    return newTask;
   }, [accountId]);
 
-  useEffect(() => { fetchScheduler(); }, [accountId]);
+  const updateTask = useCallback(async (taskId: string, patch: Partial<ScheduledTask>) => {
+    await window.electronAPI.scheduler.update(accountId, taskId, patch);
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...patch } : t));
+  }, [accountId]);
 
-  return { scheduler, loading, fetchScheduler, saveScheduler };
+  const removeTask = useCallback(async (taskId: string) => {
+    await window.electronAPI.scheduler.remove(accountId, taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }, [accountId]);
+
+  return { tasks, loading, fetchTasks, addTask, updateTask, removeTask, defaultTaskConfig };
 }
