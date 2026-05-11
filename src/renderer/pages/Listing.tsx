@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm } from 'antd';
+// fix: Table import for delete confirmation dialog
 import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../hooks/useIpc';
 import type { TaskConfig, TaskCycleResult, LogEntry, DraftProduct, ScheduledTask } from '../../shared/types';
