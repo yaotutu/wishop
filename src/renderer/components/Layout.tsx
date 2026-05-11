@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu, Tabs, Modal, Input, Button, Dropdown, message, Empty } from 'antd';
-import { PlusOutlined, SettingOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { Layout as AntLayout, Menu, Tabs, Modal, Input, Button, Dropdown, message, Empty, Tag, Progress } from 'antd';
+import { PlusOutlined, SettingOutlined, DeleteOutlined, EditOutlined, SyncOutlined } from '@ant-design/icons';
 import Listing from '../pages/Listing';
 import Orders from '../pages/Orders';
 import Settings from '../pages/Settings';
@@ -18,8 +18,25 @@ const Layout: React.FC = () => {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [formState, setFormState] = useState({ name: '', appId: '', appSecret: '' });
 
+  // Auto-updater state
+  const [updateInfo, setUpdateInfo] = useState<{ version: string } | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [updateDownloaded, setUpdateDownloaded] = useState<{ version: string } | null>(null);
+
   useEffect(() => {
     fetchAccounts();
+  }, []);
+
+  useEffect(() => {
+    window.updater?.onAvailable((info) => {
+      setUpdateInfo(info);
+    });
+    window.updater?.onProgress((info) => {
+      setDownloadProgress(info.percent);
+    });
+    window.updater?.onDownloaded((info) => {
+      setUpdateDownloaded(info);
+    });
   }, []);
 
   const handleAdd = async () => {
@@ -183,6 +200,42 @@ const Layout: React.FC = () => {
                   { key: 'settings', label: '设置' },
                 ]}
               />
+              {/* Update notification */}
+              {updateDownloaded && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderTop: '1px solid #f0f0f0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}>
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    新版本 v{updateDownloaded.version} 已下载
+                  </div>
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<SyncOutlined />}
+                    onClick={() => window.updater?.install()}
+                  >
+                    重启更新
+                  </Button>
+                </div>
+              )}
+              {updateInfo && !updateDownloaded && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderTop: '1px solid #f0f0f0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}>
+                  <div style={{ fontSize: 12, color: '#666' }}>
+                    正在下载 v{updateInfo.version}...
+                  </div>
+                  <Progress percent={downloadProgress} size="small" />
+                </div>
+              )}
             </div>
           </Sider>
         )}

@@ -122,9 +122,28 @@ contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
 contextBridge.exposeInMainWorld('appVersion', require('electron').app.getVersion());
 
+contextBridge.exposeInMainWorld('updater', {
+  onAvailable: (callback: (info: { version: string }) => void) => {
+    ipcRenderer.on('update:available', (_, info) => callback(info));
+  },
+  onProgress: (callback: (info: { percent: number }) => void) => {
+    ipcRenderer.on('update:progress', (_, info) => callback(info));
+  },
+  onDownloaded: (callback: (info: { version: string }) => void) => {
+    ipcRenderer.on('update:downloaded', (_, info) => callback(info));
+  },
+  install: (): Promise<void> => ipcRenderer.invoke('update:install'),
+});
+
 declare global {
   interface Window {
     electronAPI: typeof electronAPI;
     appVersion: string;
+    updater: {
+      onAvailable: (callback: (info: { version: string }) => void) => void;
+      onProgress: (callback: (info: { percent: number }) => void) => void;
+      onDownloaded: (callback: (info: { version: string }) => void) => void;
+      install: () => Promise<void>;
+    };
   }
 }

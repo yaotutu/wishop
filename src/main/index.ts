@@ -1,9 +1,10 @@
 import dotenv from 'dotenv';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
 import { startAllSchedulers, stopAllSchedulers } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
+import { initUpdater, quitAndInstall } from './updater';
 
 dotenv.config();
 
@@ -33,6 +34,14 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+
+  if (app.isPackaged) {
+    initUpdater(mainWindow);
+  }
+
+  ipcMain.handle('update:install', () => {
+    quitAndInstall();
   });
 }
 
