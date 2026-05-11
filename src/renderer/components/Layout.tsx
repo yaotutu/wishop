@@ -1,26 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu, Tabs, Modal, Input, Button, Dropdown, message, Empty, Badge } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, SyncOutlined, ArrowUpOutlined } from '@ant-design/icons';
+import { Layout as AntLayout, Menu, Tabs, Button, Dropdown, Empty } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import Listing from '../pages/Listing';
 import Orders from '../pages/Orders';
+import ProductSource from '../pages/ProductSource';
+import AiAnalysis from '../pages/AiAnalysis';
+import Dashboard from '../pages/Dashboard';
 import Settings from '../pages/Settings';
-import { useAccounts, Account } from '../hooks/useIpc';
+import { useAccounts } from '../hooks/useAccounts';
+import type { Account } from '../../shared/types';
+import AccountModals from './AccountModals';
 
 const { Sider, Content } = AntLayout;
 
-type PageType = 'listing' | 'orders' | 'settings';
+type PageType = 'listing' | 'orders' | 'productSource' | 'aiAnalysis' | 'dashboard' | 'settings';
 
 const Layout: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<PageType>('listing');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const [addModalOpen, setAddModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [formState, setFormState] = useState({ name: '', appId: '', appSecret: '' });
 
-  // Auto-updater state
   const [updateDownloaded, setUpdateDownloaded] = useState<{ version: string } | null>(null);
   const [version, setVersion] = useState('');
+
+  const { openAddModal, openEditModal, confirmRemove, modals } = AccountModals({
+    addAccount, updateAccount, removeAccount, switchAccount,
+  });
 
   useEffect(() => {
     fetchAccounts();
@@ -32,47 +36,6 @@ const Layout: React.FC = () => {
       setUpdateDownloaded(info);
     });
   }, []);
-
-  const handleAdd = async () => {
-    if (!formState.name || !formState.appId || !formState.appSecret) {
-      message.error('请填写完整信息');
-      return;
-    }
-    const account = await addAccount(formState.name, { appId: formState.appId, appSecret: formState.appSecret });
-    await switchAccount(account.id);
-    setAddModalOpen(false);
-    setFormState({ name: '', appId: '', appSecret: '' });
-    message.success('店铺已添加');
-  };
-
-  const handleEdit = async () => {
-    if (!editingAccount || !formState.name) return;
-    await updateAccount(editingAccount.id, { name: formState.name });
-    setEditModalOpen(false);
-    setEditingAccount(null);
-    setFormState({ name: '', appId: '', appSecret: '' });
-    message.success('店铺已更新');
-  };
-
-  const openEditModal = (account: Account) => {
-    setEditingAccount(account);
-    setFormState({ name: account.name, appId: account.config.appId, appSecret: account.config.appSecret });
-    setEditModalOpen(true);
-  };
-
-  const handleRemove = async (account: Account) => {
-    Modal.confirm({
-      title: `确认删除店铺「${account.name}」？`,
-      content: '删除后该店铺的所有数据将被清除',
-      okText: '删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        await removeAccount(account.id);
-        message.success('店铺已删除');
-      },
-    });
-  };
 
   const activeAccount = accounts.find(a => a.id === activeAccountId);
 
@@ -89,6 +52,12 @@ const Layout: React.FC = () => {
         return <Listing accountId={activeAccountId} />;
       case 'orders':
         return <Orders />;
+      case 'productSource':
+        return <ProductSource />;
+      case 'aiAnalysis':
+        return <AiAnalysis />;
+      case 'dashboard':
+        return <Dashboard />;
       case 'settings':
         return <Settings accountId={activeAccountId} />;
       default:
@@ -103,7 +72,7 @@ const Layout: React.FC = () => {
         menu={{
           items: [
             { key: 'edit', icon: <EditOutlined />, label: '编辑名称', onClick: () => openEditModal(account) },
-            { key: 'delete', icon: <DeleteOutlined />, label: '删除店铺', danger: true, onClick: () => handleRemove(account) },
+            { key: 'delete', icon: <DeleteOutlined />, label: '删除店铺', danger: true, onClick: () => confirmRemove(account) },
           ],
         }}
         trigger={['contextMenu']}
@@ -115,7 +84,6 @@ const Layout: React.FC = () => {
 
   return (
     <AntLayout style={{ height: '100vh' }}>
-      {/* Top bar: account tabs + version/update */}
       <div style={{
         height: 40,
         borderBottom: '1px solid #f0f0f0',
@@ -138,10 +106,7 @@ const Layout: React.FC = () => {
           type="dashed"
           size="small"
           icon={<PlusOutlined />}
-          onClick={() => {
-            setFormState({ name: '', appId: '', appSecret: '' });
-            setAddModalOpen(true);
-          }}
+          onClick={openAddModal}
           style={{ color: '#1677ff', borderColor: '#1677ff', fontWeight: 500 }}
         >
           添加店铺
@@ -173,6 +138,9 @@ const Layout: React.FC = () => {
                 items={[
                   { key: 'listing', label: '上架' },
                   { key: 'orders', label: '订单管理' },
+                  { key: 'productSource', label: '选品采集' },
+                  { key: 'aiAnalysis', label: 'AI 分析' },
+                  { key: 'dashboard', label: '数据看板' },
                   { key: 'settings', label: '设置' },
                 ]}
               />
@@ -186,51 +154,7 @@ const Layout: React.FC = () => {
         </AntLayout>
       </AntLayout>
 
-      {/* Add account modal */}
-      <Modal
-        title="添加店铺"
-        open={addModalOpen}
-        onOk={handleAdd}
-        onCancel={() => setAddModalOpen(false)}
-        okText="添加"
-        cancelText="取消"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Input
-            placeholder="店铺名称"
-            value={formState.name}
-            onChange={e => setFormState(s => ({ ...s, name: e.target.value }))}
-          />
-          <Input
-            placeholder="AppID"
-            value={formState.appId}
-            onChange={e => setFormState(s => ({ ...s, appId: e.target.value }))}
-          />
-          <Input.Password
-            placeholder="AppSecret"
-            value={formState.appSecret}
-            onChange={e => setFormState(s => ({ ...s, appSecret: e.target.value }))}
-          />
-        </div>
-      </Modal>
-
-      {/* Edit account modal */}
-      <Modal
-        title="编辑店铺"
-        open={editModalOpen}
-        onOk={handleEdit}
-        onCancel={() => { setEditModalOpen(false); setEditingAccount(null); }}
-        okText="保存"
-        cancelText="取消"
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Input
-            placeholder="店铺名称"
-            value={formState.name}
-            onChange={e => setFormState(s => ({ ...s, name: e.target.value }))}
-          />
-        </div>
-      </Modal>
+      {modals}
     </AntLayout>
   );
 };

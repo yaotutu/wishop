@@ -1,23 +1,13 @@
 import axios from 'axios';
+import type { Config, DraftProduct, QuotaResult } from '../../shared/types';
+
+export type { Config, DraftProduct, QuotaResult };
 
 const BASE_URL = 'https://api.weixin.qq.com';
-
-export interface Config {
-  appId: string;
-  appSecret: string;
-}
 
 interface TokenData {
   accessToken: string;
   expiresAt: number;
-}
-
-export interface DraftProduct {
-  productId: string;
-  title: string;
-  headImgs: string[];
-  status: number;
-  editStatus: number;
 }
 
 export interface ProductListResult {
@@ -29,11 +19,6 @@ export interface ProductListResult {
 export interface ListingResult {
   errcode: number;
   errmsg: string;
-}
-
-export interface QuotaResult {
-  quota: number;
-  total: number;
 }
 
 export function createWeChatClient(config: Config) {

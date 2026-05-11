@@ -1,57 +1,20 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import type { Config, SchedulerConfig, LogEntry, TaskConfig, AddLogFn, FullAccount } from '../../shared/types';
+
+export type { Config, SchedulerConfig, LogEntry, TaskConfig, AddLogFn };
+export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
 
-export interface Config {
-  appId: string;
-  appSecret: string;
+export function createScopedAddLog(accountId: string): AddLogFn {
+  return (log: Omit<LogEntry, 'id' | 'timestamp'>) => addLog(accountId, log);
 }
-
-export interface SchedulerConfig {
-  enabled: boolean;
-  cronExpression: string;
-  dailyLimit: number;
-  lastRunDate: string;
-  todayListedCount: number;
-}
-
-export interface LogEntry {
-  id: string;
-  timestamp: number;
-  runId: string;
-  productId: string;
-  productTitle: string;
-  action: 'list' | 'delete' | 'check';
-  status: 'success' | 'failed';
-  errorCode?: number;
-  errorMsg?: string;
-}
-
-export interface TaskConfig {
-  deleteFailed: boolean;
-  deleteFailedConfirm: boolean;
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  config: Config;
-  scheduler: SchedulerConfig;
-  taskConfig: TaskConfig;
-  logs: LogEntry[];
-  createdAt: number;
-}
-
-export type AddLogFn = (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 
 export interface StoreSchema {
-  accounts: Account[];
+  accounts: FullAccount[];
   activeAccountId: string;
-  // 旧版字段，仅用于迁移
   config?: Config;
   scheduler?: SchedulerConfig;
   taskConfig?: TaskConfig;
@@ -105,17 +68,17 @@ migrateIfNeeded();
 
 // --- Account management ---
 
-export function getAccounts(): Account[] {
+export function getAccounts(): FullAccount[] {
   return store.get('accounts');
 }
 
-export function getAccount(accountId: string): Account | undefined {
+export function getAccount(accountId: string): FullAccount | undefined {
   return store.get('accounts').find(a => a.id === accountId);
 }
 
-export function addAccount(name: string, config: Config): Account {
+export function addAccount(name: string, config: Config): FullAccount {
   const accounts = store.get('accounts');
-  const account: Account = {
+  const account: FullAccount = {
     id: uuidv4(),
     name,
     config,
@@ -140,7 +103,7 @@ export function removeAccount(accountId: string): void {
   }
 }
 
-export function updateAccount(accountId: string, patch: Partial<Pick<Account, 'name' | 'config'>>): void {
+export function updateAccount(accountId: string, patch: Partial<Pick<FullAccount, 'name' | 'config'>>): void {
   const accounts = store.get('accounts');
   const idx = accounts.findIndex(a => a.id === accountId);
   if (idx === -1) return;

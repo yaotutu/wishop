@@ -1,26 +1,10 @@
-import { WeChatClient, DraftProduct } from '../wechat/client';
-import { AddLogFn } from '../store';
+import { WeChatClient } from '../wechat/client';
+import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult } from '../../shared/types';
+
+export type { TaskConfig, TaskCycleResult };
 import { streamDraftProducts } from './fetch-draft-products';
 import { deleteOne } from './delete-failed-products';
 import { listOne } from './list-unreviewed-products';
-
-export interface TaskConfig {
-  deleteFailed: boolean;
-  deleteFailedConfirm: boolean;
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-}
-
-export interface TaskCycleResult {
-  scanned: number;
-  deleted: number;
-  listed: number;
-  errors: number;
-  skipped: number;
-  stopped: boolean;
-  reason?: string;
-  pendingDelete: DraftProduct[];
-}
 
 export async function runTaskCycle(
   api: WeChatClient,

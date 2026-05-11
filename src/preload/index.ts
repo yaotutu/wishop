@@ -1,56 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { Config, SchedulerConfig, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account } from '../shared/types';
 
-export interface Config {
-  appId: string;
-  appSecret: string;
-}
-
-export interface SchedulerConfig {
-  enabled: boolean;
-  cronExpression: string;
-  dailyLimit: number;
-  lastRunDate: string;
-  todayListedCount: number;
-}
-
-export interface LogEntry {
-  id: string;
-  timestamp: number;
-  runId: string;
-  productId: string;
-  productTitle: string;
-  action: 'list' | 'delete' | 'check';
-  status: 'success' | 'failed';
-  errorCode?: number;
-  errorMsg?: string;
-}
-
-export interface DraftProduct {
-  productId: string;
-  title: string;
-  headImgs: string[];
-  status: number;
-  editStatus: number;
-}
-
-export interface QuotaResult {
-  quota: number;
-  total: number;
-}
-
-export interface TaskConfig {
-  deleteFailed: boolean;
-  deleteFailedConfirm: boolean;
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  config: Config;
-  createdAt: number;
-}
+export type { Config, SchedulerConfig, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account };
 
 const electronAPI = {
   accounts: {

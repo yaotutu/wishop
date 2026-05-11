@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { getAccounts, getScheduler, setScheduler, getTaskConfig, getConfig, addLog, LogEntry } from '../store';
+import { getAccounts, getScheduler, setScheduler, getTaskConfig, getConfig, createScopedAddLog } from '../store';
 import { createWeChatClient } from '../wechat/client';
 import { runTaskCycle } from '../modules/task-cycle';
 
@@ -23,7 +23,7 @@ async function executeListing(accountId: string): Promise<void> {
   try {
     const config = getConfig(accountId);
     const api = createWeChatClient(config);
-    const scopedAddLog = (log: Omit<LogEntry, 'id' | 'timestamp'>) => addLog(accountId, log);
+    const scopedAddLog = createScopedAddLog(accountId);
     const quota = await api.getAuditQuota();
 
     if (quota.quota <= 0) {
