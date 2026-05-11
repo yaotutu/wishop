@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu, Tabs, Modal, Input, Button, Dropdown, message, Empty, Tag, Progress } from 'antd';
-import { PlusOutlined, SettingOutlined, DeleteOutlined, EditOutlined, SyncOutlined } from '@ant-design/icons';
+import { Layout as AntLayout, Menu, Tabs, Modal, Input, Button, Dropdown, message, Empty, Badge } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, SyncOutlined, ArrowUpOutlined } from '@ant-design/icons';
 import Listing from '../pages/Listing';
 import Orders from '../pages/Orders';
 import Settings from '../pages/Settings';
@@ -19,21 +19,15 @@ const Layout: React.FC = () => {
   const [formState, setFormState] = useState({ name: '', appId: '', appSecret: '' });
 
   // Auto-updater state
-  const [updateInfo, setUpdateInfo] = useState<{ version: string } | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [updateDownloaded, setUpdateDownloaded] = useState<{ version: string } | null>(null);
+  const [version, setVersion] = useState('');
 
   useEffect(() => {
     fetchAccounts();
+    window.appVersion?.get().then(v => setVersion(v));
   }, []);
 
   useEffect(() => {
-    window.updater?.onAvailable((info) => {
-      setUpdateInfo(info);
-    });
-    window.updater?.onProgress((info) => {
-      setDownloadProgress(info.percent);
-    });
     window.updater?.onDownloaded((info) => {
       setUpdateDownloaded(info);
     });
@@ -121,74 +115,56 @@ const Layout: React.FC = () => {
 
   return (
     <AntLayout style={{ height: '100vh' }}>
-      {/* Account tab bar */}
-      {accounts.length > 0 && (
-        <div style={{
-          height: 40,
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          alignItems: 'center',
-          paddingLeft: 12,
-          paddingRight: 12,
-          background: '#fafafa',
-          gap: 4,
-        }}>
-          <Tabs
-            activeKey={activeAccountId}
-            onChange={(key) => switchAccount(key)}
-            items={tabItems}
-            size="small"
-            style={{ flex: 1, marginBottom: 0 }}
-            tabBarStyle={{ margin: 0 }}
-          />
-          <Button
-            type="text"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setFormState({ name: '', appId: '', appSecret: '' });
-              setAddModalOpen(true);
-            }}
-          />
+      {/* Top bar: account tabs + version/update */}
+      <div style={{
+        height: 40,
+        borderBottom: '1px solid #f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: 12,
+        paddingRight: 12,
+        background: '#fafafa',
+        gap: 4,
+      }}>
+        <Tabs
+          activeKey={activeAccountId}
+          onChange={(key) => switchAccount(key)}
+          items={tabItems}
+          size="small"
+          style={{ flex: 1, marginBottom: 0, minWidth: 0 }}
+          tabBarStyle={{ margin: 0 }}
+        />
+        <Button
+          type="dashed"
+          size="small"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setFormState({ name: '', appId: '', appSecret: '' });
+            setAddModalOpen(true);
+          }}
+          style={{ color: '#1677ff', borderColor: '#1677ff', fontWeight: 500 }}
+        >
+          添加店铺
+        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
+          {updateDownloaded && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<ArrowUpOutlined />}
+              onClick={() => window.updater?.install()}
+            >
+              更新到 v{updateDownloaded.version}
+            </Button>
+          )}
+          <span style={{ color: '#bbb', fontSize: 12 }}>v{version}</span>
         </div>
-      )}
-      {accounts.length === 0 && (
-        <div style={{
-          height: 40,
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#fafafa',
-        }}>
-          <Button
-            type="link"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setFormState({ name: '', appId: '', appSecret: '' });
-              setAddModalOpen(true);
-            }}
-          >
-            添加店铺
-          </Button>
-        </div>
-      )}
+      </div>
+
       <AntLayout>
         {activeAccount && (
           <Sider width={200} theme="light">
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                height: 50,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderBottom: '1px solid #f0f0f0',
-                fontSize: 14,
-                fontWeight: 'bold',
-                color: '#1677ff',
-              }}>
-                Wishop v{window.appVersion}
-              </div>
               <Menu
                 mode="inline"
                 selectedKeys={[currentPage]}
@@ -200,42 +176,6 @@ const Layout: React.FC = () => {
                   { key: 'settings', label: '设置' },
                 ]}
               />
-              {/* Update notification */}
-              {updateDownloaded && (
-                <div style={{
-                  padding: '12px 16px',
-                  borderTop: '1px solid #f0f0f0',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                }}>
-                  <div style={{ fontSize: 12, color: '#666' }}>
-                    新版本 v{updateDownloaded.version} 已下载
-                  </div>
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<SyncOutlined />}
-                    onClick={() => window.updater?.install()}
-                  >
-                    重启更新
-                  </Button>
-                </div>
-              )}
-              {updateInfo && !updateDownloaded && (
-                <div style={{
-                  padding: '12px 16px',
-                  borderTop: '1px solid #f0f0f0',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                }}>
-                  <div style={{ fontSize: 12, color: '#666' }}>
-                    正在下载 v{updateInfo.version}...
-                  </div>
-                  <Progress percent={downloadProgress} size="small" />
-                </div>
-              )}
             </div>
           </Sider>
         )}

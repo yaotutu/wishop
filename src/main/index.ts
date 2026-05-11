@@ -43,6 +43,10 @@ function createWindow(): void {
   ipcMain.handle('update:install', () => {
     quitAndInstall();
   });
+
+  ipcMain.handle('app:version', () => {
+    return app.getVersion();
+  });
 }
 
 app.whenReady().then(() => {

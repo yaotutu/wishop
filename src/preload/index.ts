@@ -120,7 +120,9 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
-contextBridge.exposeInMainWorld('appVersion', require('electron').app.getVersion());
+contextBridge.exposeInMainWorld('appVersion', {
+  get: (): Promise<string> => ipcRenderer.invoke('app:version'),
+});
 
 contextBridge.exposeInMainWorld('updater', {
   onAvailable: (callback: (info: { version: string }) => void) => {
@@ -138,7 +140,9 @@ contextBridge.exposeInMainWorld('updater', {
 declare global {
   interface Window {
     electronAPI: typeof electronAPI;
-    appVersion: string;
+    appVersion: {
+      get: () => Promise<string>;
+    };
     updater: {
       onAvailable: (callback: (info: { version: string }) => void) => void;
       onProgress: (callback: (info: { percent: number }) => void) => void;
