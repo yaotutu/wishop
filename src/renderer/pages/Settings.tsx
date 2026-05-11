@@ -2,10 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Card, Form, Input, Switch, Button, Space, InputNumber, message, Tabs, Checkbox } from 'antd';
 import { useConfig, useScheduler, useTaskConfig } from '../hooks/useIpc';
 
-const Settings: React.FC = () => {
-  const { config, loading: configLoading, fetchConfig, saveConfig } = useConfig();
-  const { scheduler, loading: schedulerLoading, fetchScheduler, saveScheduler } = useScheduler();
-  const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig();
+interface SettingsProps {
+  accountId: string;
+}
+
+const Settings: React.FC<SettingsProps> = ({ accountId }) => {
+  const { config, loading: configLoading, fetchConfig, saveConfig } = useConfig(accountId);
+  const { scheduler, loading: schedulerLoading, fetchScheduler, saveScheduler } = useScheduler(accountId);
+  const { taskConfig, fetchTaskConfig, saveTaskConfig } = useTaskConfig(accountId);
   const [configForm] = Form.useForm();
   const [schedulerForm] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -14,7 +18,7 @@ const Settings: React.FC = () => {
     fetchConfig();
     fetchScheduler();
     fetchTaskConfig();
-  }, [fetchConfig, fetchScheduler, fetchTaskConfig]);
+  }, [accountId]);
 
   useEffect(() => {
     if (config) configForm.setFieldsValue(config);
@@ -139,6 +143,15 @@ const Settings: React.FC = () => {
               >
                 自动删除审核失败商品
               </Checkbox>
+              {taskConfig.deleteFailed && (
+                <Checkbox
+                  checked={taskConfig.deleteFailedConfirm}
+                  onChange={e => saveTaskConfig({ ...taskConfig, deleteFailedConfirm: e.target.checked })}
+                  style={{ marginLeft: 24 }}
+                >
+                  删除前二次确认
+                </Checkbox>
+              )}
               <Checkbox
                 checked={taskConfig.listUnreviewed}
                 onChange={e => saveTaskConfig({ ...taskConfig, listUnreviewed: e.target.checked })}

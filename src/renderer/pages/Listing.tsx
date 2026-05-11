@@ -1,14 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider } from 'antd';
-import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useTaskConfig, useLogs, useQuota, TaskConfig, TaskCycleResult, LogEntry } from '../hooks/useIpc';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table } from 'antd';
+import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { useTaskConfig, useLogs, useQuota, TaskConfig, TaskCycleResult, LogEntry, DraftProduct } from '../hooks/useIpc';
 
-const Listing: React.FC = () => {
-  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig();
-  const { logs, fetchLogs, clearLogs } = useLogs();
-  const { quota, fetchQuota } = useQuota();
+interface ListingProps {
+  accountId: string;
+}
+
+const Listing: React.FC<ListingProps> = ({ accountId }) => {
+  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig(accountId);
+  const { logs, fetchLogs, clearLogs } = useLogs(accountId);
+  const { quota, fetchQuota } = useQuota(accountId);
   const [running, setRunning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DraftProduct[]>([]);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -19,7 +26,7 @@ const Listing: React.FC = () => {
     return () => {
       unsubscribeRef.current?.();
     };
-  }, []);
+  }, [accountId]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,18 +35,41 @@ const Listing: React.FC = () => {
   const handleRun = async () => {
     setRunning(true);
     setResult(null);
-    unsubscribeRef.current = window.electronAPI.task.onLog((log: LogEntry) => {
+    setPendingDelete([]);
+    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, (log: LogEntry) => {
       fetchLogs();
     });
     try {
       const res = await runTask(taskConfig);
       setResult(res);
       fetchQuota();
+      if (res.pendingDelete?.length > 0) {
+        setPendingDelete(res.pendingDelete);
+        setConfirmModalOpen(true);
+      }
     } finally {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       setRunning(false);
       fetchLogs();
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
+    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, () => {
+      fetchLogs();
+    });
+    try {
+      await window.electronAPI.task.batchDelete(accountId, pendingDelete);
+      setConfirmModalOpen(false);
+      setPendingDelete([]);
+    } finally {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      setDeleting(false);
+      fetchLogs();
+      fetchQuota();
     }
   };
 
@@ -70,12 +100,22 @@ const Listing: React.FC = () => {
               />
               <span style={{ color: '#666' }}>条</span>
             </Space>
-            <Checkbox
-              checked={taskConfig.deleteFailed}
-              onChange={e => updateConfig({ deleteFailed: e.target.checked })}
-            >
-              删除审核失败
-            </Checkbox>
+            <Space size={8}>
+              <Checkbox
+                checked={taskConfig.deleteFailed}
+                onChange={e => updateConfig({ deleteFailed: e.target.checked })}
+              >
+                删除审核失败
+              </Checkbox>
+              {taskConfig.deleteFailed && (
+                <Checkbox
+                  checked={taskConfig.deleteFailedConfirm}
+                  onChange={e => updateConfig({ deleteFailedConfirm: e.target.checked })}
+                >
+                  二次确认
+                </Checkbox>
+              )}
+            </Space>
           </Space>
           <Space>
             {quota.total > 0 && (
@@ -88,9 +128,19 @@ const Listing: React.FC = () => {
               icon={<PlayCircleOutlined />}
               onClick={handleRun}
               loading={running}
-              disabled={(!taskConfig.listUnreviewed && !taskConfig.deleteFailed) || quotaExhausted}
+              disabled={(!taskConfig.listUnreviewed && !taskConfig.deleteFailed) || quotaExhausted || deleting}
+              style={running ? { display: 'none' } : undefined}
             >
               开始执行
+            </Button>
+            <Button
+              danger
+              icon={<CloseCircleOutlined />}
+              onClick={() => window.electronAPI.task.stop(accountId)}
+              loading={running}
+              style={!running ? { display: 'none' } : undefined}
+            >
+              停止
             </Button>
           </Space>
         </div>
@@ -115,6 +165,7 @@ const Listing: React.FC = () => {
               <span>扫描 {result.scanned}</span>
               {result.listed > 0 && <Tag color="success">提交成功 {result.listed}</Tag>}
               {result.deleted > 0 && <Tag color="blue">已删除 {result.deleted}</Tag>}
+              {result.pendingDelete?.length > 0 && <Tag color="orange">待确认删除 {result.pendingDelete.length}</Tag>}
               {result.skipped > 0 && <Tag>跳过 {result.skipped}</Tag>}
               {result.errors > 0 && <Tag color="error">失败 {result.errors}</Tag>}
               {result.stopped && <Tag color="warning">已停止: {result.reason}</Tag>}
@@ -181,6 +232,52 @@ const Listing: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* 二次确认弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <ExclamationCircleOutlined style={{ color: '#faad14' }} />
+            <span>确认删除审核失败商品</span>
+          </Space>
+        }
+        open={confirmModalOpen}
+        onCancel={() => { setConfirmModalOpen(false); setPendingDelete([]); }}
+        footer={[
+          <Button key="cancel" onClick={() => { setConfirmModalOpen(false); setPendingDelete([]); }}>
+            取消
+          </Button>,
+          <Button key="delete" type="primary" danger loading={deleting} onClick={handleConfirmDelete}>
+            确认删除 ({pendingDelete.length})
+          </Button>,
+        ]}
+        width={600}
+      >
+        <p style={{ marginBottom: 12, color: '#666' }}>
+          以下 {pendingDelete.length} 条商品审核失败，确认后将永久删除：
+        </p>
+        <Table
+          dataSource={pendingDelete}
+          rowKey="productId"
+          size="small"
+          pagination={false}
+          scroll={{ y: 300 }}
+          columns={[
+            {
+              title: '商品名称',
+              dataIndex: 'title',
+              key: 'title',
+              ellipsis: true,
+            },
+            {
+              title: '商品ID',
+              dataIndex: 'productId',
+              key: 'productId',
+              width: 160,
+            },
+          ]}
+        />
+      </Modal>
     </div>
   );
 };

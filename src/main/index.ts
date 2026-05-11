@@ -2,8 +2,8 @@ import dotenv from 'dotenv';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
-import { startScheduler, stopScheduler } from './scheduler/listing-scheduler';
-import { cleanOldLogs, getScheduler } from './store';
+import { startAllSchedulers, stopAllSchedulers } from './scheduler/listing-scheduler';
+import { cleanOldLogs } from './store';
 
 dotenv.config();
 
@@ -39,12 +39,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   cleanOldLogs();
   registerHandlers();
-
-  const scheduler = getScheduler();
-  if (scheduler.enabled) {
-    startScheduler();
-  }
-
+  startAllSchedulers();
   createWindow();
 
   app.on('activate', () => {
@@ -55,7 +50,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  stopScheduler();
+  stopAllSchedulers();
   if (process.platform !== 'darwin') {
     app.quit();
   }
