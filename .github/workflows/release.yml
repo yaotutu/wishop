@@ -66,4 +66,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           TAG=${GITHUB_REF#refs/tags/}
-          gh release edit "$TAG" --draft=false
+          for i in 1 2 3; do
+            if gh release edit "$TAG" --draft=false; then
+              echo "Release published successfully"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
+          echo "Failed to publish release after 3 attempts"
+          exit 1
