@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table } from 'antd';
-import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { useTaskConfig, useLogs, useQuota, TaskConfig, TaskCycleResult, LogEntry, DraftProduct } from '../hooks/useIpc';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, Form } from 'antd';
+import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { useTaskConfig, useLogs, useQuota, useScheduler } from '../hooks/useIpc';
+import type { TaskConfig, TaskCycleResult, LogEntry, DraftProduct, SchedulerConfig } from '../../shared/types';
 
 interface ListingProps {
   accountId: string;
@@ -11,11 +12,14 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
+  const { scheduler, fetchScheduler, saveScheduler } = useScheduler(accountId);
   const [running, setRunning] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [pendingDelete, setPendingDelete] = useState<DraftProduct[]>([]);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [schedulerForm] = Form.useForm();
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -23,10 +27,15 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchTaskConfig();
     fetchLogs();
     fetchQuota();
+    fetchScheduler();
     return () => {
       unsubscribeRef.current?.();
     };
   }, [accountId]);
+
+  useEffect(() => {
+    if (scheduler) schedulerForm.setFieldsValue(scheduler);
+  }, [scheduler, schedulerForm]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -77,6 +86,14 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     saveTaskConfig({ ...taskConfig, ...patch });
   };
 
+  const handleSchedulerSave = async () => {
+    try {
+      const values = await schedulerForm.validateFields();
+      await saveScheduler(values);
+      setSchedulerOpen(false);
+    } catch {}
+  };
+
   const quotaExhausted = quota.quota <= 0 && quota.total > 0;
 
   return (
@@ -118,6 +135,15 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </Space>
           </Space>
           <Space>
+            <Button
+              size="small"
+              icon={<ClockCircleOutlined />}
+              onClick={() => setSchedulerOpen(!schedulerOpen)}
+              type={schedulerOpen ? 'primary' : 'default'}
+              ghost={schedulerOpen}
+            >
+              定时任务
+            </Button>
             {quota.total > 0 && (
               <Tag color={quotaExhausted ? 'red' : 'green'}>
                 配额 {quota.quota}/{quota.total}
@@ -172,6 +198,31 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </Space>
           }
         />
+      )}
+
+      {/* 定时任务配置 */}
+      {schedulerOpen && (
+        <Card size="small" title="定时任务配置" extra={<Button size="small" onClick={() => setSchedulerOpen(false)}>收起</Button>}>
+          <Form form={schedulerForm} layout="vertical" style={{ maxWidth: 400 }}>
+            <Form.Item name="enabled" label="启用定时任务" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              name="cronExpression"
+              label="执行时间 (Cron 表达式)"
+              rules={[{ required: true, message: '请输入 Cron 表达式' }]}
+              extra="例如: 0 9 * * * 表示每天 9:00 执行"
+            >
+              <Input placeholder="0 9 * * *" />
+            </Form.Item>
+            <Form.Item name="dailyLimit" label="每日上限" rules={[{ required: true, message: '请输入每日上限' }]}>
+              <InputNumber min={1} max={1000} style={{ width: 200 }} />
+            </Form.Item>
+            <Form.Item>
+              <Button type="primary" onClick={handleSchedulerSave}>保存设置</Button>
+            </Form.Item>
+          </Form>
+        </Card>
       )}
 
       {/* 防封号提醒 */}
