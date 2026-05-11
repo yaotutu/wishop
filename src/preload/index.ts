@@ -120,8 +120,11 @@ const electronAPI = {
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
+contextBridge.exposeInMainWorld('appVersion', require('electron').app.getVersion());
+
 declare global {
   interface Window {
     electronAPI: typeof electronAPI;
+    appVersion: string;
   }
 }

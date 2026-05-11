@@ -160,6 +160,18 @@ const Layout: React.FC = () => {
         {activeAccount && (
           <Sider width={200} theme="light">
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                height: 50,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderBottom: '1px solid #f0f0f0',
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#1677ff',
+              }}>
+                Wishop v{window.appVersion}
+              </div>
               <Menu
                 mode="inline"
                 selectedKeys={[currentPage]}
