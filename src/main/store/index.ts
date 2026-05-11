@@ -35,9 +35,9 @@ function migrateIfNeeded(): void {
 
   // Migrate old single-account data to multi-account
   if (rawAccounts && rawAccounts.length > 0) {
-    // Migrate existing accounts: scheduler (single) → schedulers (array)
     let changed = false;
     for (const account of rawAccounts) {
+      // Migrate scheduler (single object) → schedulers (array)
       if ('scheduler' in account && !('schedulers' in account)) {
         const oldScheduler = (account as any).scheduler;
         if (oldScheduler) {
@@ -55,6 +55,11 @@ function migrateIfNeeded(): void {
           account.schedulers = [];
         }
         delete (account as any).scheduler;
+        changed = true;
+      }
+      // Ensure schedulers field exists
+      if (!('schedulers' in account)) {
+        account.schedulers = [];
         changed = true;
       }
     }
