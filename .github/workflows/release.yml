@@ -41,25 +41,16 @@ jobs:
         if: matrix.platform == 'linux'
         run: npx electron-builder --linux --publish always
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Build & Publish (macOS)
         if: matrix.platform == 'mac'
         run: npx electron-builder --mac --publish always
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Build & Publish (Windows)
         if: matrix.platform == 'win'
         run: npx electron-builder --win --publish always
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Publish release
-        run: gh release edit ${{ github.ref_name }} --draft=false
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
