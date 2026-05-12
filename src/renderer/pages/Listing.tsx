@@ -256,45 +256,48 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         />
       )}
 
-      {/* 定时任务列表 */}
-      {schedulerOpen && (
-        <Card
-          size="small"
-          title="定时任务"
-          extra={<Button size="small" type="primary" icon={<PlusOutlined />} onClick={openAddModal}>添加任务</Button>}
-        >
-          {tasks.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无定时任务" style={{ padding: '12px 0' }}>
-              <Button size="small" type="primary" onClick={openAddModal}>创建第一个任务</Button>
-            </Empty>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {tasks.map(task => (
-                <div key={task.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '8px 12px', background: '#fafafa', borderRadius: 6,
-                }}>
-                  <Switch
-                    size="small"
-                    checked={task.enabled}
-                    onChange={checked => updateTask(task.id, { enabled: checked })}
-                  />
-                  <span style={{ fontWeight: 500, minWidth: 80 }}>{task.name}</span>
-                  <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
-                  <span style={{ color: '#999', fontSize: 12 }}>
-                    今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
-                  </span>
-                  <span style={{ flex: 1 }} />
-                  <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)} />
-                  <Popconfirm title="确认删除此任务？" onConfirm={() => removeTask(task.id)} okText="删除" cancelText="取消">
-                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
+      {/* 定时任务弹窗 */}
+      <Modal
+        title="定时任务"
+        open={schedulerOpen}
+        onCancel={() => setSchedulerOpen(false)}
+        footer={null}
+        width={720}
+        centered
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openAddModal}>添加任务</Button>
+        </div>
+        {tasks.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无定时任务" style={{ padding: '32px 0' }}>
+            <Button type="primary" onClick={openAddModal}>创建第一个任务</Button>
+          </Empty>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {tasks.map(task => (
+              <div key={task.id} style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                padding: '14px 16px', background: '#fafafa', borderRadius: 8,
+              }}>
+                <Switch
+                  checked={task.enabled}
+                  onChange={checked => updateTask(task.id, { enabled: checked })}
+                />
+                <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100 }}>{task.name}</span>
+                <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
+                <span style={{ color: '#999', fontSize: 13 }}>
+                  今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
+                </span>
+                <span style={{ flex: 1 }} />
+                <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)}>编辑</Button>
+                <Popconfirm title="确认删除此任务？" onConfirm={() => removeTask(task.id)} okText="删除" cancelText="取消">
+                  <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
+                </Popconfirm>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* 防封号提醒 */}
       <Alert
