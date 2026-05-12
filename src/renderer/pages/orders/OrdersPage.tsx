@@ -20,7 +20,7 @@ const statusMap: Record<string, { color: string; text: string }> = {
   shipped: { color: 'green', text: '已发货' },
 };
 
-const Orders: React.FC = () => {
+const Orders: React.FC<{ accountId: string }> = () => {
   const columns = [
     { title: '订单号', dataIndex: 'id', key: 'id', width: 150 },
     { title: '商品名称', dataIndex: 'product', key: 'product', ellipsis: true },

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Form, Input, Button, message } from 'antd';
-import { useConfig } from '../hooks/useConfig';
+import { useConfig } from '../../hooks/useConfig';
 
 interface SettingsProps {
   accountId: string;

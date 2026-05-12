@@ -55,9 +55,11 @@ npm run start        # Run packaged electron app
 
 ### Renderer (src/renderer/)
 - **App.tsx** - Root component
-- **components/Layout.tsx** - Account tab bar (top) + sidebar (上架/订单管理/设置) + content area
-- **pages/Listing.tsx** - Receives `accountId` prop, passes to hooks
-- **pages/Settings.tsx** - Receives `accountId` prop, per-account API config and scheduler
+- **components/Layout.tsx** - Top module tabs (订单管理/店铺管理/商品提审/设置) + left account sidebar (numbered store list, only for account-scoped modules) + content area
+- **pages/common-functions/ListingPage.tsx** - Receives `accountId` prop, auto-listing tasks, scheduler, execution logs
+- **pages/orders/OrdersPage.tsx** - Receives `accountId` prop, order management (placeholder)
+- **pages/store-management/StoreManagement.tsx** - Receives `accountId` prop, store management (placeholder)
+- **pages/settings/SettingsPage.tsx** - Global module (no account sidebar), per-account API config
 - **hooks/useIpc.ts** - All hooks take `accountId` parameter. `useAccounts()` for account management.
 
 ### IPC Channels

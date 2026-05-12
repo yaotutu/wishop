@@ -1,38 +1,37 @@
 import React, { useEffect, useState } from 'react';
-import { Layout as AntLayout, Menu, Tabs, Button, Dropdown, Empty } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, ArrowUpOutlined } from '@ant-design/icons';
-import Listing from '../pages/Listing';
-import Orders from '../pages/Orders';
-import ProductSource from '../pages/ProductSource';
-import AiAnalysis from '../pages/AiAnalysis';
-import Dashboard from '../pages/Dashboard';
-import Settings from '../pages/Settings';
+import { Layout as AntLayout, Tabs, Button, Empty } from 'antd';
+import { ArrowUpOutlined } from '@ant-design/icons';
+import ListingPage from '../pages/common-functions/ListingPage';
+import OrdersPage from '../pages/orders/OrdersPage';
+import StoreManagement from '../pages/store-management/StoreManagement';
+import SettingsPage from '../pages/settings/SettingsPage';
 import { useAccounts } from '../hooks/useAccounts';
-import type { Account } from '../../shared/types';
-import AccountModals from './AccountModals';
 
 const { Sider, Content } = AntLayout;
 
-type PageType = 'listing' | 'orders' | 'productSource' | 'aiAnalysis' | 'dashboard' | 'settings';
+type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'settings';
+
+const MODULES: { key: ModuleType; label: string }[] = [
+  { key: 'orders', label: '订单管理' },
+  { key: 'storeManagement', label: '店铺管理' },
+  { key: 'commonFunctions', label: '商品提审' },
+  { key: 'settings', label: '设置' },
+];
 
 const Layout: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<PageType>('listing');
+  const [activeModule, setActiveModule] = useState<ModuleType>('orders');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
 
   const [updateDownloaded, setUpdateDownloaded] = useState<{ version: string } | null>(null);
   const [version, setVersion] = useState('');
 
-  const { openAddModal, openEditModal, confirmRemove, modals } = AccountModals({
-    addAccount, updateAccount, removeAccount, switchAccount,
-  });
-
   useEffect(() => {
     fetchAccounts();
-    window.appVersion?.get().then(v => setVersion(v));
+    window.appVersion?.get().then((v: string) => setVersion(v));
   }, []);
 
   useEffect(() => {
-    window.updater?.onDownloaded((info) => {
+    window.updater?.onDownloaded((info: { version: string }) => {
       setUpdateDownloaded(info);
     });
   }, []);
@@ -40,52 +39,47 @@ const Layout: React.FC = () => {
   const activeAccount = accounts.find(a => a.id === activeAccountId);
 
   const renderPage = () => {
-    if (!activeAccountId || !activeAccount) {
-      return (
-        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Empty description="请先添加店铺" />
-        </div>
-      );
-    }
-    switch (currentPage) {
-      case 'listing':
-        return <Listing accountId={activeAccountId} />;
-      case 'orders':
-        return <Orders />;
-      case 'productSource':
-        return <ProductSource />;
-      case 'aiAnalysis':
-        return <AiAnalysis />;
-      case 'dashboard':
-        return <Dashboard />;
+    switch (activeModule) {
+      case 'storeManagement':
+        return (
+          <StoreManagement
+            accounts={accounts}
+            addAccount={addAccount}
+            updateAccount={updateAccount}
+            removeAccount={removeAccount}
+            switchAccount={switchAccount}
+            activeAccountId={activeAccountId}
+          />
+        );
       case 'settings':
-        return <Settings accountId={activeAccountId} />;
+        if (!activeAccountId || !activeAccount) {
+          return (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Empty description="请先添加店铺" />
+            </div>
+          );
+        }
+        return <SettingsPage accountId={activeAccountId} />;
       default:
-        return <Listing accountId={activeAccountId} />;
+        if (!activeAccountId || !activeAccount) {
+          return (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Empty description="请先添加店铺" />
+            </div>
+          );
+        }
+        if (activeModule === 'orders') return <OrdersPage accountId={activeAccountId} />;
+        return <ListingPage accountId={activeAccountId} />;
     }
   };
 
-  const tabItems = accounts.map(account => ({
-    key: account.id,
-    label: (
-      <Dropdown
-        menu={{
-          items: [
-            { key: 'edit', icon: <EditOutlined />, label: '编辑名称', onClick: () => openEditModal(account) },
-            { key: 'delete', icon: <DeleteOutlined />, label: '删除店铺', danger: true, onClick: () => confirmRemove(account) },
-          ],
-        }}
-        trigger={['contextMenu']}
-      >
-        <span>{account.name}</span>
-      </Dropdown>
-    ),
-  }));
+  const moduleTabItems = MODULES.map(m => ({ key: m.key, label: m.label }));
 
   return (
     <AntLayout style={{ height: '100vh' }}>
+      {/* 顶部：模块标签页 */}
       <div style={{
-        height: 40,
+        height: 48,
         borderBottom: '1px solid #f0f0f0',
         display: 'flex',
         alignItems: 'center',
@@ -95,22 +89,13 @@ const Layout: React.FC = () => {
         gap: 4,
       }}>
         <Tabs
-          activeKey={activeAccountId}
-          onChange={(key) => switchAccount(key)}
-          items={tabItems}
+          activeKey={activeModule}
+          onChange={(key) => setActiveModule(key as ModuleType)}
+          items={moduleTabItems}
           size="small"
           style={{ flex: 1, marginBottom: 0, minWidth: 0 }}
           tabBarStyle={{ margin: 0 }}
         />
-        <Button
-          type="dashed"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={openAddModal}
-          style={{ color: '#1677ff', borderColor: '#1677ff', fontWeight: 500 }}
-        >
-          添加店铺
-        </Button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
           {updateDownloaded && (
             <Button
@@ -126,35 +111,40 @@ const Layout: React.FC = () => {
         </div>
       </div>
 
+      {/* 主体：左侧账号列表 + 右侧内容 */}
       <AntLayout>
-        {activeAccount && (
-          <Sider width={200} theme="light">
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <Menu
-                mode="inline"
-                selectedKeys={[currentPage]}
-                onClick={({ key }) => setCurrentPage(key as PageType)}
-                style={{ flex: 1 }}
-                items={[
-                  { key: 'listing', label: '上架' },
-                  { key: 'orders', label: '订单管理' },
-                  { key: 'productSource', label: '选品采集' },
-                  { key: 'aiAnalysis', label: 'AI 分析' },
-                  { key: 'dashboard', label: '数据看板' },
-                  { key: 'settings', label: '设置' },
-                ]}
-              />
+        <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
+              账号列表
             </div>
-          </Sider>
-        )}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {accounts.map((account, index) => (
+                <div
+                  key={account.id}
+                  onClick={() => switchAccount(account.id)}
+                  style={{
+                    padding: '8px 16px',
+                    cursor: 'pointer',
+                    background: account.id === activeAccountId ? '#e6f4ff' : 'transparent',
+                    borderLeft: account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
+                    fontSize: 13,
+                    userSelect: 'none',
+                    transition: 'background 0.2s',
+                  }}
+                >
+                  {index + 1}. {account.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        </Sider>
         <AntLayout>
           <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {renderPage()}
           </Content>
         </AntLayout>
       </AntLayout>
-
-      {modals}
     </AntLayout>
   );
 };
