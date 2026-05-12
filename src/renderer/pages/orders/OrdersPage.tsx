@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Typography } from 'antd';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Typography, message } from 'antd';
 import { SearchOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
@@ -64,6 +64,21 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
+  const tableAreaRef = useRef<HTMLDivElement>(null);
+  const [scrollY, setScrollY] = useState(400);
+
+  useEffect(() => {
+    const el = tableAreaRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.clientHeight;
+      if (h > 0) setScrollY(Math.max(100, h - 39));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (accountId) {
@@ -108,9 +123,16 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     const addr = await decodeAddress(orderId);
     if (addr) {
       setDecodedAddresses(prev => ({ ...prev, [orderId]: addr }));
+      const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
+      navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
     }
     setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
   }, [decodeAddress]);
+
+  const handleCopyAddress = useCallback((addr: OrderAddressInfo) => {
+    const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
+    navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
+  }, []);
 
   const canDecodeAddress = (status: OrderStatus): boolean => {
     return [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
@@ -238,7 +260,16 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
                 查看真实地址
               </Button>
             )}
-            {isDecoded && <div style={{ fontSize: 11, color: '#52c41a' }}>已解密</div>}
+            {isDecoded && (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => handleCopyAddress(real!)}
+                style={{ padding: 0, height: 'auto', fontSize: 12 }}
+              >
+                复制地址
+              </Button>
+            )}
           </div>
         );
       },
@@ -288,67 +319,64 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   ];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Status Filter */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {STATUS_FILTERS.map(f => (
-          <Tag.CheckableTag
-            key={f.label}
-            checked={activeStatus === f.status}
-            onChange={() => handleStatusFilter(f.status)}
-            style={{ padding: '4px 12px', fontSize: 13, border: '1px solid #d9d9d9', borderRadius: 4 }}
-          >
-            {f.label}
-          </Tag.CheckableTag>
-        ))}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Toolbar: fixed height */}
+      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          {STATUS_FILTERS.map(f => (
+            <Tag.CheckableTag
+              key={f.label}
+              checked={activeStatus === f.status}
+              onChange={() => handleStatusFilter(f.status)}
+            >
+              {f.label}
+            </Tag.CheckableTag>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Select value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} size="small" />
+          <Input
+            value={searchKeyword}
+            onChange={e => setSearchKeyword(e.target.value)}
+            onPressEnter={handleSearch}
+            placeholder="输入关键字搜索"
+            size="small"
+            style={{ flex: 1, maxWidth: 320 }}
+            allowClear
+          />
+          <Button type="primary" size="small" icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
+          <Button size="small" icon={<ReloadOutlined />} onClick={() => handleStatusFilter(activeStatus)}>刷新</Button>
+        </div>
+        <div style={{ minHeight: 20, marginTop: 4 }}>
+          {error && <Typography.Text type="danger" style={{ fontSize: 12 }}>{error}</Typography.Text>}
+        </div>
       </div>
 
-      {/* Search */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Select
-          value={searchType}
-          onChange={setSearchType}
-          options={SEARCH_TYPE_OPTIONS}
-          style={{ width: 120 }}
-          size="small"
-        />
-        <Input
-          value={searchKeyword}
-          onChange={e => setSearchKeyword(e.target.value)}
-          onPressEnter={handleSearch}
-          placeholder="输入关键字搜索"
-          size="small"
-          style={{ flex: 1 }}
-          allowClear
-        />
-        <Button type="primary" size="small" icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
-        <Button size="small" icon={<ReloadOutlined />} onClick={() => handleStatusFilter(activeStatus)}>刷新</Button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <Typography.Text type="danger" style={{ fontSize: 12 }}>{error}</Typography.Text>
-      )}
-
-      {/* Table */}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <Table
-          dataSource={orders}
-          columns={columns}
-          rowKey="order_id"
-          size="small"
-          loading={loading && orders.length === 0}
-          pagination={false}
-          scroll={{ x: 1100, y: 'calc(100vh - 320px)' }}
-          locale={{ emptyText: loading ? <Spin /> : <Empty description="暂无订单" /> }}
-          footer={() => hasMore ? (
-            <div style={{ textAlign: 'center' }}>
-              <Button size="small" loading={loading} onClick={handleLoadMore}>加载更多</Button>
-            </div>
+      {/* Table area: fills remaining space, never shifts */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
+          <Table
+            dataSource={orders}
+            columns={columns}
+            rowKey="order_id"
+            size="small"
+            loading={loading && orders.length === 0}
+            pagination={false}
+            scroll={{ x: 1100, y: scrollY }}
+            styles={{ body: { minHeight: scrollY } }}
+            locale={{ emptyText: loading ? <Spin /> : <Empty description="暂无订单" /> }}
+          />
+        </div>
+        {/* Bottom bar: always visible, fixed height */}
+        <div style={{ flexShrink: 0, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #f0f0f0' }}>
+          {loading && orders.length > 0 ? (
+            <Spin size="small" />
+          ) : hasMore ? (
+            <Button size="small" onClick={handleLoadMore}>加载更多</Button>
           ) : orders.length > 0 ? (
-            <div style={{ textAlign: 'center', color: '#999', fontSize: 12 }}>没有更多订单</div>
+            <span style={{ color: '#bbb', fontSize: 12 }}>— 没有更多订单 —</span>
           ) : null}
-        />
+        </div>
       </div>
 
       {/* Detail Modal */}
