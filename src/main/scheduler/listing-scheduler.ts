@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { getAccounts, getSchedulers, updateScheduler, getTaskConfig, getConfig, createScopedAddLog } from '../store';
 import type { ScheduledTask } from '../../shared/types';
 import { createWeChatClient } from '../wechat/client';
