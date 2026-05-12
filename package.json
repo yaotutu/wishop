@@ -14,7 +14,8 @@
     "push": "npm version patch -m 'chore: v%s' && git push --follow-tags"
   },
   "dependencies": {
-    "antd": "^5.22.0",
+    "@ant-design/icons": "^6.2.2",
+    "antd": "^6.3.7",
     "axios": "^1.7.0",
     "dotenv": "^17.4.2",
     "electron-store": "^8.2.0",
