@@ -352,31 +352,29 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         </div>
       </div>
 
-      {/* Table area: fills remaining space, never shifts */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
-          <Table
-            dataSource={orders}
-            columns={columns}
-            rowKey="order_id"
-            size="small"
-            loading={loading && orders.length === 0}
-            pagination={false}
-            scroll={{ x: 1100, y: scrollY }}
-            styles={{ body: { minHeight: scrollY } }}
-            locale={{ emptyText: loading ? <Spin /> : <Empty description="暂无订单" /> }}
-          />
-        </div>
-        {/* Bottom bar: always visible, fixed height */}
-        <div style={{ flexShrink: 0, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #f0f0f0' }}>
-          {loading && orders.length > 0 ? (
-            <Spin size="small" />
-          ) : hasMore ? (
-            <Button size="small" onClick={handleLoadMore}>加载更多</Button>
-          ) : orders.length > 0 ? (
-            <span style={{ color: '#bbb', fontSize: 12 }}>— 没有更多订单 —</span>
-          ) : null}
-        </div>
+      {/* Table area */}
+      <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
+        <Table
+          dataSource={orders}
+          columns={columns}
+          rowKey="order_id"
+          size="small"
+          loading={loading}
+          pagination={false}
+          scroll={{ x: 1100, y: scrollY }}
+          locale={{ emptyText: <Empty description="暂无订单" /> }}
+          footer={() => {
+            if (loading || orders.length === 0) return null;
+            if (hasMore) {
+              return (
+                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                  <Button size="small" onClick={handleLoadMore}>加载更多</Button>
+                </div>
+              );
+            }
+            return <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '8px 0' }}>— 没有更多订单 —</div>;
+          }}
+        />
       </div>
 
       {/* Detail Modal */}

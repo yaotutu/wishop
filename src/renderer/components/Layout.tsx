@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Layout as AntLayout, Tabs, Button, Empty } from 'antd';
 import { ArrowUpOutlined } from '@ant-design/icons';
-import ListingPage from '../pages/common-functions/ListingPage';
-import OrdersPage from '../pages/orders/OrdersPage';
 import StoreManagement from '../pages/store-management/StoreManagement';
-import SettingsPage from '../pages/settings/SettingsPage';
+import AccountWorkspace from './AccountWorkspace';
+import type { AccountModuleType } from './AccountWorkspace';
 import { useAccounts } from '../hooks/useAccounts';
 
 const { Sider, Content } = AntLayout;
 
 type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'settings';
+
+const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'settings']);
 
 const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
@@ -39,56 +40,48 @@ const Layout: React.FC = () => {
   const activeAccount = accounts.find(a => a.id === activeAccountId);
 
   const renderPage = () => {
-    switch (activeModule) {
-      case 'storeManagement':
+    // 全局页面
+    if (activeModule === 'storeManagement') {
+      return (
+        <StoreManagement
+          accounts={accounts}
+          addAccount={addAccount}
+          updateAccount={updateAccount}
+          removeAccount={removeAccount}
+          switchAccount={switchAccount}
+          activeAccountId={activeAccountId}
+        />
+      );
+    }
+
+    // 账号级页面：每账号独立实例
+    if (ACCOUNT_MODULES.has(activeModule)) {
+      if (accounts.length === 0) {
         return (
-          <StoreManagement
-            accounts={accounts}
-            addAccount={addAccount}
-            updateAccount={updateAccount}
-            removeAccount={removeAccount}
-            switchAccount={switchAccount}
-            activeAccountId={activeAccountId}
-          />
-        );
-      case 'settings':
-        if (!activeAccountId || !activeAccount) {
-          return (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Empty description="请先添加店铺" />
-            </div>
-          );
-        }
-        return <SettingsPage accountId={activeAccountId} />;
-      default:
-        if (accounts.length === 0) {
-          return (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Empty description="请先添加店铺" />
-            </div>
-          );
-        }
-        return (
-          <div style={{ height: '100%', position: 'relative' }}>
-            {accounts.map(account => (
-              <div
-                key={account.id}
-                style={{
-                  height: '100%',
-                  display: account.id === activeAccountId ? 'flex' : 'none',
-                  flexDirection: 'column',
-                }}
-              >
-                {activeModule === 'orders' ? (
-                  <OrdersPage accountId={account.id} />
-                ) : (
-                  <ListingPage accountId={account.id} />
-                )}
-              </div>
-            ))}
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Empty description="请先添加店铺" />
           </div>
         );
+      }
+      return (
+        <div style={{ height: '100%', position: 'relative' }}>
+          {accounts.map(account => (
+            <div
+              key={account.id}
+              style={{
+                height: '100%',
+                display: account.id === activeAccountId ? 'flex' : 'none',
+                flexDirection: 'column',
+              }}
+            >
+              <AccountWorkspace accountId={account.id} activeModule={activeModule as AccountModuleType} />
+            </div>
+          ))}
+        </div>
+      );
     }
+
+    return null;
   };
 
   const moduleTabItems = MODULES.map(m => ({ key: m.key, label: m.label }));
