@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account } from '../shared/types';
+import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo } from '../shared/types';
 
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account };
+export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo };
 
 const electronAPI = {
   accounts: {
@@ -27,6 +27,16 @@ const electronAPI = {
       ipcRenderer.invoke('drafts:fetch', accountId, reset),
     list: (accountId: string, productId: string): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('drafts:list', accountId, productId),
+  },
+  orders: {
+    list: (accountId: string, status?: OrderStatus, pageSize?: number): Promise<{ orders: Order[]; hasMore: boolean }> =>
+      ipcRenderer.invoke('orders:list', accountId, status, pageSize),
+    detail: (accountId: string, orderId: string): Promise<Order> =>
+      ipcRenderer.invoke('orders:detail', accountId, orderId),
+    search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> =>
+      ipcRenderer.invoke('orders:search', accountId, params),
+    decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> =>
+      ipcRenderer.invoke('orders:decodeAddress', accountId, orderId),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> =>

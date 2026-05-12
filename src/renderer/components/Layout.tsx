@@ -61,15 +61,33 @@ const Layout: React.FC = () => {
         }
         return <SettingsPage accountId={activeAccountId} />;
       default:
-        if (!activeAccountId || !activeAccount) {
+        if (accounts.length === 0) {
           return (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Empty description="请先添加店铺" />
             </div>
           );
         }
-        if (activeModule === 'orders') return <OrdersPage accountId={activeAccountId} />;
-        return <ListingPage accountId={activeAccountId} />;
+        return (
+          <div style={{ height: '100%', position: 'relative' }}>
+            {accounts.map(account => (
+              <div
+                key={account.id}
+                style={{
+                  height: '100%',
+                  display: account.id === activeAccountId ? 'flex' : 'none',
+                  flexDirection: 'column',
+                }}
+              >
+                {activeModule === 'orders' ? (
+                  <OrdersPage accountId={account.id} />
+                ) : (
+                  <ListingPage accountId={account.id} />
+                )}
+              </div>
+            ))}
+          </div>
+        );
     }
   };
 

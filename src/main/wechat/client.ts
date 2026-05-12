@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Config, DraftProduct, QuotaResult } from '../../shared/types';
+import type { Config, DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
 
 export type { Config, DraftProduct, QuotaResult };
 
@@ -141,6 +141,88 @@ export function createWeChatClient(config: Config) {
     return response.data;
   }
 
+  async function getOrderList(params: OrderListParams = {}): Promise<OrderListResult> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/list/get?access_token=${token}`;
+    const body: Record<string, unknown> = {
+      page_size: params.page_size || 10,
+    };
+    if (params.next_key) body.next_key = params.next_key;
+    if (params.status !== undefined) body.status = params.status;
+    if (params.create_time_range) body.create_time_range = params.create_time_range;
+    if (params.update_time_range) body.update_time_range = params.update_time_range;
+    if (params.order_id) body.order_id = params.order_id;
+
+    const response = await axios.post(url, body);
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `获取订单列表失败: ${data.errcode}`);
+    }
+    return {
+      order_id_list: data.order_id_list || [],
+      next_key: data.next_key || '',
+      has_more: !!data.has_more,
+    };
+  }
+
+  async function getOrderDetail(orderId: string): Promise<Order> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/get?access_token=${token}`;
+    const response = await axios.post(url, { order_id: orderId });
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `获取订单详情失败: ${data.errcode}`);
+    }
+    return data.order;
+  }
+
+  async function searchOrders(params: OrderSearchParams): Promise<OrderListResult> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/search?access_token=${token}`;
+    const searchCondition: Record<string, string> = {};
+    const fieldMap: Record<string, string> = {
+      order_id: 'order_id',
+      title: 'title',
+      user_name: 'user_name',
+      tel_number_last4: 'tel_number_last4',
+      merchant_notes: 'merchant_notes',
+      customer_notes: 'customer_notes',
+    };
+    const key = fieldMap[params.search_type];
+    if (key && params.keyword) {
+      searchCondition[key] = params.keyword;
+    }
+
+    const body: Record<string, unknown> = {
+      search_condition: searchCondition,
+      page_size: params.page_size || 10,
+      next_key: params.next_key || '',
+    };
+    if (params.status !== undefined) body.status = params.status;
+
+    const response = await axios.post(url, body);
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `搜索订单失败: ${data.errcode}`);
+    }
+    return {
+      order_id_list: data.order_id_list || [],
+      next_key: data.next_key || '',
+      has_more: !!data.has_more,
+    };
+  }
+
+  async function decodeOrderSensitiveInfo(orderId: string): Promise<OrderAddressInfo> {
+    const token = await getAccessToken();
+    const url = `${BASE_URL}/channels/ec/order/sensitiveinfo/decode?access_token=${token}`;
+    const response = await axios.post(url, { order_id: orderId });
+    const data = response.data;
+    if (data.errcode && data.errcode !== 0) {
+      throw new Error(data.errmsg || `解密收货信息失败: ${data.errcode}`);
+    }
+    return data.address_info;
+  }
+
   function clearTokenCache(): void {
     tokenCache = null;
   }
@@ -153,6 +235,10 @@ export function createWeChatClient(config: Config) {
     listProduct,
     getAuditQuota,
     deleteProduct,
+    getOrderList,
+    getOrderDetail,
+    searchOrders,
+    decodeOrderSensitiveInfo,
     clearTokenCache,
   };
 }
