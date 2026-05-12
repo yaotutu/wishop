@@ -6,7 +6,7 @@ import { streamDraftProducts } from './fetch-draft-products';
 import { deleteOne } from './delete-failed-products';
 import { listOne } from './list-unreviewed-products';
 
-const CONSECUTIVE_FAIL_THRESHOLD = 3;
+const CONSECUTIVE_THRESHOLD = 3;
 
 export async function runTaskCycle(
   api: WeChatClient,
@@ -22,6 +22,7 @@ export async function runTaskCycle(
   let listCount = 0;
   let consecutiveMiss = 0;
   let consecutiveFails = 0;
+  let consecutiveSkips = 0;
   let lastErrorCode: number | undefined;
   let lastErrorMsg: string | undefined;
 
@@ -53,12 +54,14 @@ export async function runTaskCycle(
       consecutiveMiss = 0;
       if (taskConfig.deleteFailedConfirm) {
         consecutiveFails = 0;
+        consecutiveSkips = 0;
         pendingDelete.push(product);
         console.log(`[TaskCycle] 标记待删除: ${product.title}`);
       } else {
         const res = await deleteOne(api, trackLog, product, runId);
         if (res === 'success') {
           consecutiveFails = 0;
+          consecutiveSkips = 0;
           result.deleted++;
         } else if (res === 'stopped') {
           result.stopped = true;
@@ -67,7 +70,8 @@ export async function runTaskCycle(
         } else {
           result.errors++;
           consecutiveFails++;
-          if (consecutiveFails >= CONSECUTIVE_FAIL_THRESHOLD) {
+          consecutiveSkips = 0;
+          if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
             result.stopped = true;
             result.reason = `连续${consecutiveFails}次删除失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
             console.warn(`[TaskCycle] ${result.reason}`);
@@ -83,11 +87,19 @@ export async function runTaskCycle(
       const res = await listOne(api, trackLog, product, runId, signal);
       if (res === 'success') {
         consecutiveFails = 0;
+        consecutiveSkips = 0;
         listCount++;
         result.listed++;
       } else if (res === 'skipped') {
         consecutiveFails = 0;
+        consecutiveSkips++;
         result.skipped++;
+        if (consecutiveSkips >= CONSECUTIVE_THRESHOLD) {
+          result.stopped = true;
+          result.reason = `连续${consecutiveSkips}次跳过，可能存在账号级问题 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
+          console.warn(`[TaskCycle] ${result.reason}`);
+          break;
+        }
       } else if (res === 'stopped') {
         result.stopped = true;
         result.reason = '提审次数超限';
@@ -95,7 +107,8 @@ export async function runTaskCycle(
       } else {
         result.errors++;
         consecutiveFails++;
-        if (consecutiveFails >= CONSECUTIVE_FAIL_THRESHOLD) {
+        consecutiveSkips = 0;
+        if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
           result.stopped = true;
           result.reason = `连续${consecutiveFails}次上架失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
           console.warn(`[TaskCycle] ${result.reason}`);

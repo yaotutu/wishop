@@ -6,6 +6,7 @@ export type ListOneResult = 'success' | 'failed' | 'skipped' | 'stopped';
 const SUBMIT_INTERVAL_MS = 3000;
 const lastSubmitTimeMap = new Map<string, number>();
 
+// 账号级错误 — 影响所有商品，立即停止任务
 const STOP_CODES = new Set([
   1002002,
   10020066,
@@ -15,7 +16,9 @@ const STOP_CODES = new Set([
   10020247,
 ]);
 
+// 商品级错误 — 该商品本身有问题，跳过继续下一个
 const SKIP_CODES = new Set([
+  10020110,  // 商品信息检查不通过
   10020067,
   10020049,
   10020052,
@@ -69,26 +72,17 @@ export async function listOne(
 
     if (STOP_CODES.has(res.errcode)) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      console.warn(`[ListUnreviewed] 全局限制(${res.errcode})，停止`);
+      console.warn(`[ListUnreviewed] 账号级错误(${res.errcode})，停止任务`);
       return 'stopped';
-    }
-
-    if (res.errcode === 10020110) {
-      const isQuotaError = res.errmsg.includes('提审次数');
-      addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      if (isQuotaError) {
-        console.warn(`[ListUnreviewed] 提审次数相关，停止`);
-        return 'stopped';
-      }
-      return 'failed';
     }
 
     if (SKIP_CODES.has(res.errcode)) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      console.log(`[ListUnreviewed] 跳过(${res.errcode}): ${product.title}`);
+      console.log(`[ListUnreviewed] 商品级错误(${res.errcode})，跳过: ${product.title}`);
       return 'skipped';
     }
 
+    // 未知错误 — 可能是网络/系统问题，计入连续失败
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
     return 'failed';
   } catch (error: any) {
