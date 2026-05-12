@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm } from 'antd';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, TimePicker } from 'antd';
 // fix: Table import for delete confirmation dialog
 import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../hooks/useIpc';
@@ -19,6 +19,14 @@ const cronPresets = [
   { label: '每 2 小时', value: '0 */2 * * *' },
   { label: '每 4 小时', value: '0 */4 * * *' },
 ];
+
+function cronToLabel(cron: string): string {
+  const preset = cronPresets.find(p => p.value === cron);
+  if (preset) return preset.label;
+  const m = cron.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
+  if (m) return `每天 ${m[2]}:${m[1].padStart(2, '0')}`;
+  return cron;
+}
 
 const defaultTaskConfig: TaskConfig = {
   deleteFailed: false,
@@ -43,12 +51,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const [formData, setFormData] = useState({
     name: '',
     cronExpression: '0 9 * * *',
-    dailyLimit: 100,
+    dailyLimit: 0,
     enabled: true,
     taskConfig: { ...defaultTaskConfig },
   });
   const unsubscribeRef = useRef<(() => void) | null>(null);
-  const logsEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchTaskConfig();
@@ -59,10 +66,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       unsubscribeRef.current?.();
     };
   }, [accountId]);
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
 
   const handleRun = async () => {
     setRunning(true);
@@ -111,7 +114,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
   const openAddModal = () => {
     setEditingTask(null);
-    setFormData({ name: '', cronExpression: '0 9 * * *', dailyLimit: 100, enabled: true, taskConfig: { ...defaultTaskConfig } });
+    setFormData({ name: '', cronExpression: '0 9 * * *', dailyLimit: 0, enabled: true, taskConfig: { ...defaultTaskConfig } });
     setEditModalOpen(true);
   };
 
@@ -217,7 +220,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               danger
               icon={<CloseCircleOutlined />}
               onClick={() => window.electronAPI.task.stop(accountId)}
-              loading={running}
               style={!running ? { display: 'none' } : undefined}
             >
               停止
@@ -278,9 +280,9 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                     onChange={checked => updateTask(task.id, { enabled: checked })}
                   />
                   <span style={{ fontWeight: 500, minWidth: 80 }}>{task.name}</span>
-                  <Tag color={task.enabled ? 'blue' : 'default'}>{task.cronExpression}</Tag>
+                  <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
                   <span style={{ color: '#999', fontSize: 12 }}>
-                    今日 {task.todayListedCount}/{task.dailyLimit}
+                    今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
                   </span>
                   <span style={{ flex: 1 }} />
                   <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)} />
@@ -319,36 +321,42 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         {logs.length === 0 ? (
           <div style={{ color: '#999', textAlign: 'center', padding: 32 }}>暂无记录</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {logs.map((log, index) => {
-              const prevLog = logs[index - 1];
-              const showDivider = index > 0 && log.runId !== prevLog.runId;
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ color: '#bbb', fontSize: 11, textAlign: 'center' }}>最新</div>
+            {[...logs].reverse().map((log, index, arr) => {
+              const nextLog = arr[index - 1];
+              const showDivider = index > 0 && log.runId !== nextLog?.runId;
+              const isSuccess = log.status === 'success';
+              const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架';
+              const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : '#1677ff';
               return (
                 <React.Fragment key={log.id}>
-                  {showDivider && <Divider style={{ margin: '8px 0' }} />}
-                  <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {log.status === 'success'
-                      ? <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
-                      : <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />}
-                    <Tag color={log.action === 'delete' ? 'orange' : log.action === 'check' ? 'green' : 'blue'} style={{ margin: 0, fontSize: 11 }}>
-                      {log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架'}
-                    </Tag>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {log.productTitle || log.productId || log.errorMsg || ''}
-                    </span>
-                    {log.errorMsg && log.productId && (
-                      <span style={{ color: '#ff4d4f', fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {log.errorMsg}
+                  {showDivider && <Divider style={{ margin: '4px 0' }} />}
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    background: isSuccess ? '#f6ffed' : '#fff2f0',
+                    borderLeft: `3px solid ${isSuccess ? '#b7eb8f' : '#ffccc7'}`,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: actionColor }}>{actionLabel}</span>
+                      <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {log.productTitle || log.productId || ''}
                       </span>
+                      <span style={{ color: '#bbb', fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {new Date(log.timestamp).toLocaleTimeString('zh-CN')}
+                      </span>
+                    </div>
+                    {log.errorMsg && (
+                      <div style={{ color: '#cf1322', fontSize: 12, marginTop: 4, lineHeight: 1.6, wordBreak: 'break-all' }}>
+                        {log.errorCode != null && <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>}
+                        {log.errorMsg}
+                      </div>
                     )}
-                    <span style={{ color: '#bbb', fontSize: 11, whiteSpace: 'nowrap' }}>
-                      {new Date(log.timestamp).toLocaleTimeString('zh-CN')}
-                    </span>
                   </div>
                 </React.Fragment>
               );
             })}
-            <div ref={logsEndRef} />
           </div>
         )}
       </Card>
@@ -374,29 +382,44 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           </div>
           <div>
             <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>执行时间</div>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <Input
-                placeholder="Cron 表达式"
-                value={formData.cronExpression}
-                onChange={e => setFormData(prev => ({ ...prev, cronExpression: e.target.value }))}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {cronPresets.map(preset => (
+                <Tag
+                  key={preset.value}
+                  color={formData.cronExpression === preset.value ? 'blue' : 'default'}
+                  style={{ cursor: 'pointer', padding: '2px 8px' }}
+                  onClick={() => setFormData(prev => ({ ...prev, cronExpression: preset.value }))}
+                >
+                  {preset.label}
+                </Tag>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#666' }}>自定义时间：</span>
+              <TimePicker
+                format="HH:mm"
+                placeholder="选择时间"
+                onChange={(_, timeStr) => {
+                  if (timeStr) {
+                    const [h, m] = timeStr.split(':');
+                    setFormData(prev => ({ ...prev, cronExpression: `${m} ${h} * * *` }));
+                  }
+                }}
               />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {cronPresets.map(preset => (
-                  <Tag
-                    key={preset.value}
-                    color={formData.cronExpression === preset.value ? 'blue' : 'default'}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setFormData(prev => ({ ...prev, cronExpression: preset.value }))}
-                  >
-                    {preset.label}
-                  </Tag>
-                ))}
-              </div>
-            </Space>
+            </div>
           </div>
           <div>
-            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>每日上限</div>
-            <InputNumber min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Checkbox
+                checked={formData.dailyLimit > 0}
+                onChange={e => setFormData(prev => ({ ...prev, dailyLimit: e.target.checked ? 100 : 0 }))}
+              >
+                <span style={{ fontSize: 13, fontWeight: 500 }}>限制每日上限</span>
+              </Checkbox>
+            </div>
+            {formData.dailyLimit > 0 && (
+              <InputNumber min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
+            )}
           </div>
           <div>
             <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>任务配置</div>

@@ -23,13 +23,21 @@ const SKIP_CODES = new Set([
   10020008,
 ]);
 
-async function waitInterval(cacheKey: string): Promise<void> {
+async function waitInterval(cacheKey: string, signal?: AbortSignal): Promise<void> {
   const lastSubmitTime = lastSubmitTimeMap.get(cacheKey) || 0;
   const now = Date.now();
   const elapsed = now - lastSubmitTime;
   if (elapsed < SUBMIT_INTERVAL_MS) {
-    console.log(`[ListUnreviewed] 等待间隔 ${SUBMIT_INTERVAL_MS - elapsed}ms...`);
-    await new Promise(resolve => setTimeout(resolve, SUBMIT_INTERVAL_MS - elapsed));
+    const waitMs = SUBMIT_INTERVAL_MS - elapsed;
+    console.log(`[ListUnreviewed] 等待间隔 ${waitMs}ms...`);
+    if (signal) {
+      await Promise.race([
+        new Promise(resolve => setTimeout(resolve, waitMs)),
+        new Promise(resolve => { signal.addEventListener('abort', resolve, { once: true }); }),
+      ]);
+    } else {
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
   }
 }
 
@@ -38,6 +46,7 @@ export async function listOne(
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,
+  signal?: AbortSignal,
 ): Promise<ListOneResult> {
   try {
     const latest = await api.getProductDetail(product.productId);
@@ -46,7 +55,7 @@ export async function listOne(
       return 'skipped';
     }
 
-    await waitInterval(api.config.appId);
+    await waitInterval(api.config.appId, signal);
     const res = await api.listProduct(product.productId);
     lastSubmitTimeMap.set(api.config.appId, Date.now());
 

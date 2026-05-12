@@ -18,7 +18,7 @@ async function executeTask(accountId: string, taskId: string): Promise<void> {
     updateScheduler(accountId, taskId, { lastRunDate: today, todayListedCount: 0 });
   }
 
-  if (count >= task.dailyLimit) {
+  if (task.dailyLimit > 0 && count >= task.dailyLimit) {
     console.log(`[Scheduler:${accountId}:${taskId}] 今日上架次数已达上限，停止执行`);
     return;
   }

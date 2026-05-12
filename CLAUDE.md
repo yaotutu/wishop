@@ -61,17 +61,17 @@ npm run start        # Run packaged electron app
 - **hooks/useIpc.ts** - All hooks take `accountId` parameter. `useAccounts()` for account management.
 
 ### IPC Channels
-| Channel | Direction | Purpose |
-|---------|-----------|---------|
-| accounts:list/add/remove/update/getActive/setActive | renderer→main | Account CRUD |
-| config:get/set | renderer→main | Get/set WeChat API credentials (per account) |
-| drafts:fetch | renderer→main | Get draft products |
-| drafts:list | renderer→main | List/publish a product |
-| quota:get | renderer→main | Get remaining audit quota |
-| logs:get/clear | renderer→main | Get/clear listing logs |
-| scheduler:get/set/start/stop | renderer→main | Manage scheduled listing |
-| task:run | renderer→main | Run task cycle |
-| log:added:{accountId} | main→renderer | Real-time log push |
+| Channel                                             | Direction     | Purpose                                      |
+| --------------------------------------------------- | ------------- | -------------------------------------------- |
+| accounts:list/add/remove/update/getActive/setActive | renderer→main | Account CRUD                                 |
+| config:get/set                                      | renderer→main | Get/set WeChat API credentials (per account) |
+| drafts:fetch                                        | renderer→main | Get draft products                           |
+| drafts:list                                         | renderer→main | List/publish a product                       |
+| quota:get                                           | renderer→main | Get remaining audit quota                    |
+| logs:get/clear                                      | renderer→main | Get/clear listing logs                       |
+| scheduler:get/set/start/stop                        | renderer→main | Manage scheduled listing                     |
+| task:run                                            | renderer→main | Run task cycle                               |
+| log:added:{accountId}                               | main→renderer | Real-time log push                           |
 
 ## WeChat API Notes
 
@@ -96,3 +96,8 @@ npm run start        # Run packaged electron app
 - `src/main/ipc/handler.ts` - Account context resolution, dependency injection
 - `src/renderer/hooks/useIpc.ts` - Typed React hooks for IPC calls
 - `.claude/skills/wechat-shop-api/` - WeChat API documentation
+
+
+# 重要规则，改规则由用户手动添加，claude在生成代码时必须遵守并且禁止修改：
+- 直接展示原始错误信息 — 不对错误做过度包装或美化，将后端/API返回的原始错误信息直接呈现给用户，保留完整的错误上下文（如状态码、错误码、错误消息）。
+- 错误信息要可定位 — 在日志和UI中标注错误发生的位置（如哪个账户、哪个商品、哪一步操作），方便用户自行排查问题。
