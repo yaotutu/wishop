@@ -23,6 +23,17 @@ function createWindow(): void {
     },
   });
 
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+        ],
+      },
+    });
+  });
+
   mainWindow.maximize();
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {

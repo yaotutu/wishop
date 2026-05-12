@@ -242,7 +242,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           type={result.stopped ? 'warning' : 'success'}
           showIcon={false}
           style={{ padding: '8px 16px' }}
-          message={
+          title={
             <Space size={16} wrap>
               <span>扫描 {result.scanned}</span>
               {result.listed > 0 && <Tag color="success">提交成功 {result.listed}</Tag>}
@@ -302,7 +302,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       {/* 防封号提醒 */}
       <Alert
         type="warning"
-        message="频繁提交审核会被封禁，请勿短时间内重复执行。每次提交间已自动间隔 3 秒。"
+        title="频繁提交审核会被封禁，请勿短时间内重复执行。每次提交间已自动间隔 3 秒。"
         showIcon
         icon={<WarningOutlined />}
         style={{ padding: '6px 12px', fontSize: 12 }}
