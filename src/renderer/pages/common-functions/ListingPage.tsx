@@ -167,7 +167,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                 提交未审核
               </Checkbox>
               <InputNumber
-                size="small" min={1} max={100} value={taskConfig.listUnreviewedQuantity}
+                size="small" min={1} value={taskConfig.listUnreviewedQuantity}
                 onChange={v => updateConfig({ listUnreviewedQuantity: v || 2 })}
                 disabled={!taskConfig.listUnreviewed}
                 style={{ width: 60 }}
@@ -439,7 +439,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               {formData.taskConfig.listUnreviewed && (
                 <Space style={{ marginLeft: 24 }}>
                   <span style={{ color: '#666', fontSize: 12 }}>每次</span>
-                  <InputNumber size="small" min={1} max={100} value={formData.taskConfig.listUnreviewedQuantity}
+                  <InputNumber size="small" min={1} value={formData.taskConfig.listUnreviewedQuantity}
                     onChange={v => setFormData(prev => ({
                       ...prev,
                       taskConfig: { ...prev.taskConfig, listUnreviewedQuantity: v || 2 },
