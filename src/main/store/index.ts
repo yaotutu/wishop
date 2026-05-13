@@ -2,6 +2,7 @@ import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult } from '../../shared/types';
+import { createLogger } from '../utils/logger';
 
 export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult };
 export type Account = FullAccount;
@@ -104,7 +105,8 @@ function migrateIfNeeded(): void {
   store.delete('scheduler');
   store.delete('taskConfig');
   store.delete('logs');
-  console.log('[Store] 已迁移单账号数据到多账号格式');
+  const logger = createLogger('Store', 'system');
+  logger.info('已迁移单账号数据到多账号格式');
 }
 
 migrateIfNeeded();

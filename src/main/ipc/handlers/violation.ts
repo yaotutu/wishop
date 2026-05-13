@@ -5,6 +5,7 @@ import { getClient } from '../../wxshop/client-registry';
 import { batchScan, scanOneByOne, batchDeleteViolations } from '../../modules/violation-detect';
 import { createLogForwarder, withLogForwarding, LogForwarder } from '../utils/log-forwarding';
 import { SessionManager } from '../utils/session-manager';
+import { createLogger } from '../../utils/logger';
 
 interface ScanSessionState {
   generator: AsyncGenerator<ViolationMatch & { scanned: number }> | null;
@@ -26,16 +27,17 @@ export function registerViolationHandlers(context: {
   });
 
   ipcMain.handle('violation:batchScan', async (event: IpcMainInvokeEvent, accountId: string, limit?: number): Promise<ViolationScanResult> => {
+    const logger = createLogger('Violation', accountId);
     const runId = Date.now().toString();
     const scopedAddLog = createScopedAddLog(accountId);
     const api = getClient(accountId);
     const words = getViolationWords(accountId);
 
     const account = getAccount(accountId);
-    console.log(`[Violation] 批量扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个 上限=${limit || '全部'}`);
+    logger.info(`批量扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个 上限=${limit || '全部'}`);
 
     if (words.length === 0) {
-      console.log(`[Violation] 词库为空，跳过`);
+      logger.info(`词库为空，跳过`);
       return { scanned: 0, violations: [], errors: 0, stopped: false, reason: '词库为空' };
     }
 
@@ -44,7 +46,7 @@ export function registerViolationHandlers(context: {
     logForwarder.start();
 
     try {
-      return await batchScan(api, scopedAddLog, words, runId, signal, limit);
+      return await batchScan(api, scopedAddLog, words, runId, signal, limit, accountId);
     } finally {
       context.scanSessions.complete(accountId);
       logForwarder.stop();
@@ -52,6 +54,7 @@ export function registerViolationHandlers(context: {
   });
 
   ipcMain.handle('violation:scanStep', async (event: IpcMainInvokeEvent, accountId: string, action: 'next' | 'skip' | 'delete'): Promise<any> => {
+    const logger = createLogger('Violation', accountId);
     let session = context.scanSessions.get(accountId);
 
     if (!session || session.state.done) {
@@ -61,14 +64,14 @@ export function registerViolationHandlers(context: {
       }
       const account = getAccount(accountId);
       const api = getClient(accountId);
-      console.log(`[Violation] 逐个扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个`);
+      logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个`);
       const scopedAddLog = createScopedAddLog(accountId);
       const runId = Date.now().toString();
       const logForwarder = createLogForwarder(event, accountId, `violation:log:${accountId}`);
       logForwarder.start();
 
       const signal = context.scanSessions.start(accountId, { generator: null, current: null, done: false, logForwarder });
-      const generator = scanOneByOne(api, scopedAddLog, words, runId, signal);
+      const generator = scanOneByOne(api, scopedAddLog, words, runId, signal, accountId);
       session = context.scanSessions.get(accountId)!;
       session.state.generator = generator;
     }
@@ -79,14 +82,16 @@ export function registerViolationHandlers(context: {
       const api = getClient(accountId);
 
       try {
-        const result = await batchDeleteViolations(api, scopedAddLog, [session.state.current], runId);
+        const result = await batchDeleteViolations(api, scopedAddLog, [session.state.current], runId, accountId);
         if (result.stopped) {
           session.state.done = true;
           session.state.logForwarder.stop();
           context.scanSessions.stop(accountId);
           return { type: 'stopped', reason: '删除触发全局限制' };
         }
-      } catch {}
+      } catch (error) {
+        logger.error('删除违规商品失败:', error);
+      }
     }
 
     const next = await session.state.generator!.next();
@@ -107,7 +112,7 @@ export function registerViolationHandlers(context: {
     const api = getClient(accountId);
 
     return withLogForwarding(event, accountId, `violation:log:${accountId}`, async () => {
-      return await batchDeleteViolations(api, scopedAddLog, violations, runId);
+      return await batchDeleteViolations(api, scopedAddLog, violations, runId, accountId);
     });
   });
 

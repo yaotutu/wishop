@@ -3,10 +3,12 @@ import { getAccounts, getSchedulers, updateScheduler, createScopedAddLog } from 
 import type { ScheduledTask } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
 import { runTaskCycle } from '../modules/task-cycle';
+import { createLogger } from '../utils/logger';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
 
 async function executeTask(accountId: string, taskId: string): Promise<void> {
+  const logger = createLogger('Scheduler', accountId);
   const schedulers = getSchedulers(accountId);
   const task = schedulers.find(t => t.id === taskId);
   if (!task) return;
@@ -19,7 +21,7 @@ async function executeTask(accountId: string, taskId: string): Promise<void> {
   }
 
   if (task.dailyLimit > 0 && count >= task.dailyLimit) {
-    console.log(`[Scheduler:${accountId}:${taskId}] 今日上架次数已达上限，停止执行`);
+    logger.info(`[${taskId}] 今日上架次数已达上限，停止执行`);
     return;
   }
 
@@ -29,21 +31,22 @@ async function executeTask(accountId: string, taskId: string): Promise<void> {
     const quota = await api.getAuditQuota();
 
     if (quota.quota <= 0) {
-      console.log(`[Scheduler:${accountId}:${taskId}] 配额已用完，停止执行`);
+      logger.info(`[${taskId}] 配额已用完，停止执行`);
       return;
     }
 
-    const result = await runTaskCycle(api, scopedAddLog, task.taskConfig, `cron-${taskId}-${Date.now()}`);
+    const result = await runTaskCycle(api, scopedAddLog, task.taskConfig, `cron-${taskId}-${Date.now()}`, undefined, accountId);
 
     const newCount = count + result.listed;
     updateScheduler(accountId, taskId, { todayListedCount: newCount });
-    console.log(`[Scheduler:${accountId}:${taskId}] 执行完毕: 提交=${result.listed}, 删除=${result.deleted}`);
+    logger.info(`[${taskId}] 执行完毕: 提交=${result.listed}, 删除=${result.deleted}`);
   } catch (error) {
-    console.error(`[Scheduler:${accountId}:${taskId}] 执行失败:`, error);
+    logger.error(`[${taskId}] 执行失败:`, error);
   }
 }
 
 export function startTask(accountId: string, task: ScheduledTask): void {
+  const logger = createLogger('Scheduler', accountId);
   const key = `${accountId}:${task.id}`;
 
   if (scheduledTasks.has(key)) {
@@ -54,22 +57,23 @@ export function startTask(accountId: string, task: ScheduledTask): void {
   if (!task.enabled) return;
 
   if (!cron.validate(task.cronExpression)) {
-    console.error(`[Scheduler:${accountId}:${task.id}] 无效的 cron 表达式: ${task.cronExpression}`);
+    logger.error(`[${task.id}] 无效的 cron 表达式: ${task.cronExpression}`);
     return;
   }
 
   const cronTask = cron.schedule(task.cronExpression, () => executeTask(accountId, task.id));
   scheduledTasks.set(key, cronTask);
-  console.log(`[Scheduler:${accountId}:${task.id}] 已启动 "${task.name}", cron: ${task.cronExpression}`);
+  logger.info(`[${task.id}] 已启动 "${task.name}", cron: ${task.cronExpression}`);
 }
 
 export function stopTask(accountId: string, taskId: string): void {
+  const logger = createLogger('Scheduler', accountId);
   const key = `${accountId}:${taskId}`;
   const cronTask = scheduledTasks.get(key);
   if (cronTask) {
     cronTask.stop();
     scheduledTasks.delete(key);
-    console.log(`[Scheduler:${accountId}:${taskId}] 已停止`);
+    logger.info(`[${taskId}] 已停止`);
   }
 }
 

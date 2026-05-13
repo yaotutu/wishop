@@ -1,12 +1,15 @@
 import { autoUpdater } from 'electron-updater';
 import { BrowserWindow } from 'electron';
+import { createLogger } from './utils/logger';
+
+const logger = createLogger('Updater', 'system');
 
 export function initUpdater(win: BrowserWindow): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('update-available', (info) => {
-    console.log(`[Updater] 发现新版本: ${info.version}`);
+    logger.info(`发现新版本: ${info.version}`);
     if (!win.isDestroyed()) {
       win.webContents.send('update:available', { version: info.version });
     }
@@ -19,17 +22,20 @@ export function initUpdater(win: BrowserWindow): void {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log(`[Updater] 新版本已下载: ${info.version}`);
+    logger.info(`新版本已下载: ${info.version}`);
     if (!win.isDestroyed()) {
       win.webContents.send('update:downloaded', { version: info.version });
     }
   });
 
-  // 网络错误静默忽略，不影响使用
-  autoUpdater.on('error', () => {});
+  autoUpdater.on('error', (error) => {
+    logger.error('自动更新错误:', error);
+  });
 
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
+    autoUpdater.checkForUpdates().catch((error) => {
+      logger.error('检查更新失败:', error);
+    });
   }, 3000);
 }
 

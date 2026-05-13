@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { getClient } from '../../wxshop/client-registry';
 import type { Order, OrderListParams, OrderSearchParams, OrderStatus, OrderAddressInfo } from '../../../shared/types';
+import { createLogger } from '../../utils/logger';
 
 interface OrderPaginationState {
   nextKey: string;
@@ -16,6 +17,7 @@ function makeTimeRange(): { start_time: number; end_time: number } {
 
 export function registerOrderHandlers(context: { orderPaginationMap: Map<string, OrderPaginationState> }): void {
   ipcMain.handle('orders:list', async (_, accountId: string, status?: OrderStatus, pageSize?: number): Promise<{ orders: Order[]; hasMore: boolean }> => {
+    const logger = createLogger('Orders', accountId);
     const existing = context.orderPaginationMap.get(accountId);
     const isReset = !existing || existing.currentStatus !== status;
     const pag: OrderPaginationState = isReset
@@ -43,7 +45,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
         const order = await api.getOrderDetail(orderId);
         orders.push(order);
       } catch (error) {
-        console.error(`[Orders] 获取订单 ${orderId} 详情失败:`, error);
+        logger.error(`获取订单 ${orderId} 详情失败:`, error);
       }
     }
 
@@ -59,6 +61,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
   });
 
   ipcMain.handle('orders:search', async (_, accountId: string, searchParams: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => {
+    const logger = createLogger('Orders', accountId);
     const api = getClient(accountId);
     const listResult = await api.searchOrders(searchParams);
 
@@ -68,7 +71,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
         const order = await api.getOrderDetail(orderId);
         orders.push(order);
       } catch (error) {
-        console.error(`[Orders] 获取订单 ${orderId} 详情失败:`, error);
+        logger.error(`获取订单 ${orderId} 详情失败:`, error);
       }
     }
 
