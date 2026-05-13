@@ -24,6 +24,18 @@ const generator = new FingerprintGenerator({
 const injector = new FingerprintInjector();
 const configs = new Map<string, BrowserConfig>();
 let browserWindow: BrowserWindow | null = null;
+let isQuitting = false;
+
+export function setBrowserQuitting(v: boolean) {
+  isQuitting = v;
+}
+
+export async function flushBrowserSession(profileId = 'default'): Promise<void> {
+  const partition = `${PARTITION_PREFIX}${profileId}`;
+  const ses = session.fromPartition(partition);
+  ses.flushStorageData();
+  await ses.cookies.flushStore();
+}
 
 function prepare(profileId: string): BrowserConfig {
   const existing = configs.get(profileId);
@@ -133,8 +145,10 @@ export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?
   });
 
   browserWindow.on('close', (e) => {
+    if (isQuitting) return;
     e.preventDefault();
     browserWindow!.hide();
+    flushBrowserSession();
   });
 
   if (url) {

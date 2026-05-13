@@ -5,6 +5,7 @@ import { registerHandlers } from './ipc/handler';
 import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall } from './updater';
+import { flushBrowserSession, setBrowserQuitting } from './browser/browser-window';
 
 dotenv.config();
 
@@ -50,6 +51,9 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
   });
 
   if (app.isPackaged) {
@@ -80,7 +84,16 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopAllTasks();
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+});
+
+app.on('before-quit', () => {
+  setBrowserQuitting(true);
+});
+
+app.on('will-quit', async (e) => {
+  e.preventDefault();
+  try {
+    await flushBrowserSession();
+  } catch {}
+  app.exit(0);
 });
