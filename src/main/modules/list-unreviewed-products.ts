@@ -1,4 +1,4 @@
-import { WeChatClient, DraftProduct } from '../wechat/client';
+import { WxShopClient, DraftProduct } from '../wxshop/client';
 import { AddLogFn } from '../store';
 
 export type ListOneResult = 'success' | 'failed' | 'skipped' | 'stopped';
@@ -45,7 +45,7 @@ async function waitInterval(cacheKey: string, signal?: AbortSignal): Promise<voi
 }
 
 export async function listOne(
-  api: WeChatClient,
+  api: WxShopClient,
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,

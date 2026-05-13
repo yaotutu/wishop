@@ -1,6 +1,6 @@
-import { WeChatClient, DraftProduct } from '../wechat/client';
+import { WxShopClient, DraftProduct } from '../wxshop/client';
 
-export async function* streamDraftProducts(api: WeChatClient, signal?: AbortSignal): AsyncGenerator<DraftProduct> {
+export async function* streamDraftProducts(api: WxShopClient, signal?: AbortSignal): AsyncGenerator<DraftProduct> {
   let nextKey = '';
   let hasMore = true;
 

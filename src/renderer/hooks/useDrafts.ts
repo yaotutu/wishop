@@ -1,26 +1,30 @@
 import { useState, useCallback } from 'react';
 import type { DraftProduct } from '../../shared/types';
+import { useIpcFetch } from './useIpcFetch';
 
 export function useDrafts(accountId: string) {
-  const [drafts, setDrafts] = useState<DraftProduct[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const { data: drafts, loading, fetch, setData: setDrafts } = useIpcFetch<DraftProduct[]>(
+    accountId,
+    useCallback(async () => {
+      const { products, hasMore: more } = await window.electronAPI.drafts.fetch(accountId, true);
+      setHasMore(more);
+      return products;
+    }, [accountId]),
+    [],
+    { autoFetch: false },
+  );
 
   const fetchDrafts = useCallback(async (reset = true) => {
     if (!accountId) return;
-    setLoading(true);
-    try {
-      const { products, hasMore: more } = await window.electronAPI.drafts.fetch(accountId, reset);
-      if (reset) {
-        setDrafts(products);
-      } else {
-        setDrafts(prev => [...prev, ...products]);
-      }
+    if (!reset) {
+      const { products, hasMore: more } = await window.electronAPI.drafts.fetch(accountId, false);
+      setDrafts(prev => [...prev, ...products]);
       setHasMore(more);
-    } finally {
-      setLoading(false);
+    } else {
+      fetch();
     }
-  }, [accountId]);
+  }, [accountId, fetch, setDrafts]);
 
   const listProduct = useCallback(async (productId: string) => {
     return window.electronAPI.drafts.list(accountId, productId);

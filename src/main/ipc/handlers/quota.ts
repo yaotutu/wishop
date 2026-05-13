@@ -1,10 +1,9 @@
 import { ipcMain } from 'electron';
-import { getConfig } from '../../store';
-import { createWeChatClient } from '../../wechat/client';
+import { getClient } from '../../wxshop/client-registry';
 
 export function registerQuotaHandlers(): void {
   ipcMain.handle('quota:get', async (_, accountId: string) => {
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     return api.getAuditQuota();
   });
 }

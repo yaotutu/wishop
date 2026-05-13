@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
-import { getConfig, createScopedAddLog } from '../../store';
+import { createScopedAddLog } from '../../store';
 import type { DraftProduct } from '../../../shared/types';
-import { createWeChatClient } from '../../wechat/client';
+import { getClient } from '../../wxshop/client-registry';
 
 interface PaginationState {
   nextKey: string;
@@ -20,7 +20,7 @@ export function registerDraftHandlers(context: { draftPaginationMap: Map<string,
       return { products: [], hasMore: false };
     }
 
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     const need = 10;
     const products: DraftProduct[] = [];
     let nextKey = pagination.nextKey;
@@ -52,7 +52,7 @@ export function registerDraftHandlers(context: { draftPaginationMap: Map<string,
   });
 
   ipcMain.handle('drafts:list', async (_, accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => {
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     const scopedAddLog = createScopedAddLog(accountId);
     try {
       const result = await api.listProduct(productId);

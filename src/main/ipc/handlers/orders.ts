@@ -1,6 +1,5 @@
 import { ipcMain } from 'electron';
-import { getConfig } from '../../store';
-import { createWeChatClient } from '../../wechat/client';
+import { getClient } from '../../wxshop/client-registry';
 import type { Order, OrderListParams, OrderSearchParams, OrderStatus, OrderAddressInfo } from '../../../shared/types';
 
 interface OrderPaginationState {
@@ -28,7 +27,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
       return { orders: [], hasMore: false };
     }
 
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
 
     const params: OrderListParams = {
       page_size: pageSize || 10,
@@ -55,12 +54,12 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
   });
 
   ipcMain.handle('orders:detail', async (_, accountId: string, orderId: string): Promise<Order> => {
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     return api.getOrderDetail(orderId);
   });
 
   ipcMain.handle('orders:search', async (_, accountId: string, searchParams: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => {
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     const listResult = await api.searchOrders(searchParams);
 
     const orders: Order[] = [];
@@ -77,7 +76,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
   });
 
   ipcMain.handle('orders:decodeAddress', async (_, accountId: string, orderId: string): Promise<OrderAddressInfo> => {
-    const api = createWeChatClient(getConfig(accountId));
+    const api = getClient(accountId);
     return api.decodeOrderSensitiveInfo(orderId);
   });
 }

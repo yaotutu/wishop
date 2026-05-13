@@ -8,14 +8,33 @@ import { registerQuotaHandlers } from './handlers/quota';
 import { registerSchedulerHandlers } from './handlers/scheduler';
 import { registerTaskHandlers } from './handlers/task';
 import { registerViolationHandlers } from './handlers/violation';
+import { SessionManager } from './utils/session-manager';
 
-const draftPaginationMap = new Map<string, { nextKey: string; hasMore: boolean }>();
-const orderPaginationMap = new Map<string, { nextKey: string; hasMore: boolean; currentStatus?: number }>();
-const taskControllers = new Map<string, AbortController>();
-const scanSessions = new Map<string, any>();
+interface PaginationState {
+  nextKey: string;
+  hasMore: boolean;
+}
+
+interface OrderPaginationState {
+  nextKey: string;
+  hasMore: boolean;
+  currentStatus?: number;
+}
+
+interface ScanSessionState {
+  generator: AsyncGenerator<any> | null;
+  current: any | null;
+  done: boolean;
+  logForwarder: { start: () => void; stop: () => void };
+}
+
+const draftPaginationMap = new Map<string, PaginationState>();
+const orderPaginationMap = new Map<string, OrderPaginationState>();
+const taskSessions = new SessionManager<void>();
+const scanSessions = new SessionManager<ScanSessionState>();
 
 export function registerHandlers(): void {
-  const context = { draftPaginationMap, orderPaginationMap, taskControllers, scanSessions };
+  const context = { draftPaginationMap, orderPaginationMap, taskSessions, scanSessions };
 
   registerAccountHandlers(context);
   registerBrowserHandlers();

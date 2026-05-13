@@ -1,4 +1,4 @@
-import { WeChatClient } from '../wechat/client';
+import { WxShopClient } from '../wxshop/client';
 import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult } from '../../shared/types';
 
 export type { TaskConfig, TaskCycleResult };
@@ -9,7 +9,7 @@ import { listOne } from './list-unreviewed-products';
 const CONSECUTIVE_THRESHOLD = 3;
 
 export async function runTaskCycle(
-  api: WeChatClient,
+  api: WxShopClient,
   addLog: AddLogFn,
   taskConfig: TaskConfig,
   runId: string,

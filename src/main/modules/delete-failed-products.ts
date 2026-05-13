@@ -1,11 +1,11 @@
-import { WeChatClient, DraftProduct } from '../wechat/client';
+import { WxShopClient, DraftProduct } from '../wxshop/client';
 import { AddLogFn } from '../store';
 
 const DELETE_INTERVAL_MS = 1000;
 const lastDeleteTimeMap = new Map<string, number>();
 
 export async function deleteOne(
-  api: WeChatClient,
+  api: WxShopClient,
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,
@@ -43,4 +43,36 @@ export async function deleteOne(
     console.error(`[DeleteFailed] 异常: ${product.title}`, error.message);
     return 'failed';
   }
+}
+
+export async function batchDelete(
+  api: WxShopClient,
+  addLog: AddLogFn,
+  products: Array<{ productId: string; title: string }>,
+  runId: string,
+): Promise<{ deleted: number; errors: number; stopped: boolean }> {
+  let deleted = 0;
+  let errors = 0;
+  let stopped = false;
+
+  for (const product of products) {
+    const draft: DraftProduct = {
+      productId: product.productId,
+      title: product.title,
+      headImgs: [],
+      status: 0,
+      editStatus: 0,
+    };
+    const res = await deleteOne(api, addLog, draft, runId);
+    if (res === 'success') {
+      deleted++;
+    } else if (res === 'stopped') {
+      stopped = true;
+      break;
+    } else {
+      errors++;
+    }
+  }
+
+  return { deleted, errors, stopped };
 }

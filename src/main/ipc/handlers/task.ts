@@ -1,11 +1,13 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { getConfig, createScopedAddLog, getTaskConfig, setTaskConfig, logEmitter } from '../../store';
-import type { TaskConfig, LogEntry, DraftProduct, TaskCycleResult } from '../../../shared/types';
-import { createWeChatClient } from '../../wechat/client';
+import { createScopedAddLog, getTaskConfig, setTaskConfig } from '../../store';
+import type { TaskConfig, DraftProduct, TaskCycleResult } from '../../../shared/types';
+import { getClient } from '../../wxshop/client-registry';
 import { runTaskCycle } from '../../modules/task-cycle';
-import { deleteOne } from '../../modules/delete-failed-products';
+import { batchDelete } from '../../modules/delete-failed-products';
+import { withLogForwarding } from '../utils/log-forwarding';
+import { SessionManager } from '../utils/session-manager';
 
-export function registerTaskHandlers(context: { taskControllers: Map<string, AbortController> }): void {
+export function registerTaskHandlers(context: { taskSessions: SessionManager<void> }): void {
   ipcMain.handle('taskConfig:get', (_, accountId: string): TaskConfig => {
     return getTaskConfig(accountId);
   });
@@ -20,7 +22,7 @@ export function registerTaskHandlers(context: { taskControllers: Map<string, Abo
 
     if (taskConfig.listUnreviewed) {
       try {
-        const api = createWeChatClient(getConfig(accountId));
+        const api = getClient(accountId);
         const quota = await api.getAuditQuota();
         console.log(`[TaskRun] 配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
         if (quota.quota > 0) {
@@ -37,65 +39,30 @@ export function registerTaskHandlers(context: { taskControllers: Map<string, Abo
       }
     }
 
-    const win = event.sender;
-    const onLog = (log: LogEntry) => {
-      if (!win.isDestroyed()) {
-        win.send(`log:added:${accountId}`, log);
+    return withLogForwarding(event, accountId, `log:added:${accountId}`, async () => {
+      const signal = context.taskSessions.start(accountId, undefined);
+      try {
+        const api = getClient(accountId);
+        const taskResult = await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal);
+        return { ...taskResult, pendingDelete: taskResult.pendingDelete };
+      } finally {
+        context.taskSessions.complete(accountId);
       }
-    };
-    logEmitter.on(`log-added:${accountId}`, onLog);
-    const controller = new AbortController();
-    context.taskControllers.set(accountId, controller);
-    try {
-      const api = createWeChatClient(getConfig(accountId));
-      const taskResult = await runTaskCycle(api, scopedAddLog, taskConfig, runId, controller.signal);
-      return { ...taskResult, pendingDelete: taskResult.pendingDelete };
-    } finally {
-      context.taskControllers.delete(accountId);
-      logEmitter.off(`log-added:${accountId}`, onLog);
-    }
+    });
   });
 
   ipcMain.handle('task:stop', (_, accountId: string): void => {
-    const controller = context.taskControllers.get(accountId);
-    if (controller) {
-      controller.abort();
-      console.log(`[TaskStop] 已发送停止信号: ${accountId}`);
-    }
+    context.taskSessions.stop(accountId);
+    console.log(`[TaskStop] 已发送停止信号: ${accountId}`);
   });
 
   ipcMain.handle('task:batchDelete', async (event: IpcMainInvokeEvent, accountId: string, products: DraftProduct[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => {
     const runId = Date.now().toString();
     const scopedAddLog = createScopedAddLog(accountId);
-    const api = createWeChatClient(getConfig(accountId));
-    let deleted = 0;
-    let errors = 0;
-    let stopped = false;
+    const api = getClient(accountId);
 
-    const win = event.sender;
-    const onLog = (log: LogEntry) => {
-      if (!win.isDestroyed()) {
-        win.send(`log:added:${accountId}`, log);
-      }
-    };
-    logEmitter.on(`log-added:${accountId}`, onLog);
-
-    try {
-      for (const product of products) {
-        const res = await deleteOne(api, scopedAddLog, product, runId);
-        if (res === 'success') {
-          deleted++;
-        } else if (res === 'stopped') {
-          stopped = true;
-          break;
-        } else {
-          errors++;
-        }
-      }
-    } finally {
-      logEmitter.off(`log-added:${accountId}`, onLog);
-    }
-
-    return { deleted, errors, stopped };
+    return withLogForwarding(event, accountId, `log:added:${accountId}`, () =>
+      batchDelete(api, scopedAddLog, products, runId),
+    );
   });
 }

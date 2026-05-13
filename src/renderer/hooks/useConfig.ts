@@ -1,30 +1,21 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import type { Config } from '../../shared/types';
+import { useIpcFetch } from './useIpcFetch';
 
 export function useConfig(accountId: string) {
-  const [config, setConfig] = useState<Config>({ appId: '', appSecret: '' });
-  const [loading, setLoading] = useState(false);
-
-  const fetchConfig = useCallback(async () => {
-    if (!accountId) return;
-    setLoading(true);
-    try {
-      const data = await window.electronAPI.config.get(accountId);
-      setConfig(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [accountId]);
+  const { data: config, loading, fetch: fetchConfig, setData: setConfigState } = useIpcFetch<Config>(
+    accountId,
+    useCallback(async () => window.electronAPI.config.get(accountId), [accountId]),
+    { appId: '', appSecret: '' },
+  );
 
   const saveConfig = useCallback(async (newConfig: Config): Promise<{ success: boolean; error?: string }> => {
     const result = await window.electronAPI.config.set(accountId, newConfig);
     if (result.success) {
-      setConfig(newConfig);
+      setConfigState(newConfig);
     }
     return result;
-  }, [accountId]);
-
-  useEffect(() => { fetchConfig(); }, [accountId]);
+  }, [accountId, setConfigState]);
 
   return { config, loading, fetchConfig, saveConfig };
 }

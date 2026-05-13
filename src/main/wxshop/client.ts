@@ -21,7 +21,7 @@ export interface ListingResult {
   errmsg: string;
 }
 
-export function createWeChatClient(config: Config) {
+export function createWxShopClient(config: Config) {
   let tokenCache: TokenData | null = null;
 
   async function getAccessToken(): Promise<string> {
@@ -243,4 +243,4 @@ export function createWeChatClient(config: Config) {
   };
 }
 
-export type WeChatClient = ReturnType<typeof createWeChatClient>;
+export type WxShopClient = ReturnType<typeof createWxShopClient>;

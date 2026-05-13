@@ -1,7 +1,7 @@
 import * as cron from 'node-cron';
-import { getAccounts, getSchedulers, updateScheduler, getTaskConfig, getConfig, createScopedAddLog } from '../store';
+import { getAccounts, getSchedulers, updateScheduler, createScopedAddLog } from '../store';
 import type { ScheduledTask } from '../../shared/types';
-import { createWeChatClient } from '../wechat/client';
+import { getClient } from '../wxshop/client-registry';
 import { runTaskCycle } from '../modules/task-cycle';
 
 const scheduledTasks = new Map<string, cron.ScheduledTask>();
@@ -24,8 +24,7 @@ async function executeTask(accountId: string, taskId: string): Promise<void> {
   }
 
   try {
-    const config = getConfig(accountId);
-    const api = createWeChatClient(config);
+    const api = getClient(accountId);
     const scopedAddLog = createScopedAddLog(accountId);
     const quota = await api.getAuditQuota();
 

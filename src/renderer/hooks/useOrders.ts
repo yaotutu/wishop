@@ -1,15 +1,24 @@
 import { useState, useCallback } from 'react';
 import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import { useIpcFetch } from './useIpcFetch';
 
 export function useOrders(accountId: string) {
-  const [orders, setOrders] = useState<Order[]>([]);
   const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: orders, loading, setData: setOrders } = useIpcFetch<Order[]>(
+    accountId,
+    useCallback(async () => {
+      const result = await window.electronAPI.orders.list(accountId);
+      setHasMore(result.hasMore);
+      return result.orders;
+    }, [accountId]),
+    [],
+    { autoFetch: false },
+  );
 
   const fetchOrders = useCallback(async (status?: OrderStatus, append = false) => {
     if (!accountId) return;
-    setLoading(true);
     setError(null);
     try {
       const result = await window.electronAPI.orders.list(accountId, status);
@@ -21,10 +30,8 @@ export function useOrders(accountId: string) {
       setHasMore(result.hasMore);
     } catch (err: any) {
       setError(err.message || '获取订单列表失败');
-    } finally {
-      setLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, setOrders]);
 
   const fetchOrderDetail = useCallback(async (orderId: string): Promise<Order | null> => {
     try {
@@ -37,7 +44,6 @@ export function useOrders(accountId: string) {
 
   const searchOrders = useCallback(async (params: OrderSearchParams) => {
     if (!accountId) return;
-    setLoading(true);
     setError(null);
     try {
       const result = await window.electronAPI.orders.search(accountId, params);
@@ -45,10 +51,8 @@ export function useOrders(accountId: string) {
       setHasMore(result.hasMore);
     } catch (err: any) {
       setError(err.message || '搜索订单失败');
-    } finally {
-      setLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, setOrders]);
 
   const decodeAddress = useCallback(async (orderId: string): Promise<OrderAddressInfo | null> => {
     try {

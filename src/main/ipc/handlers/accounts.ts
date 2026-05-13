@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { getAccounts, addAccount, removeAccount, updateAccount, getActiveAccountId, setActiveAccountId } from '../../store';
 import type { Config, Account } from '../../../shared/types';
 import { stopAllTasks } from '../../scheduler/listing-scheduler';
+import { removeClient } from '../../wxshop/client-registry';
 
 export function registerAccountHandlers(context: { draftPaginationMap: Map<string, unknown> }): void {
   ipcMain.handle('accounts:list', (): Account[] => {
@@ -15,6 +16,7 @@ export function registerAccountHandlers(context: { draftPaginationMap: Map<strin
   ipcMain.handle('accounts:remove', (_, accountId: string): void => {
     stopAllTasks();
     removeAccount(accountId);
+    removeClient(accountId);
     context.draftPaginationMap.delete(accountId);
   });
 
