@@ -1,9 +1,9 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult } from '../../shared/types';
 
-export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn };
+export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
@@ -62,6 +62,11 @@ function migrateIfNeeded(): void {
         account.schedulers = [];
         changed = true;
       }
+      // Ensure violationWords field exists
+      if (!('violationWords' in account)) {
+        account.violationWords = [];
+        changed = true;
+      }
     }
     if (changed) store.set('accounts', rawAccounts as FullAccount[]);
     return;
@@ -88,6 +93,7 @@ function migrateIfNeeded(): void {
       todayListedCount: oldScheduler.todayListedCount,
     }] : [],
     taskConfig: oldTaskConfig,
+    violationWords: [],
     logs: store.get('logs') || [],
     createdAt: Date.now(),
   };
@@ -121,6 +127,7 @@ export function addAccount(name: string, config: Config): FullAccount {
     config,
     schedulers: [],
     taskConfig: { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+    violationWords: [],
     logs: [],
     createdAt: Date.now(),
   };
@@ -276,6 +283,21 @@ export function cleanOldLogs(): void {
     }
   }
   if (changed) store.set('accounts', accounts);
+}
+
+// --- Per-account violation words ---
+
+export function getViolationWords(accountId: string): string[] {
+  const account = getAccount(accountId);
+  return account?.violationWords || [];
+}
+
+export function setViolationWords(accountId: string, words: string[]): void {
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return;
+  accounts[idx].violationWords = words;
+  store.set('accounts', accounts);
 }
 
 export default store;

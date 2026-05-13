@@ -9,14 +9,15 @@ import { useBrowser } from '../hooks/useBrowser';
 
 const { Sider, Content } = AntLayout;
 
-type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'settings';
+type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
 
-const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'settings']);
+const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation', 'settings']);
 
 const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
   { key: 'commonFunctions', label: '商品提审' },
+  { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
 

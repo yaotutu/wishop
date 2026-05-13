@@ -188,6 +188,20 @@ export interface OrderSearchParams {
   page_size?: number;
 }
 
+export interface ViolationMatch {
+  productId: string;
+  title: string;
+  matchedWords: string[];
+}
+
+export interface ViolationScanResult {
+  scanned: number;
+  violations: ViolationMatch[];
+  errors: number;
+  stopped: boolean;
+  reason?: string;
+}
+
 // Full account with all data (main process only)
 export interface FullAccount {
   id: string;
@@ -196,5 +210,6 @@ export interface FullAccount {
   schedulers: ScheduledTask[];
   taskConfig: TaskConfig;
   logs: LogEntry[];
+  violationWords: string[];
   createdAt: number;
 }

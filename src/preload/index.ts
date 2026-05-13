@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo } from '../shared/types';
+import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult } from '../shared/types';
 
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo };
+export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult };
 
 const electronAPI = {
   accounts: {
@@ -81,6 +81,25 @@ const electronAPI = {
       const handler = (_: any, log: LogEntry) => callback(log);
       ipcRenderer.on(`log:added:${accountId}`, handler);
       return () => ipcRenderer.removeListener(`log:added:${accountId}`, handler);
+    },
+  },
+  violation: {
+    getWords: (accountId: string): Promise<string[]> =>
+      ipcRenderer.invoke('violation:getWords', accountId),
+    setWords: (accountId: string, words: string[]): Promise<void> =>
+      ipcRenderer.invoke('violation:setWords', accountId, words),
+    batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> =>
+      ipcRenderer.invoke('violation:batchScan', accountId, limit),
+    scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<any> =>
+      ipcRenderer.invoke('violation:scanStep', accountId, action),
+    batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> =>
+      ipcRenderer.invoke('violation:batchDelete', accountId, violations),
+    stop: (accountId: string): Promise<void> =>
+      ipcRenderer.invoke('violation:stop', accountId),
+    onLog: (accountId: string, callback: (log: LogEntry) => void) => {
+      const handler = (_: any, log: LogEntry) => callback(log);
+      ipcRenderer.on(`violation:log:${accountId}`, handler);
+      return () => ipcRenderer.removeListener(`violation:log:${accountId}`, handler);
     },
   },
 };

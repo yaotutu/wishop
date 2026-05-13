@@ -2,8 +2,9 @@ import React from 'react';
 import ListingPage from '../pages/common-functions/ListingPage';
 import OrdersPage from '../pages/orders/OrdersPage';
 import SettingsPage from '../pages/settings/SettingsPage';
+import ViolationPage from '../pages/violation/ViolationPage';
 
-export type AccountModuleType = 'orders' | 'commonFunctions' | 'settings';
+export type AccountModuleType = 'orders' | 'commonFunctions' | 'violation' | 'settings';
 
 interface AccountWorkspaceProps {
   accountId: string;
@@ -16,6 +17,8 @@ const AccountWorkspace: React.FC<AccountWorkspaceProps> = ({ accountId, activeMo
       return <OrdersPage accountId={accountId} />;
     case 'commonFunctions':
       return <ListingPage accountId={accountId} />;
+    case 'violation':
+      return <ViolationPage accountId={accountId} />;
     case 'settings':
       return <SettingsPage accountId={accountId} />;
     default:
