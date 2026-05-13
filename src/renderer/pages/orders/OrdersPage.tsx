@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Typography, message } from 'antd';
-import { SearchOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SearchOutlined, EyeOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
+import { BrowserContext } from '../../components/Layout';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 
@@ -56,6 +57,7 @@ const valueStyle: React.CSSProperties = { fontSize: 12, color: '#333', lineHeigh
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const { orders, hasMore, loading, error, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
+  const { openBrowser } = React.useContext(BrowserContext);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -215,6 +217,17 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               <div style={{ fontSize: 12, color: '#fa8c16', lineHeight: '18px' }}>
                 发货时限: {formatTime(product.delivery_deadline)}
               </div>
+            )}
+            {record.status === OrderStatusEnum.PendingShipment && (
+              <Button
+                size="small"
+                type="primary"
+                icon={<SendOutlined />}
+                style={{ marginTop: 4, fontSize: 12 }}
+                onClick={() => openBrowser('default', 'https://www.taobao.com')}
+              >
+                淘宝发货
+              </Button>
             )}
             {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
               <>

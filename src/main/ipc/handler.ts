@@ -1,4 +1,5 @@
 import { registerAccountHandlers } from './handlers/accounts';
+import { registerBrowserHandlers } from './handlers/browser';
 import { registerConfigHandlers } from './handlers/config';
 import { registerDraftHandlers } from './handlers/drafts';
 import { registerLogHandlers } from './handlers/logs';
@@ -15,6 +16,7 @@ export function registerHandlers(): void {
   const context = { draftPaginationMap, orderPaginationMap, taskControllers };
 
   registerAccountHandlers(context);
+  registerBrowserHandlers();
   registerConfigHandlers();
   registerDraftHandlers(context);
   registerLogHandlers();

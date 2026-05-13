@@ -20,6 +20,8 @@
     "dotenv": "^17.4.2",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.3",
+    "fingerprint-generator": "^2.1.82",
+    "fingerprint-injector": "^2.1.82",
     "node-cron": "^4.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

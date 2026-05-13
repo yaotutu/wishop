@@ -8,6 +8,9 @@ import { initUpdater, quitAndInstall } from './updater';
 
 dotenv.config();
 
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
