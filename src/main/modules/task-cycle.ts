@@ -1,5 +1,6 @@
 import { WxShopClient } from '../wxshop/client';
 import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult } from '../../shared/types';
+import { createLogger } from '../utils/logger';
 
 export type { TaskConfig, TaskCycleResult };
 import { streamDraftProducts } from './fetch-draft-products';
@@ -14,8 +15,10 @@ export async function runTaskCycle(
   taskConfig: TaskConfig,
   runId: string,
   signal?: AbortSignal,
+  accountId: string = '',
 ): Promise<TaskCycleResult> {
-  console.log(`[TaskCycle] 开始 (runId=${runId}): 删除失败=${taskConfig.deleteFailed}, 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
+  const logger = createLogger('TaskCycle', accountId);
+  logger.info(`开始 (runId=${runId}): 删除失败=${taskConfig.deleteFailed}, 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
 
   const result: TaskCycleResult = { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: false, pendingDelete: [] };
   const pendingDelete: DraftProduct[] = [];
@@ -37,16 +40,16 @@ export async function runTaskCycle(
     addLog(log);
   };
 
-  for await (const product of streamDraftProducts(api, signal)) {
+  for await (const product of streamDraftProducts(api, signal, accountId)) {
     if (signal?.aborted) {
       result.stopped = true;
       result.reason = '用户手动停止';
-      console.log(`[TaskCycle] 用户手动停止，已扫描 ${result.scanned} 条`);
+      logger.info(`用户手动停止，已扫描 ${result.scanned} 条`);
       break;
     }
 
     result.scanned++;
-    console.log(`[TaskCycle] 扫描 #${result.scanned}: ${product.title} (edit_status=${product.editStatus})`);
+    logger.info(`扫描 #${result.scanned}: ${product.title} (edit_status=${product.editStatus})`);
 
     if (taskConfig.listUnreviewed && listDone()) break;
 
@@ -56,9 +59,9 @@ export async function runTaskCycle(
         consecutiveFails = 0;
         consecutiveSkips = 0;
         pendingDelete.push(product);
-        console.log(`[TaskCycle] 标记待删除: ${product.title}`);
+        logger.info(`标记待删除: ${product.title}`);
       } else {
-        const res = await deleteOne(api, trackLog, product, runId);
+        const res = await deleteOne(api, trackLog, product, runId, accountId);
         if (res === 'success') {
           consecutiveFails = 0;
           consecutiveSkips = 0;
@@ -74,7 +77,7 @@ export async function runTaskCycle(
           if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
             result.stopped = true;
             result.reason = `连续${consecutiveFails}次删除失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-            console.warn(`[TaskCycle] ${result.reason}`);
+            logger.warn(result.reason);
             break;
           }
         }
@@ -84,7 +87,7 @@ export async function runTaskCycle(
 
     if (product.editStatus === 72 && taskConfig.listUnreviewed && !listDone()) {
       consecutiveMiss = 0;
-      const res = await listOne(api, trackLog, product, runId, signal);
+      const res = await listOne(api, trackLog, product, runId, signal, accountId);
       if (res === 'success') {
         consecutiveFails = 0;
         consecutiveSkips = 0;
@@ -97,7 +100,7 @@ export async function runTaskCycle(
         if (consecutiveSkips >= CONSECUTIVE_THRESHOLD) {
           result.stopped = true;
           result.reason = `连续${consecutiveSkips}次跳过，可能存在账号级问题 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-          console.warn(`[TaskCycle] ${result.reason}`);
+          logger.warn(result.reason);
           break;
         }
       } else if (res === 'stopped') {
@@ -111,24 +114,24 @@ export async function runTaskCycle(
         if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
           result.stopped = true;
           result.reason = `连续${consecutiveFails}次上架失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-          console.warn(`[TaskCycle] ${result.reason}`);
+          logger.warn(result.reason);
           break;
         }
       }
       continue;
     }
 
-    console.log(`[TaskCycle] 跳过: edit_status=${product.editStatus}, 不匹配当前任务`);
+    logger.info(`跳过: edit_status=${product.editStatus}, 不匹配当前任务`);
     if (needConsecutiveCheck) {
       consecutiveMiss++;
       if (consecutiveMiss >= 5) {
-        console.log(`[TaskCycle] 连续 ${consecutiveMiss} 条未匹配，停止扫描`);
+        logger.info(`连续 ${consecutiveMiss} 条未匹配，停止扫描`);
         break;
       }
     }
   }
 
   result.pendingDelete = pendingDelete;
-  console.log(`[TaskCycle] 完成: 扫描=${result.scanned}, 删除=${result.deleted}, 提交=${result.listed}, 待确认删除=${pendingDelete.length}, 停止=${result.stopped}`);
+  logger.info(`完成: 扫描=${result.scanned}, 删除=${result.deleted}, 提交=${result.listed}, 待确认删除=${pendingDelete.length}, 停止=${result.stopped}`);
   return result;
 }

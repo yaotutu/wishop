@@ -1,5 +1,6 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
 import { AddLogFn } from '../store';
+import { createLogger } from '../utils/logger';
 
 const DELETE_INTERVAL_MS = 1000;
 const lastDeleteTimeMap = new Map<string, number>();
@@ -9,7 +10,9 @@ export async function deleteOne(
   addLog: AddLogFn,
   product: DraftProduct,
   runId: string,
+  accountId: string = '',
 ): Promise<'success' | 'failed' | 'stopped'> {
+  const logger = createLogger('DeleteFailed', accountId);
   try {
     const cacheKey = api.config.appId;
     const lastDeleteTime = lastDeleteTimeMap.get(cacheKey) || 0;
@@ -24,15 +27,15 @@ export async function deleteOne(
 
     if (res.errcode === 0) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'success' });
-      console.log(`[DeleteFailed] 已删除: ${product.title}`);
+      logger.info(`已删除: ${product.title}`);
       return 'success';
     }
 
-    console.warn(`[DeleteFailed] errcode=${res.errcode}, 完整报文:`, JSON.stringify(res));
+    logger.warn(`errcode=${res.errcode}, 完整报文:`, JSON.stringify(res));
 
     if (res.errcode === 10020208 || res.errcode === 10020247) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      console.warn(`[DeleteFailed] 全局限制(${res.errcode})，停止`);
+      logger.warn(`全局限制(${res.errcode})，停止`);
       return 'stopped';
     }
 
@@ -40,7 +43,7 @@ export async function deleteOne(
     return 'failed';
   } catch (error: any) {
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: error.message });
-    console.error(`[DeleteFailed] 异常: ${product.title}`, error.message);
+    logger.error(`异常: ${product.title}`, error);
     return 'failed';
   }
 }
@@ -50,6 +53,7 @@ export async function batchDelete(
   addLog: AddLogFn,
   products: Array<{ productId: string; title: string }>,
   runId: string,
+  accountId: string = '',
 ): Promise<{ deleted: number; errors: number; stopped: boolean }> {
   let deleted = 0;
   let errors = 0;
@@ -63,7 +67,7 @@ export async function batchDelete(
       status: 0,
       editStatus: 0,
     };
-    const res = await deleteOne(api, addLog, draft, runId);
+    const res = await deleteOne(api, addLog, draft, runId, accountId);
     if (res === 'success') {
       deleted++;
     } else if (res === 'stopped') {

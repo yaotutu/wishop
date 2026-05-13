@@ -1,5 +1,6 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
 import { AddLogFn } from '../store';
+import { createLogger } from '../utils/logger';
 
 export type ListOneResult = 'success' | 'failed' | 'skipped' | 'stopped';
 
@@ -26,13 +27,13 @@ const SKIP_CODES = new Set([
   10020008,
 ]);
 
-async function waitInterval(cacheKey: string, signal?: AbortSignal): Promise<void> {
+async function waitInterval(cacheKey: string, signal?: AbortSignal, logger?: any): Promise<void> {
   const lastSubmitTime = lastSubmitTimeMap.get(cacheKey) || 0;
   const now = Date.now();
   const elapsed = now - lastSubmitTime;
   if (elapsed < SUBMIT_INTERVAL_MS) {
     const waitMs = SUBMIT_INTERVAL_MS - elapsed;
-    console.log(`[ListUnreviewed] 等待间隔 ${waitMs}ms...`);
+    logger?.info?.(`等待间隔 ${waitMs}ms...`);
     if (signal) {
       await Promise.race([
         new Promise(resolve => setTimeout(resolve, waitMs)),
@@ -50,35 +51,37 @@ export async function listOne(
   product: DraftProduct,
   runId: string,
   signal?: AbortSignal,
+  accountId: string = '',
 ): Promise<ListOneResult> {
+  const logger = createLogger('ListUnreviewed', accountId);
   try {
     const latest = await api.getProductDetail(product.productId);
     if (latest.editStatus !== 72) {
-      console.log(`[ListUnreviewed] 跳过 (状态已变为 ${latest.editStatus}): ${product.title}`);
+      logger.info(`跳过 (状态已变为 ${latest.editStatus}): ${product.title}`);
       return 'skipped';
     }
 
-    await waitInterval(api.config.appId, signal);
+    await waitInterval(api.config.appId, signal, logger);
     const res = await api.listProduct(product.productId);
     lastSubmitTimeMap.set(api.config.appId, Date.now());
 
     if (res.errcode === 0) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'success' });
-      console.log(`[ListUnreviewed] 提交成功: ${product.title}`);
+      logger.info(`提交成功: ${product.title}`);
       return 'success';
     }
 
-    console.warn(`[ListUnreviewed] errcode=${res.errcode}, 完整报文:`, JSON.stringify(res));
+    logger.warn(`errcode=${res.errcode}, 完整报文:`, JSON.stringify(res));
 
     if (STOP_CODES.has(res.errcode)) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      console.warn(`[ListUnreviewed] 账号级错误(${res.errcode})，停止任务`);
+      logger.warn(`账号级错误(${res.errcode})，停止任务`);
       return 'stopped';
     }
 
     if (SKIP_CODES.has(res.errcode)) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      console.log(`[ListUnreviewed] 商品级错误(${res.errcode})，跳过: ${product.title}`);
+      logger.info(`商品级错误(${res.errcode})，跳过: ${product.title}`);
       return 'skipped';
     }
 
@@ -87,7 +90,7 @@ export async function listOne(
     return 'failed';
   } catch (error: any) {
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorMsg: error.message });
-    console.error(`[ListUnreviewed] 异常: ${product.title}`, error.message);
+    logger.error(`异常: ${product.title}`, error);
     return 'failed';
   }
 }

@@ -1,6 +1,8 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
+import { createLogger } from '../utils/logger';
 
-export async function* streamDraftProducts(api: WxShopClient, signal?: AbortSignal): AsyncGenerator<DraftProduct> {
+export async function* streamDraftProducts(api: WxShopClient, signal?: AbortSignal, accountId: string = ''): AsyncGenerator<DraftProduct> {
+  const logger = createLogger('StreamDrafts', accountId);
   let nextKey = '';
   let hasMore = true;
 
@@ -14,7 +16,7 @@ export async function* streamDraftProducts(api: WxShopClient, signal?: AbortSign
         const detail = await api.getProductDetail(productId);
         yield detail;
       } catch (error) {
-        console.error(`[StreamDrafts] 获取商品 ${productId} 详情失败:`, error);
+        logger.error(`获取商品 ${productId} 详情失败:`, error);
       }
     }
 
