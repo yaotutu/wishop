@@ -89,10 +89,12 @@ npm run start        # Run packaged electron app
 - Vite (renderer build)
 - Ant Design 5.x (UI)
 - electron-store (persistence)
+- electron-log 5.x (logging)
 - node-cron (scheduling)
 - axios (HTTP client)
 
 ## Key Files
+- `src/main/utils/logger.ts` - `createLogger(module, accountId)` 封装，基于 electron-log 的 `log.scope()`
 - `src/main/wechat/client.ts` - WeChat API client factory, token caching per instance
 - `src/main/store/index.ts` - Multi-account electron-store schema and access functions
 - `src/main/ipc/handler.ts` - Account context resolution, dependency injection
@@ -103,3 +105,22 @@ npm run start        # Run packaged electron app
 # 重要规则，改规则由用户手动添加，claude在生成代码时必须遵守并且禁止修改：
 - 直接展示原始错误信息 — 不对错误做过度包装或美化，将后端/API返回的原始错误信息直接呈现给用户，保留完整的错误上下文（如状态码、错误码、错误消息）。
 - 错误信息要可定位 — 在日志和UI中标注错误发生的位置（如哪个账户、哪个商品、哪一步操作），方便用户自行排查问题。
+
+## 日志规范
+
+主进程（`src/main/`）使用 `electron-log`，通过 `createLogger()` 创建 scoped logger。禁止直接使用 `console.log/warn/error`。
+
+```typescript
+import { createLogger } from '../utils/logger';
+const logger = createLogger('模块名', accountId);
+logger.info('普通信息');
+logger.warn('警告');
+logger.error('错误描述', error);  // error 对象必须作为第二参数
+```
+
+规则：
+1. **统一用 `createLogger`** — 不允许裸 `console.*`，新模块必须在函数开头创建 logger
+2. **标签格式 `[模块名:accountId]`** — `createLogger('模块名', accountId)` 自动生成，无 accountId 的场景用 `'system'`
+3. **error 必须传完整对象** — `logger.error('描述', error)`，不要传 `error.message`，保留堆栈信息
+4. **禁止静默吞错误** — `catch {}`、`.catch(() => {})`、`on('error', () => {})` 均不允许，必须有 `logger.error`
+5. **日志自动写文件** — 日志写入 `userData/logs/main.log`（5MB 轮转），无需手动处理
