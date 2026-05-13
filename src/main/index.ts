@@ -6,6 +6,7 @@ import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall } from './updater';
 import { flushBrowserSession, setBrowserQuitting } from './browser/browser-window';
+import { log } from './utils/logger';
 
 dotenv.config();
 
@@ -70,6 +71,23 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 初始化 electron-log
+  log.initialize();
+  log.transports.file.resolvePathFn = (vars) => path.join(vars.userData, 'logs', 'main.log');
+  log.transports.file.maxSize = 5 * 1024 * 1024; // 5MB
+
+  log.transports.console.format = ({ data, message }) => {
+    const prefix = message.scope ? `[${message.scope}] ` : '';
+    return [`${prefix}`, ...data];
+  };
+
+  log.transports.file.format = ({ data, level, message }) => {
+    const ts = message.date.toISOString().slice(0, 19);
+    const scope = message.scope ? `[${message.scope}] ` : '';
+    const text = data.map(d => typeof d === 'string' ? d : JSON.stringify(d)).join(' ');
+    return [`[${ts}] [${level}] ${scope}${text}`];
+  };
+
   cleanOldLogs();
   registerHandlers();
   startAllTasks();
