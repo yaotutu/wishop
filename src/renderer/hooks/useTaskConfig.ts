@@ -6,7 +6,7 @@ export function useTaskConfig(accountId: string) {
   const { data: taskConfig, loading, fetch: fetchTaskConfig, setData: setTaskConfigState } = useIpcFetch<TaskConfig>(
     accountId,
     useCallback(async () => window.electronAPI.taskConfig.get(accountId), [accountId]),
-    { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+    { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
   );
 
   const saveTaskConfig = useCallback(async (config: TaskConfig) => {

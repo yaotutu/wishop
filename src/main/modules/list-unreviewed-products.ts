@@ -1,31 +1,12 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
 import { AddLogFn } from '../store';
+import type { BlacklistRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 
-export type ListOneResult = 'success' | 'failed' | 'skipped' | 'stopped';
+export type ListOneResult = 'success' | 'skipped' | 'stopped' | 'deleted';
 
 const SUBMIT_INTERVAL_MS = 3000;
 const lastSubmitTimeMap = new Map<string, number>();
-
-// 账号级错误 — 影响所有商品，立即停止任务
-const STOP_CODES = new Set([
-  1002002,
-  10020066,
-  10020111,
-  10020208,
-  10020246,
-  10020247,
-]);
-
-// 商品级错误 — 该商品本身有问题，跳过继续下一个
-const SKIP_CODES = new Set([
-  10020110,  // 商品信息检查不通过
-  10020067,
-  10020049,
-  10020052,
-  10020053,
-  10020008,
-]);
 
 async function waitInterval(cacheKey: string, signal?: AbortSignal, logger?: any): Promise<void> {
   const lastSubmitTime = lastSubmitTimeMap.get(cacheKey) || 0;
@@ -45,6 +26,12 @@ async function waitInterval(cacheKey: string, signal?: AbortSignal, logger?: any
   }
 }
 
+function matchBlacklist(errcode: number, errmsg: string | undefined, blacklist: BlacklistRule[]): BlacklistRule | undefined {
+  return blacklist.find(r =>
+    r.code === errcode || (errmsg && errmsg.includes(`错误码:${r.code}`))
+  );
+}
+
 export async function listOne(
   api: WxShopClient,
   addLog: AddLogFn,
@@ -52,8 +39,10 @@ export async function listOne(
   runId: string,
   signal?: AbortSignal,
   accountId: string = '',
+  blacklistRules: BlacklistRule[] = [],
+  autoDeleteFailed: boolean = true,
 ): Promise<ListOneResult> {
-  const logger = createLogger('ListUnreviewed', accountId);
+  const logger = createLogger('ListOne', accountId);
   try {
     const latest = await api.getProductDetail(product.productId);
     if (latest.editStatus !== 72) {
@@ -73,24 +62,34 @@ export async function listOne(
 
     logger.warn(`errcode=${res.errcode}, 完整报文:`, JSON.stringify(res));
 
-    if (STOP_CODES.has(res.errcode)) {
+    // 黑名单 → 停任务
+    const blacklisted = matchBlacklist(res.errcode, res.errmsg, blacklistRules);
+    if (blacklisted) {
       addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      logger.warn(`账号级错误(${res.errcode})，停止任务`);
+      logger.warn(`黑名单错误码(${blacklisted.code})，停止任务`);
       return 'stopped';
     }
 
-    if (SKIP_CODES.has(res.errcode)) {
-      addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-      logger.info(`商品级错误(${res.errcode})，跳过: ${product.title}`);
+    // 不在黑名单 → 删除或跳过
+    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
+    if (autoDeleteFailed) {
+      try {
+        await api.deleteProduct(product.productId);
+        const reason = res.errmsg ? `errcode:${res.errcode} ${res.errmsg}` : `errcode:${res.errcode}`;
+        addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'success', errorMsg: `上架失败，已自动删除。原因: ${reason}` });
+        logger.info(`上架失败，已删除: ${product.title} (errcode=${res.errcode})`);
+      } catch (e: any) {
+        addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: `上架失败(errcode:${res.errcode})，删除也失败: ${e.message}` });
+        logger.error(`上架后删除失败: ${product.title}`, e);
+      }
+      return 'deleted';
+    } else {
+      logger.info(`上架失败，跳过: ${product.title} (errcode=${res.errcode})`);
       return 'skipped';
     }
-
-    // 未知错误 — 可能是网络/系统问题，计入连续失败
-    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
-    return 'failed';
   } catch (error: any) {
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorMsg: error.message });
     logger.error(`异常: ${product.title}`, error);
-    return 'failed';
+    return 'deleted';
   }
 }

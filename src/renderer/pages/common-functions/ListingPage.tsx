@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, TimePicker } from 'antd';
-// fix: Table import for delete confirmation dialog
-import { PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select } from 'antd';
+import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined } from '@ant-design/icons';
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
-import type { TaskConfig, TaskCycleResult, LogEntry, DraftProduct, ScheduledTask } from '../../../shared/types';
+import { useBlacklistRules } from '../../hooks/useBlacklistRules';
+import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary } from '../../../shared/types';
 
 interface ListingProps {
   accountId: string;
@@ -29,10 +29,9 @@ function cronToLabel(cron: string): string {
 }
 
 const defaultTaskConfig: TaskConfig = {
-  deleteFailed: false,
-  deleteFailedConfirm: false,
   listUnreviewed: true,
   listUnreviewedQuantity: 2,
+  autoDeleteFailed: true,
 };
 
 const Listing: React.FC<ListingProps> = ({ accountId }) => {
@@ -40,11 +39,9 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
+  const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules } = useBlacklistRules();
   const [running, setRunning] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<DraftProduct[]>([]);
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
@@ -55,6 +52,12 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     enabled: true,
     taskConfig: { ...defaultTaskConfig },
   });
+
+  // 黑名单管理弹窗
+  const [blacklistOpen, setBlacklistOpen] = useState(false);
+  const [newRuleCode, setNewRuleCode] = useState('');
+  const [newRuleDesc, setNewRuleDesc] = useState('');
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -62,6 +65,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchLogs();
     fetchQuota();
     fetchTasks();
+    fetchBlacklistRules();
     return () => {
       unsubscribeRef.current?.();
     };
@@ -70,7 +74,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const handleRun = async () => {
     setRunning(true);
     setResult(null);
-    setPendingDelete([]);
     unsubscribeRef.current = window.electronAPI.task.onLog(accountId, () => {
       fetchLogs();
     });
@@ -78,33 +81,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       const res = await runTask(taskConfig);
       setResult(res);
       fetchQuota();
-      if (res.pendingDelete?.length > 0) {
-        setPendingDelete(res.pendingDelete);
-        setConfirmModalOpen(true);
-      }
     } finally {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       setRunning(false);
       fetchLogs();
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    setDeleting(true);
-    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, () => {
-      fetchLogs();
-    });
-    try {
-      await window.electronAPI.task.batchDelete(accountId, pendingDelete);
-      setConfirmModalOpen(false);
-      setPendingDelete([]);
-    } finally {
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      setDeleting(false);
-      fetchLogs();
-      fetchQuota();
     }
   };
 
@@ -151,6 +132,55 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     setEditModalOpen(false);
   };
 
+  // 从日志加入黑名单
+  const handleAddToBlacklist = async (code: number, errorMsg?: string) => {
+    const codes = new Set(blacklistRules.map(r => r.code));
+    const newRules: BlacklistRule[] = [];
+    if (!codes.has(code)) {
+      newRules.push({ code, description: errorMsg?.slice(0, 50) || undefined });
+    }
+    if (errorMsg) {
+      const subCodeRegex = /错误码:(\d+)/g;
+      let match;
+      while ((match = subCodeRegex.exec(errorMsg)) !== null) {
+        const subCode = parseInt(match[1], 10);
+        if (!codes.has(subCode)) {
+          codes.add(subCode);
+          newRules.push({ code: subCode, description: errorMsg?.slice(0, 50) || undefined });
+        }
+      }
+    }
+    if (newRules.length === 0) {
+      message.info('已在黑名单中');
+      return;
+    }
+    await saveBlacklistRules([...blacklistRules, ...newRules]);
+    message.success(`已将 ${newRules.map(r => r.code).join(', ')} 加入黑名单`);
+  };
+
+  // 删除黑名单规则
+  const handleDeleteRule = async (code: number) => {
+    await saveBlacklistRules(blacklistRules.filter(r => r.code !== code));
+    message.success('已删除');
+  };
+
+  // 手动添加黑名单规则
+  const handleAddRule = async () => {
+    const code = parseInt(newRuleCode.trim(), 10);
+    if (isNaN(code)) {
+      message.error('请输入有效的错误码');
+      return;
+    }
+    if (blacklistRules.some(r => r.code === code)) {
+      message.error('该错误码已存在');
+      return;
+    }
+    await saveBlacklistRules([...blacklistRules, { code, description: newRuleDesc.trim() || undefined }]);
+    setNewRuleCode('');
+    setNewRuleDesc('');
+    message.success('已添加');
+  };
+
   const quotaExhausted = quota.quota <= 0 && quota.total > 0;
 
   return (
@@ -174,24 +204,21 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               />
               <span style={{ color: '#666' }}>条</span>
             </Space>
-            <Space size={8}>
-              <Checkbox
-                checked={taskConfig.deleteFailed}
-                onChange={e => updateConfig({ deleteFailed: e.target.checked })}
-              >
-                删除审核失败
-              </Checkbox>
-              {taskConfig.deleteFailed && (
-                <Checkbox
-                  checked={taskConfig.deleteFailedConfirm}
-                  onChange={e => updateConfig({ deleteFailedConfirm: e.target.checked })}
-                >
-                  二次确认
-                </Checkbox>
-              )}
-            </Space>
+            <Checkbox
+              checked={taskConfig.autoDeleteFailed !== false}
+              onChange={e => updateConfig({ autoDeleteFailed: e.target.checked })}
+            >
+              失败自动删除
+            </Checkbox>
           </Space>
           <Space>
+            <Button
+              size="small"
+              icon={<StopOutlined />}
+              onClick={() => setBlacklistOpen(true)}
+            >
+              黑名单 ({blacklistRules.length})
+            </Button>
             <Button
               size="small"
               icon={<ClockCircleOutlined />}
@@ -211,7 +238,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               icon={<PlayCircleOutlined />}
               onClick={handleRun}
               loading={running}
-              disabled={(!taskConfig.listUnreviewed && !taskConfig.deleteFailed) || quotaExhausted || deleting}
+              disabled={!taskConfig.listUnreviewed || quotaExhausted}
               style={running ? { display: 'none' } : undefined}
             >
               开始执行
@@ -245,11 +272,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           title={
             <Space size={16} wrap>
               <span>扫描 {result.scanned}</span>
-              {result.listed > 0 && <Tag color="success">提交成功 {result.listed}</Tag>}
+              {result.listed > 0 && <Tag color="success">上架成功 {result.listed}</Tag>}
               {result.deleted > 0 && <Tag color="blue">已删除 {result.deleted}</Tag>}
-              {result.pendingDelete?.length > 0 && <Tag color="orange">待确认删除 {result.pendingDelete.length}</Tag>}
               {result.skipped > 0 && <Tag>跳过 {result.skipped}</Tag>}
-              {result.errors > 0 && <Tag color="error">失败 {result.errors}</Tag>}
+              {result.errors > 0 && <Tag color="error">删除失败 {result.errors}</Tag>}
               {result.stopped && <Tag color="warning">已停止: {result.reason}</Tag>}
             </Space>
           }
@@ -302,7 +328,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       {/* 防封号提醒 */}
       <Alert
         type="warning"
-        title="频繁提交审核会被封禁，请勿短时间内重复执行。每次提交间已自动间隔 3 秒。"
+        title="频繁提交审核会被封禁，请勿短时间内重复执行。每次提交间已自动间隔 3 秒。上架失败的商品会自动删除。"
         showIcon
         icon={<WarningOutlined />}
         style={{ padding: '6px 12px', fontSize: 12 }}
@@ -316,6 +342,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px', minHeight: 0 } }}
         extra={
           <Space size={4}>
+            <Button size="small" type="text" icon={<StopOutlined />} onClick={() => setBlacklistOpen(true)} title="黑名单" />
             <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(); }} />
             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={clearLogs} />
           </Space>
@@ -332,6 +359,9 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               const isSuccess = log.status === 'success';
               const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架';
               const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : '#1677ff';
+              const inBlacklist = log.errorCode != null && blacklistRules.some(r =>
+                r.code === log.errorCode || (log.errorMsg && log.errorMsg.includes(`错误码:${r.code}`))
+              );
               return (
                 <React.Fragment key={log.id}>
                   {showDivider && <Divider style={{ margin: '4px 0' }} />}
@@ -352,8 +382,23 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                     </div>
                     {log.errorMsg && (
                       <div style={{ color: '#cf1322', fontSize: 12, marginTop: 4, lineHeight: 1.6, wordBreak: 'break-all' }}>
-                        {log.errorCode != null && <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>}
+                        {log.errorCode != null && (
+                          <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>
+                        )}
                         {log.errorMsg}
+                        {log.errorCode != null && !inBlacklist && log.action === 'list' && (
+                          <Button
+                            type="link"
+                            size="small"
+                            style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#ff4d4f' }}
+                            onClick={() => handleAddToBlacklist(log.errorCode!, log.errorMsg)}
+                          >
+                            加入黑名单
+                          </Button>
+                        )}
+                        {inBlacklist && (
+                          <Tag color="red" style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px', padding: '0 4px', verticalAlign: 'middle' }}>黑名单</Tag>
+                        )}
                       </div>
                     )}
                   </div>
@@ -399,15 +444,16 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: '#666' }}>自定义时间：</span>
-              <TimePicker
-                format="HH:mm"
-                placeholder="选择时间"
-                onChange={(_, timeStr) => {
-                  if (timeStr) {
-                    const [h, m] = timeStr.split(':');
-                    setFormData(prev => ({ ...prev, cronExpression: `${m} ${h} * * *` }));
+              <Input
+                placeholder="HH:mm"
+                value={formData.cronExpression.split(' ').slice(0, 2).reverse().join(':').replace(/^\d{1,2}:/, m => m.padStart(3, '0'))}
+                onChange={e => {
+                  const match = e.target.value.match(/^(\d{1,2}):(\d{1,2})$/);
+                  if (match) {
+                    setFormData(prev => ({ ...prev, cronExpression: `${match[2]} ${match[1]} * * *` }));
                   }
                 }}
+                style={{ width: 100 }}
               />
             </div>
           </div>
@@ -449,27 +495,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                   <span style={{ color: '#666', fontSize: 12 }}>条</span>
                 </Space>
               )}
-              <Checkbox
-                checked={formData.taskConfig.deleteFailed}
-                onChange={e => setFormData(prev => ({
-                  ...prev,
-                  taskConfig: { ...prev.taskConfig, deleteFailed: e.target.checked },
-                }))}
-              >
-                删除审核失败商品
-              </Checkbox>
-              {formData.taskConfig.deleteFailed && (
-                <Checkbox
-                  checked={formData.taskConfig.deleteFailedConfirm}
-                  onChange={e => setFormData(prev => ({
-                    ...prev,
-                    taskConfig: { ...prev.taskConfig, deleteFailedConfirm: e.target.checked },
-                  }))}
-                  style={{ marginLeft: 24 }}
-                >
-                  删除前二次确认
-                </Checkbox>
-              )}
             </Space>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -479,40 +504,57 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         </div>
       </Modal>
 
-      {/* 二次确认弹窗 */}
+      {/* 黑名单管理弹窗 */}
       <Modal
-        title={
-          <Space>
-            <ExclamationCircleOutlined style={{ color: '#faad14' }} />
-            <span>确认删除审核失败商品</span>
-          </Space>
-        }
-        open={confirmModalOpen}
-        onCancel={() => { setConfirmModalOpen(false); setPendingDelete([]); }}
-        footer={[
-          <Button key="cancel" onClick={() => { setConfirmModalOpen(false); setPendingDelete([]); }}>
-            取消
-          </Button>,
-          <Button key="delete" type="primary" danger loading={deleting} onClick={handleConfirmDelete}>
-            确认删除 ({pendingDelete.length})
-          </Button>,
-        ]}
+        title="黑名单管理"
+        open={blacklistOpen}
+        onCancel={() => setBlacklistOpen(false)}
+        footer={null}
         width={600}
       >
-        <p style={{ marginBottom: 12, color: '#666' }}>
-          以下 {pendingDelete.length} 条商品审核失败，确认后将永久删除：
-        </p>
-        <Table
-          dataSource={pendingDelete}
-          rowKey="productId"
-          size="small"
-          pagination={false}
-          scroll={{ y: 300 }}
-          columns={[
-            { title: '商品名称', dataIndex: 'title', key: 'title', ellipsis: true },
-            { title: '商品ID', dataIndex: 'productId', key: 'productId', width: 160 },
-          ]}
-        />
+        <div style={{ marginBottom: 12, color: '#888', fontSize: 12 }}>
+          遇到这些错误码会立即停止任务，避免继续请求触发封控。填一个数字即可，会同时匹配 API 的 errcode 和错误信息中的「错误码:XXXXX」。
+        </div>
+        {blacklistRules.length > 0 && (
+          <Table
+            dataSource={blacklistRules}
+            rowKey="code"
+            size="small"
+            pagination={false}
+            style={{ marginBottom: 16 }}
+            columns={[
+              { title: '错误码', dataIndex: 'code', key: 'code', width: 100 },
+              { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+              {
+                title: '',
+                key: 'del',
+                width: 60,
+                render: (_: any, record: BlacklistRule) => (
+                  <Popconfirm title="删除此规则？" onConfirm={() => handleDeleteRule(record.code)}>
+                    <Button type="link" danger size="small" icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                ),
+              },
+            ]}
+          />
+        )}
+        <Space wrap>
+          <Input
+            placeholder="错误码，如 10020110"
+            value={newRuleCode}
+            onChange={e => setNewRuleCode(e.target.value)}
+            style={{ width: 160 }}
+            onPressEnter={handleAddRule}
+          />
+          <Input
+            placeholder="描述（可选）"
+            value={newRuleDesc}
+            onChange={e => setNewRuleDesc(e.target.value)}
+            style={{ width: 200 }}
+            onPressEnter={handleAddRule}
+          />
+          <Button type="primary" danger icon={<PlusOutlined />} onClick={handleAddRule}>添加</Button>
+        </Space>
       </Modal>
     </div>
   );

@@ -1,13 +1,11 @@
 import { WxShopClient } from '../wxshop/client';
-import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult } from '../../shared/types';
+import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult, BlacklistRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 
 export type { TaskConfig, TaskCycleResult };
 import { streamDraftProducts } from './fetch-draft-products';
 import { deleteOne } from './delete-failed-products';
 import { listOne } from './list-unreviewed-products';
-
-const CONSECUTIVE_THRESHOLD = 3;
 
 export async function runTaskCycle(
   api: WxShopClient,
@@ -16,26 +14,34 @@ export async function runTaskCycle(
   runId: string,
   signal?: AbortSignal,
   accountId: string = '',
+  blacklistRules: BlacklistRule[] = [],
 ): Promise<TaskCycleResult> {
   const logger = createLogger('TaskCycle', accountId);
-  logger.info(`开始 (runId=${runId}): 删除失败=${taskConfig.deleteFailed}, 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
+  logger.info(`开始 (runId=${runId}): 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
 
-  const result: TaskCycleResult = { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: false, pendingDelete: [] };
-  const pendingDelete: DraftProduct[] = [];
+  const result: TaskCycleResult = { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: false };
   let listCount = 0;
-  let consecutiveMiss = 0;
-  let consecutiveFails = 0;
-  let consecutiveSkips = 0;
-  let lastErrorCode: number | undefined;
-  let lastErrorMsg: string | undefined;
+  const errorCodeMap = new Map<number, { count: number; msg: string }>();
 
   const listDone = () => !taskConfig.listUnreviewed || listCount >= taskConfig.listUnreviewedQuantity;
-  const needConsecutiveCheck = taskConfig.deleteFailed && !taskConfig.listUnreviewed;
 
   const trackLog: AddLogFn = (log) => {
     if (log.status === 'failed') {
-      lastErrorCode = log.errorCode;
-      lastErrorMsg = log.errorMsg;
+      if (log.errorCode != null) {
+        const existing = errorCodeMap.get(log.errorCode);
+        if (existing) existing.count++;
+        else errorCodeMap.set(log.errorCode, { count: 1, msg: log.errorMsg || '' });
+      }
+      if (log.errorMsg) {
+        const subCodeRegex = /错误码:(\d+)/g;
+        let match;
+        while ((match = subCodeRegex.exec(log.errorMsg)) !== null) {
+          const subCode = parseInt(match[1], 10);
+          const existing = errorCodeMap.get(subCode);
+          if (existing) existing.count++;
+          else errorCodeMap.set(subCode, { count: 1, msg: log.errorMsg || '' });
+        }
+      }
     }
     addLog(log);
   };
@@ -53,85 +59,49 @@ export async function runTaskCycle(
 
     if (taskConfig.listUnreviewed && listDone()) break;
 
-    if (product.editStatus === 3 && taskConfig.deleteFailed) {
-      consecutiveMiss = 0;
-      if (taskConfig.deleteFailedConfirm) {
-        consecutiveFails = 0;
-        consecutiveSkips = 0;
-        pendingDelete.push(product);
-        logger.info(`标记待删除: ${product.title}`);
+    // editStatus=72 → 尝试上架
+    if (product.editStatus === 72 && taskConfig.listUnreviewed && !listDone()) {
+      const res = await listOne(api, trackLog, product, runId, signal, accountId, blacklistRules, taskConfig.autoDeleteFailed !== false);
+      if (res === 'success') {
+        listCount++;
+        result.listed++;
+      } else if (res === 'stopped') {
+        result.stopped = true;
+        result.reason = '触发黑名单错误码，停止任务';
+        break;
+      } else if (res === 'deleted') {
+        result.deleted++;
       } else {
-        const res = await deleteOne(api, trackLog, product, runId, accountId);
-        if (res === 'success') {
-          consecutiveFails = 0;
-          consecutiveSkips = 0;
-          result.deleted++;
-        } else if (res === 'stopped') {
-          result.stopped = true;
-          result.reason = '删除操作被限制';
-          break;
-        } else {
-          result.errors++;
-          consecutiveFails++;
-          consecutiveSkips = 0;
-          if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
-            result.stopped = true;
-            result.reason = `连续${consecutiveFails}次删除失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-            logger.warn(result.reason);
-            break;
-          }
-        }
+        result.skipped++;
       }
       continue;
     }
 
-    if (product.editStatus === 72 && taskConfig.listUnreviewed && !listDone()) {
-      consecutiveMiss = 0;
-      const res = await listOne(api, trackLog, product, runId, signal, accountId);
+    // editStatus=3 → 直接删除
+    if (product.editStatus === 3) {
+      const res = await deleteOne(api, trackLog, product, runId, accountId);
       if (res === 'success') {
-        consecutiveFails = 0;
-        consecutiveSkips = 0;
-        listCount++;
-        result.listed++;
-      } else if (res === 'skipped') {
-        consecutiveFails = 0;
-        consecutiveSkips++;
-        result.skipped++;
-        if (consecutiveSkips >= CONSECUTIVE_THRESHOLD) {
-          result.stopped = true;
-          result.reason = `连续${consecutiveSkips}次跳过，可能存在账号级问题 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-          logger.warn(result.reason);
-          break;
-        }
+        result.deleted++;
       } else if (res === 'stopped') {
         result.stopped = true;
-        result.reason = '提审次数超限';
+        result.reason = '删除操作被限制';
         break;
       } else {
         result.errors++;
-        consecutiveFails++;
-        consecutiveSkips = 0;
-        if (consecutiveFails >= CONSECUTIVE_THRESHOLD) {
-          result.stopped = true;
-          result.reason = `连续${consecutiveFails}次上架失败，自动停止 (errcode=${lastErrorCode}, ${lastErrorMsg})`;
-          logger.warn(result.reason);
-          break;
-        }
       }
       continue;
     }
 
-    logger.info(`跳过: edit_status=${product.editStatus}, 不匹配当前任务`);
-    if (needConsecutiveCheck) {
-      consecutiveMiss++;
-      if (consecutiveMiss >= 5) {
-        logger.info(`连续 ${consecutiveMiss} 条未匹配，停止扫描`);
-        break;
-      }
-    }
+    // 其他 editStatus → 跳过，打日志观察
+    logger.warn(`未知 editStatus=${product.editStatus}: ${product.title} (productId=${product.productId})`);
+    result.skipped++;
   }
 
-  result.pendingDelete = pendingDelete;
-  logger.info(`完成: 扫描=${result.scanned}, 删除=${result.deleted}, 提交=${result.listed}, 待确认删除=${pendingDelete.length}, 停止=${result.stopped}`);
+  if (errorCodeMap.size > 0) {
+    result.errorCodes = Array.from(errorCodeMap.entries())
+      .map(([code, v]) => ({ code, count: v.count, msg: v.msg }))
+      .sort((a, b) => b.count - a.count);
+  }
+  logger.info(`完成: 扫描=${result.scanned}, 上架=${result.listed}, 删除=${result.deleted}, 跳过=${result.skipped}, 错误=${result.errors}, 停止=${result.stopped}`);
   return result;
 }

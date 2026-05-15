@@ -1,10 +1,10 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 
-export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult };
+export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
@@ -20,6 +20,8 @@ export interface StoreSchema {
   scheduler?: { enabled: boolean; cronExpression: string; dailyLimit: number; lastRunDate: string; todayListedCount: number };
   taskConfig?: TaskConfig;
   logs?: LogEntry[];
+  skipCodeRules?: BlacklistRule[];
+  blacklistRules?: BlacklistRule[];
 }
 
 const store = new Store<StoreSchema>({
@@ -48,7 +50,7 @@ function migrateIfNeeded(): void {
             enabled: oldScheduler.enabled,
             cronExpression: oldScheduler.cronExpression,
             dailyLimit: oldScheduler.dailyLimit,
-            taskConfig: account.taskConfig || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+            taskConfig: account.taskConfig || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
             lastRunDate: oldScheduler.lastRunDate,
             todayListedCount: oldScheduler.todayListedCount,
           }];
@@ -77,7 +79,7 @@ function migrateIfNeeded(): void {
   if (!oldConfig || (!oldConfig.appId && !oldConfig.appSecret)) return;
 
   const oldScheduler = store.get('scheduler');
-  const oldTaskConfig = store.get('taskConfig') || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 };
+  const oldTaskConfig = store.get('taskConfig') || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true };
 
   const account: FullAccount = {
     id: uuidv4(),
@@ -128,7 +130,7 @@ export function addAccount(name: string, config: Config): FullAccount {
     name,
     config,
     schedulers: [],
-    taskConfig: { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 },
+    taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
     violationWords: [],
     logs: [],
     createdAt: Date.now(),
@@ -225,7 +227,7 @@ export function removeScheduler(accountId: string, taskId: string): void {
 
 export function getTaskConfig(accountId: string): TaskConfig {
   const account = getAccount(accountId);
-  return account?.taskConfig || { deleteFailed: false, deleteFailedConfirm: false, listUnreviewed: true, listUnreviewedQuantity: 2 };
+  return account?.taskConfig || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true };
 }
 
 export function setTaskConfig(accountId: string, taskConfig: TaskConfig): void {
@@ -300,6 +302,25 @@ export function setViolationWords(accountId: string, words: string[]): void {
   if (idx === -1) return;
   accounts[idx].violationWords = words;
   store.set('accounts', accounts);
+}
+
+// --- Global blacklist rules ---
+
+const DEFAULT_BLACKLIST: BlacklistRule[] = [
+  { code: 1002002, description: '账号级错误' },
+  { code: 10020066, description: '账号级错误' },
+  { code: 10020111, description: '账号级错误' },
+  { code: 10020208, description: '操作频率限制' },
+  { code: 10020246, description: '账号级错误' },
+  { code: 10020247, description: '账号级错误' },
+];
+
+export function getBlacklistRules(): BlacklistRule[] {
+  return store.get('blacklistRules') || DEFAULT_BLACKLIST;
+}
+
+export function setBlacklistRules(rules: BlacklistRule[]): void {
+  store.set('blacklistRules', rules);
 }
 
 export default store;

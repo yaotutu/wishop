@@ -29,10 +29,9 @@ export interface LogEntry {
 }
 
 export interface TaskConfig {
-  deleteFailed: boolean;
-  deleteFailedConfirm: boolean;
   listUnreviewed: boolean;
   listUnreviewedQuantity: number;
+  autoDeleteFailed: boolean;
 }
 
 export interface DraftProduct {
@@ -48,6 +47,12 @@ export interface QuotaResult {
   total: number;
 }
 
+export interface ErrorCodeSummary {
+  code: number;
+  count: number;
+  msg: string;
+}
+
 export interface TaskCycleResult {
   scanned: number;
   deleted: number;
@@ -56,7 +61,7 @@ export interface TaskCycleResult {
   skipped: number;
   stopped: boolean;
   reason?: string;
-  pendingDelete: DraftProduct[];
+  errorCodes?: ErrorCodeSummary[];
 }
 
 export interface Account {
@@ -200,6 +205,12 @@ export interface ViolationScanResult {
   errors: number;
   stopped: boolean;
   reason?: string;
+}
+
+// Blacklist rule — error codes that should stop the task immediately
+export interface BlacklistRule {
+  code: number;
+  description?: string;
 }
 
 // Full account with all data (main process only)

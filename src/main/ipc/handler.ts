@@ -8,6 +8,7 @@ import { registerQuotaHandlers } from './handlers/quota';
 import { registerSchedulerHandlers } from './handlers/scheduler';
 import { registerTaskHandlers } from './handlers/task';
 import { registerViolationHandlers } from './handlers/violation';
+import { registerBlacklistRulesHandlers } from './handlers/blacklistRules';
 import { SessionManager } from './utils/session-manager';
 
 interface PaginationState {
@@ -46,4 +47,5 @@ export function registerHandlers(): void {
   registerSchedulerHandlers();
   registerTaskHandlers(context);
   registerViolationHandlers(context);
+  registerBlacklistRulesHandlers();
 }

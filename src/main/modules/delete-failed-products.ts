@@ -26,7 +26,7 @@ export async function deleteOne(
     lastDeleteTimeMap.set(cacheKey, Date.now());
 
     if (res.errcode === 0) {
-      addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'success' });
+      addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'success', errorMsg: product.editStatus === 3 ? '审核失败，已自动删除' : undefined });
       logger.info(`已删除: ${product.title}`);
       return 'success';
     }

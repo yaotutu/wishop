@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult } from '../shared/types';
+import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule } from '../shared/types';
 
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult };
+export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule };
 
 const electronAPI = {
   accounts: {
@@ -73,8 +73,6 @@ const electronAPI = {
   task: {
     run: (accountId: string, config: TaskConfig): Promise<any> =>
       ipcRenderer.invoke('task:run', accountId, config),
-    batchDelete: (accountId: string, products: DraftProduct[]): Promise<{ deleted: number; errors: number; stopped: boolean }> =>
-      ipcRenderer.invoke('task:batchDelete', accountId, products),
     stop: (accountId: string): Promise<void> =>
       ipcRenderer.invoke('task:stop', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => {
@@ -101,6 +99,12 @@ const electronAPI = {
       ipcRenderer.on(`violation:log:${accountId}`, handler);
       return () => ipcRenderer.removeListener(`violation:log:${accountId}`, handler);
     },
+  },
+  blacklistRules: {
+    get: (): Promise<BlacklistRule[]> =>
+      ipcRenderer.invoke('blacklistRules:get'),
+    set: (rules: BlacklistRule[]): Promise<void> =>
+      ipcRenderer.invoke('blacklistRules:set', rules),
   },
 };
 

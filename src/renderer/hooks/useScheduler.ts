@@ -3,10 +3,9 @@ import type { ScheduledTask, TaskConfig } from '../../shared/types';
 import { useIpcFetch } from './useIpcFetch';
 
 const defaultTaskConfig: TaskConfig = {
-  deleteFailed: false,
-  deleteFailedConfirm: false,
   listUnreviewed: true,
   listUnreviewedQuantity: 2,
+  autoDeleteFailed: true,
 };
 
 export function useSchedulers(accountId: string) {

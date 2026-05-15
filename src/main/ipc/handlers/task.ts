@@ -1,9 +1,8 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { createScopedAddLog, getTaskConfig, setTaskConfig } from '../../store';
-import type { TaskConfig, DraftProduct, TaskCycleResult } from '../../../shared/types';
+import { createScopedAddLog, getTaskConfig, setTaskConfig, getBlacklistRules } from '../../store';
+import type { TaskConfig, TaskCycleResult } from '../../../shared/types';
 import { getClient } from '../../wxshop/client-registry';
 import { runTaskCycle } from '../../modules/task-cycle';
-import { batchDelete } from '../../modules/delete-failed-products';
 import { withLogForwarding } from '../utils/log-forwarding';
 import { SessionManager } from '../utils/session-manager';
 import { createLogger } from '../../utils/logger';
@@ -32,12 +31,12 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
         } else {
           scopedAddLog({ runId, productId: '', productTitle: `今日提审配额已用完 (${quota.quota}/${quota.total})，请明天再试`, action: 'check', status: 'failed' });
           logger.warn(`配额为0，跳过执行`);
-          return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `提审配额已用完 (剩余${quota.quota}/${quota.total})`, pendingDelete: [] };
+          return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `提审配额已用完 (剩余${quota.quota}/${quota.total})` };
         }
       } catch (error: any) {
         scopedAddLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
         logger.error(`配额检查失败:`, error);
-        return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}`, pendingDelete: [] };
+        return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}` };
       }
     }
 
@@ -45,8 +44,8 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
       const signal = context.taskSessions.start(accountId, undefined);
       try {
         const api = getClient(accountId);
-        const taskResult = await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId);
-        return { ...taskResult, pendingDelete: taskResult.pendingDelete };
+        const blacklistRules = getBlacklistRules();
+        return await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules);
       } finally {
         context.taskSessions.complete(accountId);
       }
@@ -57,15 +56,5 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
     const logger = createLogger('TaskStop', accountId);
     context.taskSessions.stop(accountId);
     logger.info(`已发送停止信号: ${accountId}`);
-  });
-
-  ipcMain.handle('task:batchDelete', async (event: IpcMainInvokeEvent, accountId: string, products: DraftProduct[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => {
-    const runId = Date.now().toString();
-    const scopedAddLog = createScopedAddLog(accountId);
-    const api = getClient(accountId);
-
-    return withLogForwarding(event, accountId, `log:added:${accountId}`, () =>
-      batchDelete(api, scopedAddLog, products, runId, accountId),
-    );
   });
 }
