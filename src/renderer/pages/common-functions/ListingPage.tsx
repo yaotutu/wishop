@@ -42,6 +42,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules } = useBlacklistRules();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
+  const [localListedCount, setLocalListedCount] = useState(0);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
@@ -74,8 +75,12 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const handleRun = async () => {
     setRunning(true);
     setResult(null);
-    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, () => {
+    setLocalListedCount(0);
+    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, (log: LogEntry) => {
       fetchLogs();
+      if (log.status === 'success' && log.action === 'list') {
+        setLocalListedCount(prev => prev + 1);
+      }
     });
     try {
       const res = await runTask(taskConfig);
@@ -85,6 +90,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       setRunning(false);
+      setLocalListedCount(0);
       fetchLogs();
     }
   };
@@ -181,7 +187,8 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     message.success('已添加');
   };
 
-  const quotaExhausted = quota.quota <= 0 && quota.total > 0;
+  const displayQuota = running ? quota.quota - localListedCount : quota.quota;
+  const quotaExhausted = displayQuota <= 0 && quota.total > 0;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -230,7 +237,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </Button>
             {quota.total > 0 && (
               <Tag color={quotaExhausted ? 'red' : 'green'}>
-                配额 {quota.quota}/{quota.total}
+                配额 {displayQuota}/{quota.total}
               </Tag>
             )}
             <Button
