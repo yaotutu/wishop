@@ -307,12 +307,12 @@ export function setViolationWords(accountId: string, words: string[]): void {
 // --- Global blacklist rules ---
 
 const DEFAULT_BLACKLIST: BlacklistRule[] = [
-  { code: 1002002, description: '账号级错误' },
-  { code: 10020066, description: '账号级错误' },
-  { code: 10020111, description: '账号级错误' },
-  { code: 10020208, description: '操作频率限制' },
-  { code: 10020246, description: '账号级错误' },
-  { code: 10020247, description: '账号级错误' },
+  { code: 1002002, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
+  { code: 10020066, description: '本店铺近1小时内提审次数超过限制，请1小时后再试' },
+  { code: 10020111, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
+  { code: 10020208, description: '本店铺的上架功能被封禁，请登录微信小店后台管理页查看详情' },
+  { code: 10020246, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
+  { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
 ];
 
 export function getBlacklistRules(): BlacklistRule[] {
