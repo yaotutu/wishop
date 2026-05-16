@@ -1,10 +1,10 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 
-export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule };
+export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
@@ -22,6 +22,7 @@ export interface StoreSchema {
   logs?: LogEntry[];
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
+  statusRules?: StatusRule[];
 }
 
 const store = new Store<StoreSchema>({
@@ -310,6 +311,7 @@ const DEFAULT_BLACKLIST: BlacklistRule[] = [
   { code: 1002002, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
   { code: 10020066, description: '本店铺近1小时内提审次数超过限制，请1小时后再试' },
   { code: 10020111, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
+  { code: 6600148, description: '今日提审次数已用尽，请明日再试' },
   { code: 10020208, description: '本店铺的上架功能被封禁，请登录微信小店后台管理页查看详情' },
   { code: 10020246, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
   { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
@@ -331,6 +333,32 @@ export function getSkipKeywords(): string[] {
 
 export function setSkipKeywords(keywords: string[]): void {
   store.set('skipKeywords', keywords);
+}
+
+// --- Global status rules (editStatus → action mapping) ---
+// 控制任务执行时，不同 editStatus 状态码对应的处理方式
+// 默认规则匹配原始硬编码逻辑，用户可通过 UI 自定义
+
+const DEFAULT_STATUS_RULES: StatusRule[] = [
+  { editStatus: 72, label: '未审核',   action: 'submit' },
+  { editStatus: 1,  label: '编辑中',   action: 'submit' },
+  { editStatus: 3,  label: '审核失败', action: 'delete' },
+  { editStatus: 2,  label: '审核中',   action: 'skip' },
+  { editStatus: 4,  label: '成功',     action: 'skip' },
+  { editStatus: 7,  label: '上传中',   action: 'skip' },
+  { editStatus: 8,  label: '上传失败', action: 'skip' },
+];
+
+export function getStatusRules(): StatusRule[] {
+  return store.get('statusRules') || DEFAULT_STATUS_RULES;
+}
+
+export function setStatusRules(rules: StatusRule[]): void {
+  store.set('statusRules', rules);
+}
+
+export function getDefaultStatusRules(): StatusRule[] {
+  return DEFAULT_STATUS_RULES;
 }
 
 export default store;

@@ -4,7 +4,8 @@ import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutline
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
 import { useSkipKeywords } from '../../hooks/useSkipKeywords';
-import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary } from '../../../shared/types';
+import { useStatusRules } from '../../hooks/useStatusRules';
+import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary, StatusRule } from '../../../shared/types';
 
 interface ListingProps {
   accountId: string;
@@ -42,6 +43,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules } = useBlacklistRules();
   const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
+  const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [localListedCount, setLocalListedCount] = useState(0);
@@ -56,17 +58,20 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     taskConfig: { ...defaultTaskConfig },
   });
 
-  // 黑名单管理弹窗
-  const [blacklistOpen, setBlacklistOpen] = useState(false);
+  // 黑名单管理（内部 state，不再单独弹窗）
   const [newRuleCode, setNewRuleCode] = useState('');
   const [newRuleDesc, setNewRuleDesc] = useState('');
 
-  // 跳过关键词管理弹窗
-  const [skipKeywordOpen, setSkipKeywordOpen] = useState(false);
+  // 跳过关键词管理（内部 state，不再单独弹窗）
   const [newKeyword, setNewKeyword] = useState('');
 
   // 单商品测试提审
   const [testProductId, setTestProductId] = useState('');
+
+  const [newRuleStatus, setNewRuleStatus] = useState<number | undefined>(undefined);
+  const [newRuleLabel, setNewRuleLabel] = useState('');
+  const [newRuleAction, setNewRuleAction] = useState<'submit' | 'delete' | 'skip'>('skip');
+  const [rulesLocked, setRulesLocked] = useState(true);
 
   const handleTestList = async () => {
     if (!testProductId.trim()) {
@@ -94,6 +99,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchTasks();
     fetchBlacklistRules();
     fetchKeywords();
+    fetchStatusRules();
     return () => {
       unsubscribeRef.current?.();
     };
@@ -246,6 +252,62 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     message.success(`已将「${keyword}」加入跳过列表`);
   };
 
+  // --- 解锁运行规则 ---
+  const handleUnlockRules = () => {
+    Modal.confirm({
+      title: '确认修改运行规则？',
+      content: '当前配置已经是最优解，除非你清楚每个规则的作用，否则不建议修改。错误的配置可能导致商品被误删或提审失败。',
+      okText: '我了解风险，继续',
+      cancelText: '算了',
+      okButtonProps: { danger: true },
+      onOk: () => setRulesLocked(false),
+    });
+  };
+
+  // --- 处理规则 CRUD ---
+
+  // 更新单条规则的操作类型
+  const handleUpdateStatusRule = async (editStatus: number, newAction: 'submit' | 'delete' | 'skip') => {
+    const updated = statusRules.map(r =>
+      r.editStatus === editStatus ? { ...r, action: newAction } : r
+    );
+    await saveStatusRules(updated);
+    message.success('已更新');
+  };
+
+  // 删除单条规则
+  const handleDeleteStatusRule = async (editStatus: number) => {
+    await saveStatusRules(statusRules.filter(r => r.editStatus !== editStatus));
+    message.success('已删除');
+  };
+
+  // 手动添加新规则
+  const handleAddStatusRule = async () => {
+    if (newRuleStatus === undefined || isNaN(newRuleStatus)) {
+      message.error('请输入有效的状态码');
+      return;
+    }
+    if (statusRules.some(r => r.editStatus === newRuleStatus)) {
+      message.error('该状态码已存在');
+      return;
+    }
+    if (!newRuleLabel.trim()) {
+      message.error('请输入标签');
+      return;
+    }
+    await saveStatusRules([...statusRules, { editStatus: newRuleStatus, label: newRuleLabel.trim(), action: newRuleAction }]);
+    setNewRuleStatus(undefined);
+    setNewRuleLabel('');
+    setNewRuleAction('skip');
+    message.success('已添加');
+  };
+
+  // 恢复默认规则
+  const handleResetStatusRules = async () => {
+    await resetStatusRules();
+    message.success('已恢复默认规则');
+  };
+
   const displayQuota = running ? quota.quota - localListedCount : quota.quota;
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
 
@@ -281,24 +343,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </Checkbox>
           </Space>
           <Space>
-            <Tooltip title="匹配到这些错误码时立即停止任务，防止触发封控">
-              <Button
-                size="small"
-                icon={<StopOutlined />}
-                onClick={() => setBlacklistOpen(true)}
-              >
-                停止黑名单 ({blacklistRules.length})
-              </Button>
-            </Tooltip>
-            <Tooltip title="错误信息包含这些关键词时保留商品不删除，留给手动处理。如：品牌、类目">
-              <Button
-                size="small"
-                icon={<ExclamationCircleOutlined />}
-                onClick={() => setSkipKeywordOpen(true)}
-              >
-                保留关键词 ({skipKeywords.length})
-              </Button>
-            </Tooltip>
             <Button
               size="small"
               icon={<ClockCircleOutlined />}
@@ -420,14 +464,153 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         )}
       </Modal>
 
-      {/* 防封号提醒 */}
-      <Alert
-        type="warning"
-        title="频繁提交审核会被封禁，请勿短时间内重复执行。每次提交间已自动间隔 3 秒。上架失败的商品会自动删除。"
-        showIcon
-        icon={<WarningOutlined />}
-        style={{ padding: '6px 12px', fontSize: 12 }}
-      />
+      {/* 运行规则 — 直接铺在页面上，默认锁定 */}
+      <Card
+        size="small"
+        title="运行规则"
+        extra={
+          <Button
+            size="small"
+            type="text"
+            onClick={() => rulesLocked ? handleUnlockRules() : setRulesLocked(true)}
+          >
+            {rulesLocked ? '🔒 已锁定' : '🔓 已解锁'}
+          </Button>
+        }
+        style={{ flexShrink: 0, opacity: rulesLocked ? 0.75 : 1 }}
+        styles={{ body: { padding: '12px 16px' } }}
+      >
+        {/* 扫描商品时：按状态码决定处理方式 */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>扫描商品时</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            {statusRules.map(rule => (
+              <Tag key={rule.editStatus} style={{ fontSize: 12, padding: '2px 8px' }}>
+                {rule.editStatus}({rule.label}) →
+                <Select
+                  value={rule.action}
+                  size="small"
+                  variant="borderless"
+                  disabled={rulesLocked}
+                  style={{ width: 90, marginLeft: 4, verticalAlign: 'middle' }}
+                  onChange={(v: 'submit' | 'delete' | 'skip') => handleUpdateStatusRule(rule.editStatus, v)}
+                  options={[
+                    { value: 'submit', label: '提交审核' },
+                    { value: 'delete', label: '直接删除' },
+                    { value: 'skip', label: '跳过' },
+                  ]}
+                />
+              </Tag>
+            ))}
+            {!rulesLocked && (
+              <Popconfirm title="恢复默认规则？" onConfirm={handleResetStatusRules}>
+                <Button size="small" type="link">恢复默认</Button>
+              </Popconfirm>
+            )}
+          </div>
+          {!rulesLocked && (
+            <Space wrap style={{ marginTop: 8 }}>
+              <InputNumber
+                placeholder="状态码"
+                value={newRuleStatus}
+                onChange={v => setNewRuleStatus(v ?? undefined)}
+                style={{ width: 80 }}
+                min={0}
+                size="small"
+              />
+              <Input
+                placeholder="含义"
+                value={newRuleLabel}
+                onChange={e => setNewRuleLabel(e.target.value)}
+                style={{ width: 100 }}
+                size="small"
+                onPressEnter={handleAddStatusRule}
+              />
+              <Select
+                value={newRuleAction}
+                onChange={(v: 'submit' | 'delete' | 'skip') => setNewRuleAction(v)}
+                style={{ width: 100 }}
+                size="small"
+                options={[
+                  { value: 'submit', label: '提交审核' },
+                  { value: 'delete', label: '直接删除' },
+                  { value: 'skip', label: '跳过' },
+                ]}
+              />
+              <Button size="small" icon={<PlusOutlined />} onClick={handleAddStatusRule}>添加</Button>
+            </Space>
+          )}
+        </div>
+
+        <Divider style={{ margin: '8px 0 12px' }} />
+
+        {/* 提审失败时：按错误码/关键词决定处理方式 */}
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>提审失败时</div>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+            {/* 立即停止 */}
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>遇到这些错误码 → 停止任务</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                {blacklistRules.map(r => (
+                  <Tag
+                    key={r.code}
+                    closable={!rulesLocked}
+                    onClose={() => handleDeleteRule(r.code)}
+                    color="red"
+                    style={{ fontSize: 11 }}
+                  >
+                    {r.code}
+                  </Tag>
+                ))}
+                {!rulesLocked && (
+                  <>
+                    <Input
+                      placeholder="错误码"
+                      value={newRuleCode}
+                      onChange={e => setNewRuleCode(e.target.value)}
+                      style={{ width: 100 }}
+                      size="small"
+                      onPressEnter={handleAddRule}
+                    />
+                    <Button size="small" icon={<PlusOutlined />} onClick={handleAddRule} />
+                  </>
+                )}
+              </div>
+            </div>
+            {/* 不删除 */}
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>错误信息包含这些词 → 不删商品</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                {skipKeywords.map(kw => (
+                  <Tag
+                    key={kw}
+                    closable={!rulesLocked}
+                    onClose={() => handleDeleteKeyword(kw)}
+                    color="orange"
+                    style={{ fontSize: 11 }}
+                  >
+                    {kw}
+                  </Tag>
+                ))}
+                {!rulesLocked && (
+                  <>
+                    <Input
+                      placeholder="关键词"
+                      value={newKeyword}
+                      onChange={e => setNewKeyword(e.target.value)}
+                      style={{ width: 100 }}
+                      size="small"
+                      onPressEnter={handleAddKeyword}
+                    />
+                    <Button size="small" icon={<PlusOutlined />} onClick={handleAddKeyword} />
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* 执行记录 */}
       <Card
@@ -437,7 +620,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px', minHeight: 0 } }}
         extra={
           <Space size={4}>
-            <Button size="small" type="text" icon={<StopOutlined />} onClick={() => setBlacklistOpen(true)} title="黑名单" />
             <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(); }} />
             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={clearLogs} />
           </Space>
@@ -618,100 +800,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             <span>{formData.enabled ? '创建后立即启用' : '创建后不启用'}</span>
           </div>
         </div>
-      </Modal>
-
-      {/* 黑名单管理弹窗 */}
-      <Modal
-        title="黑名单管理"
-        open={blacklistOpen}
-        onCancel={() => setBlacklistOpen(false)}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: 12, color: '#888', fontSize: 12 }}>
-          遇到这些错误码会立即停止任务，避免继续请求触发封控。填一个数字即可，会同时匹配 API 的 errcode 和错误信息中的「错误码:XXXXX」。
-        </div>
-        {blacklistRules.length > 0 && (
-          <Table
-            dataSource={blacklistRules}
-            rowKey="code"
-            size="small"
-            pagination={false}
-            style={{ marginBottom: 16 }}
-            columns={[
-              { title: '错误码', dataIndex: 'code', key: 'code', width: 100 },
-              { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
-              {
-                title: '',
-                key: 'del',
-                width: 60,
-                render: (_: any, record: BlacklistRule) => (
-                  <Popconfirm title="删除此规则？" onConfirm={() => handleDeleteRule(record.code)}>
-                    <Button type="link" danger size="small" icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                ),
-              },
-            ]}
-          />
-        )}
-        <Space wrap>
-          <Input
-            placeholder="错误码，如 10020110"
-            value={newRuleCode}
-            onChange={e => setNewRuleCode(e.target.value)}
-            style={{ width: 160 }}
-            onPressEnter={handleAddRule}
-          />
-          <Input
-            placeholder="描述（可选）"
-            value={newRuleDesc}
-            onChange={e => setNewRuleDesc(e.target.value)}
-            style={{ width: 200 }}
-            onPressEnter={handleAddRule}
-          />
-          <Button type="primary" danger icon={<PlusOutlined />} onClick={handleAddRule}>添加</Button>
-        </Space>
-      </Modal>
-
-      {/* 保留关键词管理弹窗 */}
-      <Modal
-        title="保留关键词"
-        open={skipKeywordOpen}
-        onCancel={() => setSkipKeywordOpen(false)}
-        footer={null}
-        width={600}
-      >
-        <div style={{ marginBottom: 12, color: '#888', fontSize: 12 }}>
-          上架失败时，如果错误信息中包含这些关键词，商品不会被自动删除，保留给你手动处理（如补充品牌、类目等）。任务继续执行不会中断。不包含这些关键词的失败商品仍然会被自动删除。
-        </div>
-        {skipKeywords.length > 0 && (
-          <div style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>示例：添加「品牌」后，错误信息含"请在商品品牌处添加"的商品将保留不删</div>
-        )}
-        {skipKeywords.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {skipKeywords.map(kw => (
-              <Tag
-                key={kw}
-                closable
-                onClose={() => handleDeleteKeyword(kw)}
-                color="orange"
-                style={{ fontSize: 13, padding: '2px 8px' }}
-              >
-                {kw}
-              </Tag>
-            ))}
-          </div>
-        )}
-        <Space wrap>
-          <Input
-            placeholder="关键词，如 品牌、类目"
-            value={newKeyword}
-            onChange={e => setNewKeyword(e.target.value)}
-            style={{ width: 200 }}
-            onPressEnter={handleAddKeyword}
-          />
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddKeyword}>添加</Button>
-        </Space>
       </Modal>
     </div>
   );

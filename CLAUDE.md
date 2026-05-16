@@ -42,7 +42,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 **Key constraint: Business 和 API 层不 import store。依赖通过参数注入。**
 
 ### Shared Types (`src/shared/types.ts`)
-所有层共享的类型定义：`Config`, `Account`, `FullAccount`, `ScheduledTask`, `TaskConfig`, `LogEntry`, `DraftProduct`, `QuotaResult`, `TaskCycleResult`, `Order*`, `ViolationMatch`, `ViolationScanResult`, `AddLogFn`, `OrderStatus` (enum)。
+所有层共享的类型定义：`Config`, `Account`, `FullAccount`, `ScheduledTask`, `TaskConfig`, `LogEntry`, `DraftProduct`, `QuotaResult`, `TaskCycleResult`, `Order*`, `ViolationMatch`, `ViolationScanResult`, `AddLogFn`, `OrderStatus` (enum), `BlacklistRule`, `StatusAction`, `StatusRule`。
 
 ### Main Process (`src/main/`)
 - **index.ts** - Electron 入口，创建窗口，注册 IPC handlers，启动调度器，管理 auto-updater
@@ -59,11 +59,14 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `logs.ts` - 日志管理
   - `scheduler.ts` - 调度任务管理
   - `task.ts` - 任务执行控制（运行、批量删除、停止）
+  - `blacklistRules.ts` - 停止黑名单规则管理
+  - `skipCodeRules.ts` - 保留关键词管理
+  - `statusRules.ts` - 处理规则管理（editStatus → action 映射）
   - `violation.ts` - 违规词检测
   - `browser.ts` - 浏览器窗口控制
 - **ipc/utils/** - `log-forwarding.ts`（日志转发）、`session-manager.ts`（会话管理）
 - **modules/** - 业务逻辑模块：
-  - `task-cycle.ts` - 任务周期编排，接收 `api: WeChatClient, addLog: AddLogFn`
+  - `task-cycle.ts` - 任务周期编排，接收 `api: WeChatClient, addLog: AddLogFn, statusRules: StatusRule[]`。通过 statusRules 查表决定每个 editStatus 的处理方式（submit/delete/skip）
   - `fetch-draft-products.ts` - 异步生成器，接收 `api: WeChatClient`
   - `delete-failed-products.ts` - 删除失败商品，接收 `api` + `addLog`
   - `list-unreviewed-products.ts` - 列出待审商品，接收 `api` + `addLog`
@@ -98,6 +101,9 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `useLogs.ts` - 日志管理
   - `useScheduler.ts` - 调度管理
   - `useTaskConfig.ts` - 任务配置
+  - `useBlacklistRules.ts` - 停止黑名单规则
+  - `useSkipKeywords.ts` - 保留关键词
+  - `useStatusRules.ts` - 处理规则（editStatus → action 映射）
   - `useBrowser.ts` - 浏览器控制
 
 ### IPC Channels
@@ -113,6 +119,9 @@ npm run push         # 版本号 patch + git push --follow-tags
 | scheduler:list/add/update/remove                    | renderer→main | 调度任务管理                                 |
 | taskConfig:get/set                                  | renderer→main | 任务配置管理                                 |
 | task:run/batchDelete/stop                           | renderer→main | 任务执行控制                                 |
+| blacklistRules:get/set                              | renderer→main | 停止黑名单规则管理                           |
+| skipKeywords:get/set                                | renderer→main | 保留关键词管理                               |
+| statusRules:get/set/reset                           | renderer→main | 处理规则管理（editStatus→action映射）        |
 | violation:getWords/setWords/batchScan/scanStep/batchDelete/stop | renderer→main | 违规词检测                       |
 | browser:open/close                                  | renderer→main | 浏览器窗口控制                               |
 | app:version                                         | renderer→main | 获取应用版本                                 |
@@ -125,7 +134,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 - **Base URL**: `https://api.weixin.qq.com`
 - **Auth**: access_token via `cgi-bin/token`
 - **Product status** (`status` param in list API): 0=草稿, 5=已上架, 6=回收站, etc.
-- **Edit status** (`edit_status` field): 1=编辑中, 2=审核中/可上架, 3=失败, 4=成功, 7=上传中, 8=失败, 72=未审核
+- **Edit status** (`edit_status` field): 1=编辑中, 2=审核中, 3=审核失败, 4=成功, 7=上传中, 8=上传失败, 72=未审核。处理方式通过 `statusRules` 全局配置（默认：1/72→提审, 3→删除, 其他→跳过）
 - **Listing API** (`/channels/ec/product/listing`): Only works when `edit_status=2`
 - **Draft list API** (`/channels/ec/product/list/get`): Response uses `product_ids` field (not `product_id_list`)
 - **Order status** (`OrderStatus` enum): 10=待付款, 12=待接受赠品, 13=拼团, 20=待发货, 21=部分发货, 30=待收货, 100=已完成, 200=售后取消, 250=用户取消

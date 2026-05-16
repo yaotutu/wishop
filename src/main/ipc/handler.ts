@@ -10,6 +10,7 @@ import { registerTaskHandlers } from './handlers/task';
 import { registerViolationHandlers } from './handlers/violation';
 import { registerBlacklistRulesHandlers } from './handlers/blacklistRules';
 import { registerSkipCodeRulesHandlers } from './handlers/skipCodeRules';
+import { registerStatusRulesHandlers } from './handlers/statusRules';
 import { SessionManager } from './utils/session-manager';
 
 interface PaginationState {
@@ -50,4 +51,5 @@ export function registerHandlers(): void {
   registerViolationHandlers(context);
   registerBlacklistRulesHandlers();
   registerSkipCodeRulesHandlers();
+  registerStatusRulesHandlers();
 }

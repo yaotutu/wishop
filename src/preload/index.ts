@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule } from '../shared/types';
+import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule } from '../shared/types';
 
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule };
+export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 
 const electronAPI = {
   accounts: {
@@ -111,6 +111,15 @@ const electronAPI = {
       ipcRenderer.invoke('skipKeywords:get'),
     set: (keywords: string[]): Promise<void> =>
       ipcRenderer.invoke('skipKeywords:set', keywords),
+  },
+  // 处理规则 — editStatus → action 的可配置映射
+  statusRules: {
+    get: (): Promise<StatusRule[]> =>
+      ipcRenderer.invoke('statusRules:get'),
+    set: (rules: StatusRule[]): Promise<void> =>
+      ipcRenderer.invoke('statusRules:set', rules),
+    reset: (): Promise<StatusRule[]> =>
+      ipcRenderer.invoke('statusRules:reset'),
   },
 };
 

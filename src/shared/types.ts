@@ -214,6 +214,15 @@ export interface BlacklistRule {
   description?: string;
 }
 
+// Status rule — maps editStatus codes to actions during task cycle
+export type StatusAction = 'submit' | 'delete' | 'skip';
+
+export interface StatusRule {
+  editStatus: number;  // 微信小店商品的 edit_status 值
+  label: string;       // 中文标签，如"编辑中"、"审核中"
+  action: StatusAction; // 对应操作：submit=提交审核, delete=删除, skip=跳过
+}
+
 // Full account with all data (main process only)
 export interface FullAccount {
   id: string;

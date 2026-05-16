@@ -1,5 +1,5 @@
 import * as cron from 'node-cron';
-import { getAccounts, getSchedulers, updateScheduler, createScopedAddLog } from '../store';
+import { getAccounts, getSchedulers, updateScheduler, createScopedAddLog, getBlacklistRules, getSkipKeywords, getStatusRules } from '../store';
 import type { ScheduledTask } from '../../shared/types';
 import { getClient } from '../wxshop/client-registry';
 import { runTaskCycle } from '../modules/task-cycle';
@@ -35,7 +35,11 @@ async function executeTask(accountId: string, taskId: string): Promise<void> {
       return;
     }
 
-    const result = await runTaskCycle(api, scopedAddLog, task.taskConfig, `cron-${taskId}-${Date.now()}`, undefined, accountId);
+    const result = await runTaskCycle(
+      api, scopedAddLog, task.taskConfig, `cron-${taskId}-${Date.now()}`,
+      undefined, accountId,
+      getBlacklistRules(), getSkipKeywords(), getStatusRules(),
+    );
 
     const newCount = count + result.listed;
     updateScheduler(accountId, taskId, { todayListedCount: newCount });
