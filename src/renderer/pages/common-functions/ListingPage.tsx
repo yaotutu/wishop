@@ -835,4 +835,4 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   );
 };
 
-export default Listing;
+export default React.memo(Listing);

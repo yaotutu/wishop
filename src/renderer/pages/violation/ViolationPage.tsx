@@ -570,4 +570,4 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   );
 };
 
-export default ViolationPage;
+export default React.memo(ViolationPage);

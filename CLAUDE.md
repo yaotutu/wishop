@@ -80,15 +80,14 @@ npm run push         # 版本号 patch + git push --follow-tags
 
 ### Renderer (`src/renderer/`)
 - **App.tsx** - 根组件
-- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 左侧账户侧边栏 + 内容区。`BrowserContext` 提供浏览器控制。
-- **components/AccountWorkspace.tsx** - 账户工作区，管理账户作用域模块
+- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 左侧账户侧边栏 + 内容区。`BrowserContext` 提供浏览器控制。账户模块使用 `display:none/contents` 策略保持所有账户页面组件实例，切换账户不销毁组件。
 - **components/AccountModals.tsx** - 账户添加/编辑/删除弹窗
 - **components/StatCard.tsx** - 统计卡片组件
 - **pages/** - 页面组件：
-  - `orders/OrdersPage.tsx` - 订单管理（列表、搜索、详情、地址解码）
+  - `orders/OrdersPage.tsx` - 订单管理（列表、搜索、详情、地址解码），React.memo 包裹
   - `store-management/StoreManagement.tsx` - 店铺管理（占位）
-  - `common-functions/ListingPage.tsx` - 商品提审，含调度器和执行日志
-  - `violation/ViolationPage.tsx` - 违规词检测管理
+  - `common-functions/ListingPage.tsx` - 商品提审，含调度器和执行日志，React.memo 包裹
+  - `violation/ViolationPage.tsx` - 违规词检测管理，React.memo 包裹
   - `settings/SettingsPage.tsx` - 全局设置，每账户 API 配置
 - **hooks/** - 按 domain 拆分的 React hooks：
   - `useIpc.ts` - 基础 IPC hook
@@ -161,8 +160,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 - `src/main/browser/browser-window.ts` - 浏览器窗口 + 指纹注入
 - `src/main/updater.ts` - 自动更新逻辑
 - `src/renderer/hooks/*.ts` - 按 domain 拆分的 React hooks
-- `src/renderer/components/Layout.tsx` - 主布局 + 路由
-- `src/renderer/components/AccountWorkspace.tsx` - 账户工作区
+- `src/renderer/components/Layout.tsx` - 主布局 + 路由（display:none/contents 账户切换策略）
 
 
 # 重要规则，改规则由用户手动添加，claude在生成代码时必须遵守并且禁止修改：

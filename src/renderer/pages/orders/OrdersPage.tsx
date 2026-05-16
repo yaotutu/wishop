@@ -507,4 +507,4 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   );
 };
 
-export default Orders;
+export default React.memo(Orders);
