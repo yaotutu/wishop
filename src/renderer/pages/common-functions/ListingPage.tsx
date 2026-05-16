@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
+import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
@@ -335,9 +335,9 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* 任务配置 + 执行 */}
-      <Card size="small">
+      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space size={24}>
             <Space size={8}>
@@ -430,7 +430,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         {running && (
           <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>执行中，请勿重复操作...</div>
         )}
-      </Card>
+      </div>
 
       {/* 执行结果 */}
       {result && (
@@ -495,11 +495,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         )}
       </Modal>
 
-      {/* 运行规则 — 直接铺在页面上，默认锁定 */}
-      <Card
-        size="small"
-        title="运行规则"
-        extra={
+      {/* 运行规则 — 默认锁定 */}
+      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, opacity: rulesLocked ? 0.75 : 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontWeight: 500 }}>运行规则</span>
           <Button
             size="small"
             type="text"
@@ -507,10 +506,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           >
             {rulesLocked ? '🔒 已锁定' : '🔓 已解锁'}
           </Button>
-        }
-        style={{ flexShrink: 0, opacity: rulesLocked ? 0.75 : 1 }}
-        styles={{ body: { padding: '12px 16px' } }}
-      >
+        </div>
         {/* 扫描商品时：按状态码决定处理方式 */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>扫描商品时</div>
@@ -646,21 +642,18 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             </div>
           </div>
         </div>
-      </Card>
+      </div>
 
       {/* 执行记录 */}
-      <Card
-        size="small"
-        title="执行记录"
-        style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px', minHeight: 0 } }}
-        extra={
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
+          <span style={{ fontWeight: 500 }}>执行记录</span>
           <Space size={4}>
             <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(); }} />
             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={clearLogs} />
           </Space>
-        }
-      >
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {logs.length === 0 ? (
           <div style={{ color: '#999', textAlign: 'center', padding: 32 }}>暂无记录</div>
         ) : (
@@ -741,7 +734,8 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             })}
           </div>
         )}
-      </Card>
+        </div>
+      </div>
 
       {/* 新建/编辑定时任务弹窗 */}
       <Modal

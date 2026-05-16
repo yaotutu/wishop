@@ -85,49 +85,6 @@ const Layout: React.FC = () => {
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-
-  const renderPage = () => {
-    switch (activeModule) {
-      case 'storeManagement':
-        return (
-          <StoreManagement
-            accounts={accounts}
-            addAccount={addAccount}
-            updateAccount={updateAccount}
-            removeAccount={removeAccount}
-            switchAccount={switchAccount}
-            activeAccountId={activeAccountId}
-          />
-        );
-      case 'settings':
-        return <SettingsPage />;
-      default:
-        if (accounts.length === 0) {
-          return (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Empty description="请先添加店铺" />
-            </div>
-          );
-        }
-        return (
-          <div style={{ height: '100%', position: 'relative' }}>
-            {accounts.map(account => (
-              <div
-                key={account.id}
-                style={{
-                  height: '100%',
-                  display: account.id === activeAccountId ? 'flex' : 'none',
-                  flexDirection: 'column',
-                }}
-              >
-                <AccountWorkspace accountId={account.id} activeModule={activeModule as AccountModuleType} />
-              </div>
-            ))}
-          </div>
-        );
-    }
-  };
-
   const moduleTabItems = MODULES.map(m => ({ key: m.key, label: m.label }));
 
   return (
@@ -153,15 +110,50 @@ const Layout: React.FC = () => {
           />
         </div>
 
-        {isAccountModule ? (
+        {/* 账户模块 — display:contents 使子元素直接参与外层 flex 布局 */}
+        <div style={{ display: isAccountModule ? 'contents' : 'none' }}>
           <AccountLayout accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount}>
-            {renderPage()}
+            {accounts.length === 0 ? (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Empty description="请先添加店铺" />
+              </div>
+            ) : (
+              <div style={{ height: '100%', position: 'relative' }}>
+                {accounts.map(account => (
+                  <div
+                    key={account.id}
+                    style={{
+                      height: '100%',
+                      display: account.id === activeAccountId ? 'flex' : 'none',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <AccountWorkspace accountId={account.id} activeModule={activeModule as AccountModuleType} />
+                  </div>
+                ))}
+              </div>
+            )}
           </AccountLayout>
-        ) : (
+        </div>
+
+        {/* 全局模块 */}
+        <div style={{ display: !isAccountModule ? 'contents' : 'none' }}>
           <GlobalLayout>
-            {renderPage()}
+            <div style={{ height: '100%', display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <StoreManagement
+                accounts={accounts}
+                addAccount={addAccount}
+                updateAccount={updateAccount}
+                removeAccount={removeAccount}
+                switchAccount={switchAccount}
+                activeAccountId={activeAccountId}
+              />
+            </div>
+            <div style={{ height: '100%', display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <SettingsPage />
+            </div>
           </GlobalLayout>
-        )}
+        </div>
       </AntLayout>
     </BrowserContext.Provider>
   );

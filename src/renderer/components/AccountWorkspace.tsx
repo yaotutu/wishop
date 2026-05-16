@@ -10,17 +10,18 @@ interface AccountWorkspaceProps {
   activeModule: AccountModuleType;
 }
 
-const AccountWorkspace: React.FC<AccountWorkspaceProps> = ({ accountId, activeModule }) => {
-  switch (activeModule) {
-    case 'orders':
-      return <OrdersPage accountId={accountId} />;
-    case 'commonFunctions':
-      return <ListingPage accountId={accountId} />;
-    case 'violation':
-      return <ViolationPage accountId={accountId} />;
-    default:
-      return null;
-  }
-};
+const AccountWorkspace: React.FC<AccountWorkspaceProps> = ({ accountId, activeModule }) => (
+  <>
+    <div style={{ height: '100%', display: activeModule === 'orders' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <OrdersPage accountId={accountId} />
+    </div>
+    <div style={{ height: '100%', display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <ListingPage accountId={accountId} />
+    </div>
+    <div style={{ height: '100%', display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
+      <ViolationPage accountId={accountId} />
+    </div>
+  </>
+);
 
 export default AccountWorkspace;
