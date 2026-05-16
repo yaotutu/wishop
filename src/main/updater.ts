@@ -15,6 +15,13 @@ export function initUpdater(win: BrowserWindow): void {
     }
   });
 
+  autoUpdater.on('update-not-available', () => {
+    logger.info('当前已是最新版本');
+    if (!win.isDestroyed()) {
+      win.webContents.send('update:not-available');
+    }
+  });
+
   autoUpdater.on('download-progress', (progress) => {
     if (!win.isDestroyed()) {
       win.webContents.send('update:progress', { percent: Math.round(progress.percent) });
@@ -30,6 +37,9 @@ export function initUpdater(win: BrowserWindow): void {
 
   autoUpdater.on('error', (error) => {
     logger.error('自动更新错误:', error);
+    if (!win.isDestroyed()) {
+      win.webContents.send('update:error', error?.message || String(error));
+    }
   });
 
   setTimeout(() => {
@@ -37,6 +47,10 @@ export function initUpdater(win: BrowserWindow): void {
       logger.error('检查更新失败:', error);
     });
   }, 3000);
+}
+
+export async function checkForUpdates(): Promise<void> {
+  await autoUpdater.checkForUpdates();
 }
 
 export function quitAndInstall(): void {

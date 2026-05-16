@@ -130,6 +130,7 @@ contextBridge.exposeInMainWorld('appVersion', {
 });
 
 contextBridge.exposeInMainWorld('updater', {
+  check: (): Promise<void> => ipcRenderer.invoke('update:check'),
   onAvailable: (callback: (info: { version: string }) => void) => {
     ipcRenderer.on('update:available', (_, info) => callback(info));
   },
@@ -138,6 +139,12 @@ contextBridge.exposeInMainWorld('updater', {
   },
   onDownloaded: (callback: (info: { version: string }) => void) => {
     ipcRenderer.on('update:downloaded', (_, info) => callback(info));
+  },
+  onNotAvailable: (callback: () => void) => {
+    ipcRenderer.on('update:not-available', () => callback());
+  },
+  onError: (callback: (error: string) => void) => {
+    ipcRenderer.on('update:error', (_, error) => callback(error));
   },
   install: (): Promise<void> => ipcRenderer.invoke('update:install'),
 });
@@ -149,9 +156,12 @@ declare global {
       get: () => Promise<string>;
     };
     updater: {
+      check: () => Promise<void>;
       onAvailable: (callback: (info: { version: string }) => void) => void;
       onProgress: (callback: (info: { percent: number }) => void) => void;
       onDownloaded: (callback: (info: { version: string }) => void) => void;
+      onNotAvailable: (callback: () => void) => void;
+      onError: (callback: (error: string) => void) => void;
       install: () => Promise<void>;
     };
   }

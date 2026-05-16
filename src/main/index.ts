@@ -4,7 +4,7 @@ import path from 'path';
 import { registerHandlers } from './ipc/handler';
 import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
-import { initUpdater, quitAndInstall } from './updater';
+import { initUpdater, quitAndInstall, checkForUpdates } from './updater';
 import { flushBrowserSession, setBrowserQuitting } from './browser/browser-window';
 import { log } from './utils/logger';
 
@@ -63,6 +63,10 @@ function createWindow(): void {
 
   ipcMain.handle('update:install', () => {
     quitAndInstall();
+  });
+
+  ipcMain.handle('update:check', async () => {
+    await checkForUpdates();
   });
 
   ipcMain.handle('app:version', () => {

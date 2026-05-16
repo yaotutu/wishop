@@ -1,70 +1,96 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Form, Input, Button, message } from 'antd';
-import { useConfig } from '../../hooks/useConfig';
+import { Card, Button, Progress, Space, Typography, Descriptions } from 'antd';
+import { CheckCircleOutlined, CloudDownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 
-interface SettingsProps {
-  accountId: string;
-}
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
-const Settings: React.FC<SettingsProps> = ({ accountId }) => {
-  const { config, fetchConfig, saveConfig } = useConfig(accountId);
-  const [configForm] = Form.useForm();
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    fetchConfig();
-  }, [accountId]);
+const SettingsPage: React.FC = () => {
+  const [version, setVersion] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [newVersion, setNewVersion] = useState('');
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    if (config) configForm.setFieldsValue(config);
-  }, [config, configForm]);
+    window.appVersion?.get().then((v: string) => setVersion(v));
+  }, []);
 
-  const handleConfigSave = async () => {
+  useEffect(() => {
+    window.updater?.onAvailable((info) => {
+      setNewVersion(info.version);
+      setUpdateStatus('available');
+    });
+    window.updater?.onProgress((info) => {
+      setDownloadPercent(info.percent);
+      setUpdateStatus('downloading');
+    });
+    window.updater?.onDownloaded((info) => {
+      setNewVersion(info.version);
+      setUpdateStatus('downloaded');
+    });
+    window.updater?.onNotAvailable(() => {
+      setUpdateStatus('not-available');
+    });
+    window.updater?.onError((error) => {
+      setErrorMsg(error);
+      setUpdateStatus('error');
+    });
+  }, []);
+
+  const handleCheck = async () => {
+    setUpdateStatus('checking');
+    setErrorMsg('');
+    setNewVersion('');
+    setDownloadPercent(0);
     try {
-      const values = await configForm.validateFields();
-      setSaving(true);
-      const result = await saveConfig(values);
-      if (result.success) {
-        message.success('配置已保存，Token 验证成功');
-      } else {
-        message.error(result.error || '保存失败');
-      }
-    } catch (err: any) {
-      if (err.errorFields) {
-        message.error('请填写完整信息');
-      } else {
-        message.error(err.message || '保存失败');
-      }
-    } finally {
-      setSaving(false);
+      await window.updater?.check();
+    } catch {
+      // 事件回调会处理状态
+    }
+  };
+
+  const handleInstall = () => {
+    window.updater?.install();
+  };
+
+  const renderUpdateAction = () => {
+    switch (updateStatus) {
+      case 'checking':
+        return <Button icon={<ReloadOutlined spin />} disabled>检查中...</Button>;
+      case 'available':
+        return <span style={{ color: '#1677ff' }}>发现新版本 v{newVersion}，正在下载...</span>;
+      case 'downloading':
+        return <Progress percent={downloadPercent} style={{ maxWidth: 300 }} />;
+      case 'downloaded':
+        return (
+          <Button type="primary" icon={<CloudDownloadOutlined />} onClick={handleInstall}>
+            重启并更新到 v{newVersion}
+          </Button>
+        );
+      case 'not-available':
+        return <span style={{ color: '#52c41a' }}><CheckCircleOutlined /> 当前已是最新版本</span>;
+      case 'error':
+        return <span style={{ color: '#ff4d4f' }}>更新失败：{errorMsg}</span>;
+      default:
+        return null;
     }
   };
 
   return (
-    <Card title="API 配置">
-      <Form form={configForm} layout="vertical" style={{ maxWidth: 400 }}>
-        <Form.Item
-          name="appId"
-          label="AppID"
-          rules={[{ required: true, message: '请输入 AppID' }]}
-        >
-          <Input placeholder="微信小店的 AppID" />
-        </Form.Item>
-        <Form.Item
-          name="appSecret"
-          label="AppSecret"
-          rules={[{ required: true, message: '请输入 AppSecret' }]}
-        >
-          <Input.Password placeholder="微信小店的 AppSecret" />
-        </Form.Item>
-        <Form.Item>
-          <Button type="primary" onClick={handleConfigSave} loading={saving}>
-            保存配置
+    <Card title="关于">
+      <Descriptions column={1} style={{ maxWidth: 500 }}>
+        <Descriptions.Item label="当前版本">v{version}</Descriptions.Item>
+      </Descriptions>
+      <Space style={{ marginTop: 16 }}>
+        {(updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error') && (
+          <Button type="primary" onClick={handleCheck} disabled={updateStatus === 'checking'}>
+            检查更新
           </Button>
-        </Form.Item>
-      </Form>
+        )}
+        {renderUpdateAction()}
+      </Space>
     </Card>
   );
 };
 
-export default Settings;
+export default SettingsPage;
