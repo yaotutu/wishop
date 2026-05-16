@@ -51,7 +51,7 @@ export async function listOne(
   const logger = createLogger('ListOne', accountId);
   try {
     const latest = await api.getProductDetail(product.productId);
-    if (latest.editStatus !== 72) {
+    if (latest.editStatus !== 72 && latest.editStatus !== 1) {
       logger.info(`跳过 (状态已变为 ${latest.editStatus}): ${product.title}`);
       return 'skipped';
     }

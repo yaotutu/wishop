@@ -65,6 +65,26 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const [skipKeywordOpen, setSkipKeywordOpen] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
 
+  // 单商品测试提审
+  const [testProductId, setTestProductId] = useState('');
+
+  const handleTestList = async () => {
+    if (!testProductId.trim()) {
+      message.warning('请输入商品ID');
+      return;
+    }
+    try {
+      const res = await window.electronAPI.drafts.list(accountId, testProductId.trim());
+      if (res.success) {
+        message.success(`商品 ${testProductId} 提审成功`);
+      } else {
+        message.error(`提审失败: ${res.error}`);
+      }
+    } catch (e: any) {
+      message.error(`提审异常: ${e.message}`);
+    }
+  };
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -293,6 +313,20 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                 配额 {displayQuota}/{quota.total}
               </Tag>
             )}
+            <Input
+              size="small"
+              placeholder="商品ID"
+              value={testProductId}
+              onChange={e => setTestProductId(e.target.value)}
+              style={{ width: 140 }}
+              onPressEnter={handleTestList}
+            />
+            <Button
+              size="small"
+              onClick={handleTestList}
+            >
+              测试提审
+            </Button>
             <Button
               type="primary"
               icon={<PlayCircleOutlined />}

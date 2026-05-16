@@ -24,6 +24,10 @@ export async function runTaskCycle(
   let listCount = 0;
   const errorCodeMap = new Map<number, { count: number; msg: string }>();
 
+  // editStatus=1 提审结果追踪
+  const status1Success: { productId: string; title: string }[] = [];
+  const status1Failed: { productId: string; title: string; reason: string }[] = [];
+
   const listDone = () => !taskConfig.listUnreviewed || listCount >= taskConfig.listUnreviewedQuantity;
 
   const trackLog: AddLogFn = (log) => {
@@ -60,20 +64,32 @@ export async function runTaskCycle(
 
     if (taskConfig.listUnreviewed && listDone()) break;
 
-    // editStatus=72 → 尝试上架
-    if (product.editStatus === 72 && taskConfig.listUnreviewed && !listDone()) {
+    // editStatus=1(编辑中) 或 editStatus=72(未审核) → 尝试提审
+    if ((product.editStatus === 1 || product.editStatus === 72) && taskConfig.listUnreviewed && !listDone()) {
       const res = await listOne(api, trackLog, product, runId, signal, accountId, blacklistRules, taskConfig.autoDeleteFailed !== false, skipKeywords);
       if (res === 'success') {
         listCount++;
         result.listed++;
+        if (product.editStatus === 1) {
+          status1Success.push({ productId: product.productId, title: product.title });
+        }
       } else if (res === 'stopped') {
         result.stopped = true;
         result.reason = '触发黑名单错误码，停止任务';
+        if (product.editStatus === 1) {
+          status1Failed.push({ productId: product.productId, title: product.title, reason: '触发黑名单' });
+        }
         break;
       } else if (res === 'deleted') {
         result.deleted++;
+        if (product.editStatus === 1) {
+          status1Failed.push({ productId: product.productId, title: product.title, reason: '提审失败，已删除' });
+        }
       } else {
         result.skipped++;
+        if (product.editStatus === 1) {
+          status1Failed.push({ productId: product.productId, title: product.title, reason: '提审失败，跳过' });
+        }
       }
       continue;
     }
@@ -106,5 +122,17 @@ export async function runTaskCycle(
       .sort((a, b) => b.count - a.count);
   }
   logger.info(`完成: 扫描=${result.scanned}, 上架=${result.listed}, 删除=${result.deleted}, 跳过=${result.skipped}, 错误=${result.errors}, 停止=${result.stopped}`);
+
+  // editStatus=1 汇总
+  if (status1Success.length > 0 || status1Failed.length > 0) {
+    logger.info(`[editStatus=1 汇总] 总计=${status1Success.length + status1Failed.length}, 成功=${status1Success.length}, 失败=${status1Failed.length}`);
+    if (status1Success.length > 0) {
+      logger.info(`[editStatus=1 成功] ${status1Success.map(p => `${p.productId}(${p.title})`).join(', ')}`);
+    }
+    if (status1Failed.length > 0) {
+      logger.info(`[editStatus=1 失败] ${status1Failed.map(p => `${p.productId}(${p.title}): ${p.reason}`).join('; ')}`);
+    }
+  }
+
   return result;
 }
