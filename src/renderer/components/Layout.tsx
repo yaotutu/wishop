@@ -24,7 +24,7 @@ const MODULES: { key: ModuleType; label: string }[] = [
 ];
 
 export const BrowserContext = React.createContext<{
-  openBrowser: () => void;
+  openBrowser: (profileId?: string, url?: string) => void;
 }>({ openBrowser: () => {} });
 
 /** 账户侧边栏 */

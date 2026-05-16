@@ -6,6 +6,7 @@ import { createLogger } from '../../utils/logger';
 interface OrderPaginationState {
   nextKey: string;
   hasMore: boolean;
+  timeRange?: { start_time: number; end_time: number };
 }
 
 function makeTimeRange(): { start_time: number; end_time: number } {
@@ -19,7 +20,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
     const paginationKey = `${accountId}:${status ?? 'all'}`;
     let pag = context.orderPaginationMap.get(paginationKey);
     if (!pag) {
-      pag = { nextKey: '', hasMore: true };
+      pag = { nextKey: '', hasMore: true, timeRange: makeTimeRange() };
       context.orderPaginationMap.set(paginationKey, pag);
     }
 
@@ -28,13 +29,12 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
     }
 
     const api = getClient(accountId);
-    const timeRange = makeTimeRange();
 
     const params: OrderListParams = {
       page_size: pageSize || 10,
       next_key: pag.nextKey || undefined,
       status,
-      update_time_range: timeRange,
+      update_time_range: pag.timeRange,
     };
     const listResult = await api.getOrderList(params);
 

@@ -94,7 +94,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, [accountId, fetchOrders]);
 
-  const handleStatusChange = useCallback((val: string | number) => {
+  const handleStatusChange = useCallback((val: string | number | null) => {
+    if (val === null) return;
     const status = val === 'all' ? undefined : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
@@ -340,6 +341,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             enterButton="搜索"
           />
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
+          <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
         </Flex>
         {error && (
           <Alert type="error" title={error} showIcon closable={{ onClose: clearError }} />

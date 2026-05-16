@@ -107,6 +107,7 @@ export interface OrderProductInfo {
   estimate_price: number;
   on_aftersale_sku_cnt: number;
   finish_aftersale_sku_cnt: number;
+  delivery_deadline?: number;
 }
 
 export interface OrderPriceInfo {
