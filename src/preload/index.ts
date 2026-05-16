@@ -106,6 +106,12 @@ const electronAPI = {
     set: (rules: BlacklistRule[]): Promise<void> =>
       ipcRenderer.invoke('blacklistRules:set', rules),
   },
+  skipKeywords: {
+    get: (): Promise<string[]> =>
+      ipcRenderer.invoke('skipKeywords:get'),
+    set: (keywords: string[]): Promise<void> =>
+      ipcRenderer.invoke('skipKeywords:set', keywords),
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

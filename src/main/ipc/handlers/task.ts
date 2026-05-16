@@ -1,5 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { createScopedAddLog, getTaskConfig, setTaskConfig, getBlacklistRules } from '../../store';
+import { createScopedAddLog, getTaskConfig, setTaskConfig, getBlacklistRules, getSkipKeywords } from '../../store';
 import type { TaskConfig, TaskCycleResult } from '../../../shared/types';
 import { getClient } from '../../wxshop/client-registry';
 import { runTaskCycle } from '../../modules/task-cycle';
@@ -45,7 +45,8 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
       try {
         const api = getClient(accountId);
         const blacklistRules = getBlacklistRules();
-        return await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules);
+        const skipKeywords = getSkipKeywords();
+        return await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules, skipKeywords);
       } finally {
         context.taskSessions.complete(accountId);
       }

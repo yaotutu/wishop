@@ -15,6 +15,7 @@ export async function runTaskCycle(
   signal?: AbortSignal,
   accountId: string = '',
   blacklistRules: BlacklistRule[] = [],
+  skipKeywords: string[] = [],
 ): Promise<TaskCycleResult> {
   const logger = createLogger('TaskCycle', accountId);
   logger.info(`开始 (runId=${runId}): 提交未审核=${taskConfig.listUnreviewed}(${taskConfig.listUnreviewedQuantity})`);
@@ -61,7 +62,7 @@ export async function runTaskCycle(
 
     // editStatus=72 → 尝试上架
     if (product.editStatus === 72 && taskConfig.listUnreviewed && !listDone()) {
-      const res = await listOne(api, trackLog, product, runId, signal, accountId, blacklistRules, taskConfig.autoDeleteFailed !== false);
+      const res = await listOne(api, trackLog, product, runId, signal, accountId, blacklistRules, taskConfig.autoDeleteFailed !== false, skipKeywords);
       if (res === 'success') {
         listCount++;
         result.listed++;
@@ -92,8 +93,10 @@ export async function runTaskCycle(
       continue;
     }
 
-    // 其他 editStatus → 跳过，打日志观察
-    logger.warn(`未知 editStatus=${product.editStatus}: ${product.title} (productId=${product.productId})`);
+    // 其他 editStatus → 跳过
+    const statusLabels: Record<number, string> = { 1: '编辑中', 2: '审核中', 4: '成功', 7: '上传中', 8: '上传失败' };
+    const label = statusLabels[product.editStatus] || '未知';
+    logger.info(`跳过 (edit_status=${product.editStatus} ${label}): ${product.title} (productId=${product.productId})`);
     result.skipped++;
   }
 

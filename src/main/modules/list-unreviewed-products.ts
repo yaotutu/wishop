@@ -32,6 +32,11 @@ function matchBlacklist(errcode: number, errmsg: string | undefined, blacklist: 
   );
 }
 
+function matchSkipKeyword(errmsg: string | undefined, skipKeywords: string[]): string | undefined {
+  if (!errmsg) return undefined;
+  return skipKeywords.find(kw => errmsg.includes(kw));
+}
+
 export async function listOne(
   api: WxShopClient,
   addLog: AddLogFn,
@@ -41,6 +46,7 @@ export async function listOne(
   accountId: string = '',
   blacklistRules: BlacklistRule[] = [],
   autoDeleteFailed: boolean = true,
+  skipKeywords: string[] = [],
 ): Promise<ListOneResult> {
   const logger = createLogger('ListOne', accountId);
   try {
@@ -70,8 +76,16 @@ export async function listOne(
       return 'stopped';
     }
 
-    // 不在黑名单 → 删除或跳过
+    // 不在黑名单 → 检查是否跳过删除 / 自动删除
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
+
+    const matchedKeyword = matchSkipKeyword(res.errmsg, skipKeywords);
+    if (matchedKeyword) {
+      addLog({ runId, productId: product.productId, productTitle: product.title, action: 'skip', status: 'failed', errorCode: res.errcode, errorMsg: `上架失败，跳过删除（待处理）。原因: errcode:${res.errcode} ${res.errmsg || ''}` });
+      logger.info(`上架失败，跳过删除（匹配关键词「${matchedKeyword}」）: ${product.title} (errcode=${res.errcode})`);
+      return 'skipped';
+    }
+
     if (autoDeleteFailed) {
       try {
         await api.deleteProduct(product.productId);

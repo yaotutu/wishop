@@ -22,7 +22,7 @@ export interface LogEntry {
   runId: string;
   productId: string;
   productTitle: string;
-  action: 'list' | 'delete' | 'check';
+  action: 'list' | 'delete' | 'check' | 'skip';
   status: 'success' | 'failed';
   errorCode?: number;
   errorMsg?: string;
@@ -62,6 +62,7 @@ export interface TaskCycleResult {
   stopped: boolean;
   reason?: string;
   errorCodes?: ErrorCodeSummary[];
+  pendingCount?: number;
 }
 
 export interface Account {

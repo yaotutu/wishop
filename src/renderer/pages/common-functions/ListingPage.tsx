@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select } from 'antd';
-import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined } from '@ant-design/icons';
+import { Card, Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
+import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
 import { useBlacklistRules } from '../../hooks/useBlacklistRules';
+import { useSkipKeywords } from '../../hooks/useSkipKeywords';
 import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary } from '../../../shared/types';
 
 interface ListingProps {
@@ -40,6 +41,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { quota, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules } = useBlacklistRules();
+  const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [localListedCount, setLocalListedCount] = useState(0);
@@ -59,6 +61,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const [newRuleCode, setNewRuleCode] = useState('');
   const [newRuleDesc, setNewRuleDesc] = useState('');
 
+  // 跳过关键词管理弹窗
+  const [skipKeywordOpen, setSkipKeywordOpen] = useState(false);
+  const [newKeyword, setNewKeyword] = useState('');
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -67,6 +73,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchQuota();
     fetchTasks();
     fetchBlacklistRules();
+    fetchKeywords();
     return () => {
       unsubscribeRef.current?.();
     };
@@ -187,6 +194,38 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     message.success('已添加');
   };
 
+  // 删除跳过关键词
+  const handleDeleteKeyword = async (kw: string) => {
+    await saveKeywords(skipKeywords.filter(k => k !== kw));
+    message.success('已删除');
+  };
+
+  // 手动添加跳过关键词
+  const handleAddKeyword = async () => {
+    const kw = newKeyword.trim();
+    if (!kw) {
+      message.error('请输入关键词');
+      return;
+    }
+    if (skipKeywords.includes(kw)) {
+      message.error('该关键词已存在');
+      return;
+    }
+    await saveKeywords([...skipKeywords, kw]);
+    setNewKeyword('');
+    message.success('已添加');
+  };
+
+  // 从日志提取关键词加入跳过列表
+  const handleAddKeywordFromLog = async (keyword: string) => {
+    if (skipKeywords.includes(keyword)) {
+      message.info('已在跳过列表中');
+      return;
+    }
+    await saveKeywords([...skipKeywords, keyword]);
+    message.success(`已将「${keyword}」加入跳过列表`);
+  };
+
   const displayQuota = running ? quota.quota - localListedCount : quota.quota;
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
 
@@ -216,16 +255,30 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               onChange={e => updateConfig({ autoDeleteFailed: e.target.checked })}
             >
               失败自动删除
+              <Tooltip title="上架失败的商品自动删除。开启后，可配合「保留关键词」排除不需要删除的情况">
+                <QuestionCircleOutlined style={{ color: '#999', marginLeft: 4, fontSize: 12 }} />
+              </Tooltip>
             </Checkbox>
           </Space>
           <Space>
-            <Button
-              size="small"
-              icon={<StopOutlined />}
-              onClick={() => setBlacklistOpen(true)}
-            >
-              黑名单 ({blacklistRules.length})
-            </Button>
+            <Tooltip title="匹配到这些错误码时立即停止任务，防止触发封控">
+              <Button
+                size="small"
+                icon={<StopOutlined />}
+                onClick={() => setBlacklistOpen(true)}
+              >
+                停止黑名单 ({blacklistRules.length})
+              </Button>
+            </Tooltip>
+            <Tooltip title="错误信息包含这些关键词时保留商品不删除，留给手动处理。如：品牌、类目">
+              <Button
+                size="small"
+                icon={<ExclamationCircleOutlined />}
+                onClick={() => setSkipKeywordOpen(true)}
+              >
+                保留关键词 ({skipKeywords.length})
+              </Button>
+            </Tooltip>
             <Button
               size="small"
               icon={<ClockCircleOutlined />}
@@ -282,6 +335,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               {result.listed > 0 && <Tag color="success">上架成功 {result.listed}</Tag>}
               {result.deleted > 0 && <Tag color="blue">已删除 {result.deleted}</Tag>}
               {result.skipped > 0 && <Tag>跳过 {result.skipped}</Tag>}
+              {(result.pendingCount ?? 0) > 0 && <Tag color="orange">待处理 {result.pendingCount}</Tag>}
               {result.errors > 0 && <Tag color="error">删除失败 {result.errors}</Tag>}
               {result.stopped && <Tag color="warning">已停止: {result.reason}</Tag>}
             </Space>
@@ -364,8 +418,9 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               const nextLog = arr[index - 1];
               const showDivider = index > 0 && log.runId !== nextLog?.runId;
               const isSuccess = log.status === 'success';
-              const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : '上架';
-              const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : '#1677ff';
+              const isSkipAction = log.action === 'skip';
+              const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : log.action === 'skip' ? '待处理' : '上架';
+              const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : isSkipAction ? '#fa8c16' : '#1677ff';
               const inBlacklist = log.errorCode != null && blacklistRules.some(r =>
                 r.code === log.errorCode || (log.errorMsg && log.errorMsg.includes(`错误码:${r.code}`))
               );
@@ -375,8 +430,8 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                   <div style={{
                     padding: '8px 12px',
                     borderRadius: 6,
-                    background: isSuccess ? '#f6ffed' : '#fff2f0',
-                    borderLeft: `3px solid ${isSuccess ? '#b7eb8f' : '#ffccc7'}`,
+                    background: isSuccess ? '#f6ffed' : isSkipAction ? '#fff7e6' : '#fff2f0',
+                    borderLeft: `3px solid ${isSuccess ? '#b7eb8f' : isSkipAction ? '#ffd591' : '#ffccc7'}`,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: actionColor }}>{actionLabel}</span>
@@ -393,15 +448,35 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                           <Tag color="error" style={{ fontSize: 11, marginRight: 4, lineHeight: '18px', padding: '0 4px' }}>errcode:{log.errorCode}</Tag>
                         )}
                         {log.errorMsg}
-                        {log.errorCode != null && !inBlacklist && log.action === 'list' && (
-                          <Button
-                            type="link"
-                            size="small"
-                            style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#ff4d4f' }}
-                            onClick={() => handleAddToBlacklist(log.errorCode!, log.errorMsg)}
-                          >
-                            加入黑名单
-                          </Button>
+                        {isSkipAction && (
+                          <Tag color="orange" style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px', padding: '0 4px', verticalAlign: 'middle' }}>待处理</Tag>
+                        )}
+                        {log.errorCode != null && !inBlacklist && !isSkipAction && log.action === 'list' && (
+                          <Tooltip title="将此错误码加入停止黑名单，以后遇到时立即停止任务">
+                            <Button
+                              type="link"
+                              size="small"
+                              style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#ff4d4f' }}
+                              onClick={() => handleAddToBlacklist(log.errorCode!, log.errorMsg)}
+                            >
+                              停止黑名单
+                            </Button>
+                          </Tooltip>
+                        )}
+                        {log.errorCode != null && !inBlacklist && !isSkipAction && log.action === 'list' && (
+                          <Tooltip title="添加关键词，以后错误信息包含该词时保留商品不删除">
+                            <Button
+                              type="link"
+                              size="small"
+                              style={{ fontSize: 11, padding: '0 4px', height: 'auto', marginLeft: 4, verticalAlign: 'middle', color: '#fa8c16' }}
+                              onClick={() => {
+                                const kw = window.prompt('输入关键词，以后错误信息包含该词时保留商品不删除', '');
+                                if (kw?.trim()) handleAddKeywordFromLog(kw.trim());
+                              }}
+                            >
+                              保留不删
+                            </Button>
+                          </Tooltip>
                         )}
                         {inBlacklist && (
                           <Tag color="red" style={{ fontSize: 10, marginLeft: 4, lineHeight: '16px', padding: '0 4px', verticalAlign: 'middle' }}>黑名单</Tag>
@@ -561,6 +636,47 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             onPressEnter={handleAddRule}
           />
           <Button type="primary" danger icon={<PlusOutlined />} onClick={handleAddRule}>添加</Button>
+        </Space>
+      </Modal>
+
+      {/* 保留关键词管理弹窗 */}
+      <Modal
+        title="保留关键词"
+        open={skipKeywordOpen}
+        onCancel={() => setSkipKeywordOpen(false)}
+        footer={null}
+        width={600}
+      >
+        <div style={{ marginBottom: 12, color: '#888', fontSize: 12 }}>
+          上架失败时，如果错误信息中包含这些关键词，商品不会被自动删除，保留给你手动处理（如补充品牌、类目等）。任务继续执行不会中断。不包含这些关键词的失败商品仍然会被自动删除。
+        </div>
+        {skipKeywords.length > 0 && (
+          <div style={{ marginBottom: 8, color: '#666', fontSize: 12 }}>示例：添加「品牌」后，错误信息含"请在商品品牌处添加"的商品将保留不删</div>
+        )}
+        {skipKeywords.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {skipKeywords.map(kw => (
+              <Tag
+                key={kw}
+                closable
+                onClose={() => handleDeleteKeyword(kw)}
+                color="orange"
+                style={{ fontSize: 13, padding: '2px 8px' }}
+              >
+                {kw}
+              </Tag>
+            ))}
+          </div>
+        )}
+        <Space wrap>
+          <Input
+            placeholder="关键词，如 品牌、类目"
+            value={newKeyword}
+            onChange={e => setNewKeyword(e.target.value)}
+            style={{ width: 200 }}
+            onPressEnter={handleAddKeyword}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddKeyword}>添加</Button>
         </Space>
       </Modal>
     </div>

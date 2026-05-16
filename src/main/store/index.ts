@@ -20,7 +20,7 @@ export interface StoreSchema {
   scheduler?: { enabled: boolean; cronExpression: string; dailyLimit: number; lastRunDate: string; todayListedCount: number };
   taskConfig?: TaskConfig;
   logs?: LogEntry[];
-  skipCodeRules?: BlacklistRule[];
+  skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
 }
 
@@ -321,6 +321,16 @@ export function getBlacklistRules(): BlacklistRule[] {
 
 export function setBlacklistRules(rules: BlacklistRule[]): void {
   store.set('blacklistRules', rules);
+}
+
+// --- Skip keywords (keywords in error message that should skip deletion) ---
+
+export function getSkipKeywords(): string[] {
+  return store.get('skipKeywords') || [];
+}
+
+export function setSkipKeywords(keywords: string[]): void {
+  store.set('skipKeywords', keywords);
 }
 
 export default store;
