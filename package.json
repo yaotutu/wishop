@@ -39,30 +39,5 @@
     "electron-builder": "^26.8.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.12"
-  },
-  "build": {
-    "appId": "com.wishop.app",
-    "productName": "Wishop",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "publish": {
-      "provider": "github",
-      "owner": "yaotutu",
-      "repo": "wishop"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "mac": {
-      "target": "zip"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
   }
 }

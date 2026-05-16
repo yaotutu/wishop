@@ -5,8 +5,14 @@ directories:
 files:
   - dist/**/*
   - package.json
+publish:
+  provider: github
+  owner: yaotutu
+  repo: wishop
 win:
   target: nsis
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+mac:
+  target: zip
