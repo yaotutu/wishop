@@ -109,6 +109,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     setRunning(true);
     setResult(null);
     setLocalListedCount(0);
+    // 启动时自动将提交数量设为当前剩余配额
+    if (quota.quota > 0 && taskConfig.listUnreviewedQuantity > quota.quota) {
+      await saveTaskConfig({ ...taskConfig, listUnreviewedQuantity: quota.quota });
+    }
+    const config = { ...taskConfig, listUnreviewedQuantity: Math.min(taskConfig.listUnreviewedQuantity, quota.quota || taskConfig.listUnreviewedQuantity) };
     unsubscribeRef.current = window.electronAPI.task.onLog(accountId, (log: LogEntry) => {
       fetchLogs();
       if (log.status === 'success' && log.action === 'list') {
@@ -116,7 +121,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       }
     });
     try {
-      const res = await runTask(taskConfig);
+      const res = await runTask(config);
       setResult(res);
       fetchQuota();
     } finally {
@@ -325,11 +330,19 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                 提交未审核
               </Checkbox>
               <InputNumber
-                size="small" min={1} value={taskConfig.listUnreviewedQuantity}
+                controls={false}
+                size="small" min={1} max={quota.quota || undefined} value={taskConfig.listUnreviewedQuantity}
                 onChange={v => updateConfig({ listUnreviewedQuantity: v || 2 })}
                 disabled={!taskConfig.listUnreviewed}
                 style={{ width: 60 }}
               />
+              <Button
+                size="small"
+                disabled={!taskConfig.listUnreviewed || !quota.quota}
+                onClick={() => updateConfig({ listUnreviewedQuantity: quota.quota })}
+              >
+                最大
+              </Button>
               <span style={{ color: '#666' }}>条</span>
             </Space>
             <Checkbox
@@ -511,6 +524,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           {!rulesLocked && (
             <Space wrap style={{ marginTop: 8 }}>
               <InputNumber
+                controls={false}
                 placeholder="状态码"
                 value={newRuleStatus}
                 onChange={v => setNewRuleStatus(v ?? undefined)}
@@ -765,7 +779,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               </Checkbox>
             </div>
             {formData.dailyLimit > 0 && (
-              <InputNumber min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
+              <InputNumber controls={false} min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
             )}
           </div>
           <div>
@@ -783,7 +797,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               {formData.taskConfig.listUnreviewed && (
                 <Space style={{ marginLeft: 24 }}>
                   <span style={{ color: '#666', fontSize: 12 }}>每次</span>
-                  <InputNumber size="small" min={1} value={formData.taskConfig.listUnreviewedQuantity}
+                  <InputNumber size="small" controls={false} min={1} max={quota.quota || undefined} value={formData.taskConfig.listUnreviewedQuantity}
                     onChange={v => setFormData(prev => ({
                       ...prev,
                       taskConfig: { ...prev.taskConfig, listUnreviewedQuantity: v || 2 },
