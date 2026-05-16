@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty } from 'antd';
 import StoreManagement from '../pages/store-management/StoreManagement';
 import SettingsPage from '../pages/settings/SettingsPage';
-import AccountWorkspace from './AccountWorkspace';
-import type { AccountModuleType } from './AccountWorkspace';
+import OrdersPage from '../pages/orders/OrdersPage';
+import ListingPage from '../pages/common-functions/ListingPage';
+import ViolationPage from '../pages/violation/ViolationPage';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
 import { useBrowser } from '../hooks/useBrowser';
 
-const { Sider, Content } = AntLayout;
+const { Header, Sider, Content } = AntLayout;
 
 type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
 
@@ -26,54 +27,77 @@ export const BrowserContext = React.createContext<{
   openBrowser: () => void;
 }>({ openBrowser: () => {} });
 
-/** 账号级布局：左侧账号列表 + 右侧内容 */
-const AccountLayout: React.FC<{
+/** 账户侧边栏 */
+const AccountSider: React.FC<{
   accounts: Account[];
   activeAccountId: string;
   switchAccount: (id: string) => void;
-  children: React.ReactNode;
-}> = ({ accounts, activeAccountId, switchAccount, children }) => (
-  <AntLayout>
-    <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
-          账号列表
-        </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          {accounts.map((account, index) => (
-            <div
-              key={account.id}
-              onClick={() => switchAccount(account.id)}
-              style={{
-                padding: '8px 16px',
-                cursor: 'pointer',
-                background: account.id === activeAccountId ? '#e6f4ff' : 'transparent',
-                borderLeft: account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
-                fontSize: 13,
-                userSelect: 'none',
-                transition: 'background 0.2s',
-              }}
-            >
-              {index + 1}. {account.name}
-            </div>
-          ))}
-        </div>
+}> = ({ accounts, activeAccountId, switchAccount }) => (
+  <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
+        账号列表
       </div>
-    </Sider>
-    <AntLayout>
-      <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {children}
-      </Content>
-    </AntLayout>
-  </AntLayout>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {accounts.map((account, index) => (
+          <div
+            key={account.id}
+            onClick={() => switchAccount(account.id)}
+            style={{
+              padding: '8px 16px',
+              cursor: 'pointer',
+              background: account.id === activeAccountId ? '#e6f4ff' : 'transparent',
+              borderLeft: account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
+              fontSize: 13,
+              userSelect: 'none',
+              transition: 'background 0.2s',
+            }}
+          >
+            {index + 1}. {account.name}
+          </div>
+        ))}
+      </div>
+    </div>
+  </Sider>
 );
 
-/** 全局布局：直接铺满内容 */
-const GlobalLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-    {children}
-  </Content>
-);
+/** 账户作用域的模块内容（所有页面同时挂载，切换 display 保留状态） */
+const AccountModuleContent: React.FC<{
+  accounts: Account[];
+  activeAccountId: string;
+  activeModule: ModuleType;
+}> = ({ accounts, activeAccountId, activeModule }) => {
+  if (accounts.length === 0) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Empty description="请先添加店铺" />
+      </div>
+    );
+  }
+  return (
+    <div style={{ height: '100%', position: 'relative' }}>
+      {accounts.map(account => (
+        <div
+          key={account.id}
+          style={{
+            height: '100%',
+            display: account.id === activeAccountId ? 'contents' : 'none',
+          }}
+        >
+          <div style={{ height: '100%', display: activeModule === 'orders' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <OrdersPage accountId={account.id} />
+          </div>
+          <div style={{ height: '100%', display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <ListingPage accountId={account.id} />
+          </div>
+          <div style={{ height: '100%', display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <ViolationPage accountId={account.id} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const Layout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('orders');
@@ -85,61 +109,33 @@ const Layout: React.FC = () => {
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-  const moduleTabItems = MODULES.map(m => ({ key: m.key, label: m.label }));
+  const browserValue = useMemo(() => ({ openBrowser }), [openBrowser]);
 
   return (
-    <BrowserContext.Provider value={{ openBrowser }}>
+    <BrowserContext.Provider value={browserValue}>
       <AntLayout style={{ height: '100vh' }}>
-        <div style={{
-          height: 48,
-          borderBottom: '1px solid #f0f0f0',
-          display: 'flex',
-          alignItems: 'center',
-          paddingLeft: 12,
-          paddingRight: 12,
-          background: '#fafafa',
-          gap: 4,
-        }}>
+        <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
           <Tabs
             activeKey={activeModule}
             onChange={(key) => setActiveModule(key as ModuleType)}
-            items={moduleTabItems}
+            items={MODULES.map(m => ({ key: m.key, label: m.label }))}
             size="small"
-            style={{ flex: 1, marginBottom: 0, minWidth: 0 }}
+            style={{ flex: 1, minWidth: 0 }}
             tabBarStyle={{ margin: 0 }}
           />
-        </div>
-
-        {/* 账户模块 — display:contents 使子元素直接参与外层 flex 布局 */}
-        <div style={{ display: isAccountModule ? 'contents' : 'none' }}>
-          <AccountLayout accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount}>
-            {accounts.length === 0 ? (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Empty description="请先添加店铺" />
-              </div>
-            ) : (
-              <div style={{ height: '100%', position: 'relative' }}>
-                {accounts.map(account => (
-                  <div
-                    key={account.id}
-                    style={{
-                      height: '100%',
-                      display: account.id === activeAccountId ? 'flex' : 'none',
-                      flexDirection: 'column',
-                    }}
-                  >
-                    <AccountWorkspace accountId={account.id} activeModule={activeModule as AccountModuleType} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </AccountLayout>
-        </div>
-
-        {/* 全局模块 */}
-        <div style={{ display: !isAccountModule ? 'contents' : 'none' }}>
-          <GlobalLayout>
-            <div style={{ height: '100%', display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+        </Header>
+        <AntLayout>
+          {/* 账户侧边栏 — 仅账户模块显示 */}
+          {isAccountModule && (
+            <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
+          )}
+          <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
+            <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+              <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
+            </div>
+            {/* 店铺管理 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
               <StoreManagement
                 accounts={accounts}
                 addAccount={addAccount}
@@ -149,11 +145,12 @@ const Layout: React.FC = () => {
                 activeAccountId={activeAccountId}
               />
             </div>
-            <div style={{ height: '100%', display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+            {/* 设置 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
               <SettingsPage />
             </div>
-          </GlobalLayout>
-        </div>
+          </Content>
+        </AntLayout>
       </AntLayout>
     </BrowserContext.Provider>
   );

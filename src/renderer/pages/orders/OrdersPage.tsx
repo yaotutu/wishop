@@ -375,6 +375,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           loading={loading}
           pagination={false}
           scroll={{ x: 1100, y: scrollY }}
+          style={{ height: '100%' }}
+          styles={{
+            content: { height: '100%', display: 'flex', flexDirection: 'column' },
+            section: { flex: 1 },
+          }}
           locale={{ emptyText: <Empty description="暂无订单" /> }}
           footer={() => {
             if (loading || orders.length === 0) return null;

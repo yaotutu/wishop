@@ -29,6 +29,7 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@ant-design/cli": "^6.4.2",
     "@types/node": "^25.7.0",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19.2.14",
