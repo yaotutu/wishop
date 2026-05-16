@@ -103,6 +103,8 @@ const electronAPI = {
   blacklistRules: {
     get: (): Promise<BlacklistRule[]> =>
       ipcRenderer.invoke('blacklistRules:get'),
+    getDefaultCodes: (): Promise<number[]> =>
+      ipcRenderer.invoke('blacklistRules:getDefaultCodes'),
     set: (rules: BlacklistRule[]): Promise<void> =>
       ipcRenderer.invoke('blacklistRules:set', rules),
   },

@@ -26,13 +26,7 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
         const api = getClient(accountId);
         const quota = await api.getAuditQuota();
         logger.info(`配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
-        if (quota.quota > 0) {
-          scopedAddLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: 'success' });
-        } else {
-          scopedAddLog({ runId, productId: '', productTitle: `今日提审配额已用完 (${quota.quota}/${quota.total})，请明天再试`, action: 'check', status: 'failed' });
-          logger.warn(`配额为0，跳过执行`);
-          return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `提审配额已用完 (剩余${quota.quota}/${quota.total})` };
-        }
+        scopedAddLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: quota.quota > 0 ? 'success' : 'failed' });
       } catch (error: any) {
         scopedAddLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
         logger.error(`配额检查失败:`, error);

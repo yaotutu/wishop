@@ -317,12 +317,20 @@ const DEFAULT_BLACKLIST: BlacklistRule[] = [
   { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
 ];
 
+export function getDefaultBlacklistCodes(): number[] {
+  return DEFAULT_BLACKLIST.map(r => r.code);
+}
+
 export function getBlacklistRules(): BlacklistRule[] {
-  return store.get('blacklistRules') || DEFAULT_BLACKLIST;
+  const stored = store.get('blacklistRules');
+  if (!stored) return DEFAULT_BLACKLIST;
+  const codeSet = new Set(stored.map(r => r.code));
+  return [...stored, ...DEFAULT_BLACKLIST.filter(r => !codeSet.has(r.code))];
 }
 
 export function setBlacklistRules(rules: BlacklistRule[]): void {
-  store.set('blacklistRules', rules);
+  const defaultCodes = new Set(DEFAULT_BLACKLIST.map(r => r.code));
+  store.set('blacklistRules', rules.filter(r => !defaultCodes.has(r.code)));
 }
 
 // --- Skip keywords (keywords in error message that should skip deletion) ---
@@ -350,7 +358,10 @@ const DEFAULT_STATUS_RULES: StatusRule[] = [
 ];
 
 export function getStatusRules(): StatusRule[] {
-  return store.get('statusRules') || DEFAULT_STATUS_RULES;
+  const stored = store.get('statusRules');
+  if (!stored) return DEFAULT_STATUS_RULES;
+  const statusSet = new Set(stored.map(r => r.editStatus));
+  return [...stored, ...DEFAULT_STATUS_RULES.filter(r => !statusSet.has(r.editStatus))];
 }
 
 export function setStatusRules(rules: StatusRule[]): void {

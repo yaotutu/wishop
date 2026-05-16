@@ -41,7 +41,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
-  const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules } = useBlacklistRules();
+  const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
   const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
   const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
   const [running, setRunning] = useState(false);
@@ -106,6 +106,20 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   }, [accountId]);
 
   const handleRun = async () => {
+    if (quotaExhausted) {
+      Modal.confirm({
+        title: '今日提审配额已用完',
+        content: '配额为 0 时仍可执行任务，但提审步骤会失败。是否继续？',
+        okText: '继续执行',
+        cancelText: '取消',
+        onOk: () => doRun(),
+      });
+    } else {
+      doRun();
+    }
+  };
+
+  const doRun = async () => {
     setRunning(true);
     setResult(null);
     setLocalListedCount(0);
@@ -202,8 +216,12 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     message.success(`已将 ${newRules.map(r => r.code).join(', ')} 加入黑名单`);
   };
 
-  // 删除黑名单规则
+  // 删除黑名单规则（默认规则不可删除）
   const handleDeleteRule = async (code: number) => {
+    if (blacklistDefaultCodes.has(code)) {
+      message.warning('默认规则不可删除');
+      return;
+    }
     await saveBlacklistRules(blacklistRules.filter(r => r.code !== code));
     message.success('已删除');
   };
@@ -389,7 +407,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               icon={<PlayCircleOutlined />}
               onClick={handleRun}
               loading={running}
-              disabled={!taskConfig.listUnreviewed || quotaExhausted}
+              disabled={!taskConfig.listUnreviewed}
               style={running ? { display: 'none' } : undefined}
             >
               开始执行
@@ -566,17 +584,21 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             <div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>遇到这些错误码 → 停止任务</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                {blacklistRules.map(r => (
-                  <Tag
-                    key={r.code}
-                    closable={!rulesLocked}
-                    onClose={() => handleDeleteRule(r.code)}
-                    color="red"
-                    style={{ fontSize: 11 }}
-                  >
-                    {r.code}
-                  </Tag>
-                ))}
+                {blacklistRules.map(r => {
+                  const isDefault = blacklistDefaultCodes.has(r.code);
+                  return (
+                    <Tooltip key={r.code} title={isDefault ? '系统默认规则，不可删除' : undefined}>
+                      <Tag
+                        closable={!rulesLocked && !isDefault}
+                        onClose={() => handleDeleteRule(r.code)}
+                        color={isDefault ? '#cf1322' : 'red'}
+                        style={{ fontSize: 11, ...(isDefault ? { borderStyle: 'solid', opacity: 0.75 } : {}) }}
+                      >
+                        {r.code}
+                      </Tag>
+                    </Tooltip>
+                  );
+                })}
                 {!rulesLocked && (
                   <>
                     <Input
