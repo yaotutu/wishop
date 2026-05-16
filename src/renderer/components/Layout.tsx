@@ -101,15 +101,23 @@ const AccountModuleContent: React.FC<{
 
 const Layout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('orders');
+  const [version, setVersion] = useState('');
+  const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const { openBrowser } = useBrowser();
 
   useEffect(() => {
     fetchAccounts();
+    window.appVersion?.get().then((v: string) => setVersion(v));
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
   const browserValue = useMemo(() => ({ openBrowser }), [openBrowser]);
+
+  const handleVersionClick = () => {
+    setSettingsTab('about');
+    setActiveModule('settings');
+  };
 
   return (
     <BrowserContext.Provider value={browserValue}>
@@ -123,6 +131,12 @@ const Layout: React.FC = () => {
             style={{ flex: 1, minWidth: 0 }}
             tabBarStyle={{ margin: 0 }}
           />
+          <span
+            onClick={handleVersionClick}
+            style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
+          >
+            v{version}
+          </span>
         </Header>
         <AntLayout>
           {/* 账户侧边栏 — 仅账户模块显示 */}
@@ -147,7 +161,7 @@ const Layout: React.FC = () => {
             </div>
             {/* 设置 */}
             <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <SettingsPage />
+              <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
             </div>
           </Content>
         </AntLayout>
