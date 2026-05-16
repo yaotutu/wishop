@@ -8,8 +8,7 @@ export function useAccounts() {
   const fetchAccounts = useCallback(async () => {
     const list = await window.electronAPI.accounts.list();
     setAccounts(list);
-    const active = await window.electronAPI.accounts.getActive();
-    setActiveAccountIdState(active);
+    setActiveAccountIdState(prev => prev || list[0]?.id || '');
   }, []);
 
   const addAccount = useCallback(async (name: string, config: Config): Promise<Account> => {
@@ -28,8 +27,7 @@ export function useAccounts() {
     await fetchAccounts();
   }, [fetchAccounts]);
 
-  const switchAccount = useCallback(async (id: string) => {
-    await window.electronAPI.accounts.setActive(id);
+  const switchAccount = useCallback((id: string) => {
     setActiveAccountIdState(id);
   }, []);
 

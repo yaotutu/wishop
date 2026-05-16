@@ -21,7 +21,6 @@ interface PaginationState {
 interface OrderPaginationState {
   nextKey: string;
   hasMore: boolean;
-  currentStatus?: number;
 }
 
 interface ScanSessionState {

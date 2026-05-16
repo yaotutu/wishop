@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Typography, message } from 'antd';
-import { SearchOutlined, EyeOutlined, ReloadOutlined, SendOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, message } from 'antd';
+import { ReloadOutlined, EyeOutlined, SendOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
 import { BrowserContext } from '../../components/Layout';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
+
+const { Text } = Typography;
 
 const STATUS_CONFIG: Record<number, { color: string; text: string }> = {
   [OrderStatusEnum.PendingPayment]: { color: 'orange', text: '待付款' },
@@ -25,12 +27,12 @@ const PAYMENT_METHOD: Record<number, string> = {
   4: '积分兑换',
 };
 
-const STATUS_FILTERS: { label: string; status?: OrderStatus }[] = [
-  { label: '全部' },
-  { label: '待付款', status: OrderStatusEnum.PendingPayment },
-  { label: '待发货', status: OrderStatusEnum.PendingShipment },
-  { label: '已发货', status: OrderStatusEnum.PendingReceipt },
-  { label: '已完成', status: OrderStatusEnum.Completed },
+const STATUS_FILTER_OPTIONS = [
+  { label: '全部', value: 'all' },
+  { label: '待付款', value: OrderStatusEnum.PendingPayment },
+  { label: '待发货', value: OrderStatusEnum.PendingShipment },
+  { label: '已发货', value: OrderStatusEnum.PendingReceipt },
+  { label: '已完成', value: OrderStatusEnum.Completed },
 ];
 
 const SEARCH_TYPE_OPTIONS = [
@@ -52,11 +54,14 @@ function formatPrice(cents: number): string {
   return `¥${(cents / 100).toFixed(2)}`;
 }
 
-const labelStyle: React.CSSProperties = { fontSize: 12, color: '#999', lineHeight: '18px' };
-const valueStyle: React.CSSProperties = { fontSize: 12, color: '#333', lineHeight: '18px' };
+const firstProduct = (order: Order): OrderProductInfo | undefined =>
+  order.order_detail?.product_infos?.[0];
+
+const canDecodeAddress = (status: OrderStatus): boolean =>
+  [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
-  const { orders, hasMore, loading, error, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
+  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
   const { openBrowser } = React.useContext(BrowserContext);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
@@ -89,19 +94,20 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
   }, [accountId, fetchOrders]);
 
-  const handleStatusFilter = useCallback((status?: OrderStatus) => {
+  const handleStatusChange = useCallback((val: string | number) => {
+    const status = val === 'all' ? undefined : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
     fetchOrders(status);
   }, [fetchOrders]);
 
-  const handleSearch = useCallback(() => {
-    if (!searchKeyword.trim()) {
+  const handleSearch = useCallback((value: string) => {
+    if (!value?.trim()) {
       fetchOrders(activeStatus);
       return;
     }
-    searchOrders({ search_type: searchType, keyword: searchKeyword.trim() });
-  }, [searchType, searchKeyword, activeStatus, fetchOrders, searchOrders]);
+    searchOrders({ search_type: searchType, keyword: value.trim() });
+  }, [activeStatus, searchType, fetchOrders, searchOrders]);
 
   const handleLoadMore = useCallback(() => {
     fetchOrders(activeStatus, true);
@@ -115,10 +121,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     setDetailOrder(order);
     setDetailLoading(false);
   }, [fetchOrderDetail]);
-
-  const firstProduct = (order: Order): OrderProductInfo | undefined => {
-    return order.order_detail?.product_infos?.[0];
-  };
 
   const handleDecodeAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
@@ -136,10 +138,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
 
-  const canDecodeAddress = (status: OrderStatus): boolean => {
-    return [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
-  };
-
   const columns = [
     {
       title: '订单信息',
@@ -150,13 +148,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             {product?.thumb_img && (
-              <Image src={product.thumb_img} width={50} height={50} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
+              <Image src={product.thumb_img} width={50} height={50} alt={product.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} preview={false} />
             )}
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 12, color: '#999' }}>{record.order_id}</div>
+              <Text type="secondary" style={{ fontSize: 12 }}>{record.order_id}</Text>
               <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product?.title || '-'}</div>
-              {product?.sku_code && <div style={labelStyle}>编码: {product.sku_code}</div>}
-              <div style={labelStyle}>下单: {formatTime(record.create_time)}</div>
+              {product?.sku_code && <Text type="secondary" style={{ fontSize: 12 }}>编码: {product.sku_code}</Text>}
+              <br />
+              <Text type="secondary" style={{ fontSize: 12 }}>下单: {formatTime(record.create_time)}</Text>
             </div>
           </div>
         );
@@ -172,8 +171,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         const specs = product.sku_attrs?.map(a => a.attr_value).join(', ') || '-';
         return (
           <div>
-            <div style={valueStyle}>{specs}</div>
-            <div style={labelStyle}>x{product.sku_cnt}</div>
+            <div style={{ fontSize: 12, color: '#333' }}>{specs}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>x{product.sku_cnt}</Text>
           </div>
         );
       },
@@ -188,10 +187,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         return (
           <div>
             <div style={{ fontWeight: 600, fontSize: 13 }}>{formatPrice(pi.order_price)}</div>
-            <div style={labelStyle}>商品 {formatPrice(pi.product_price)}</div>
-            <div style={labelStyle}>运费 {formatPrice(pi.freight)}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>商品 {formatPrice(pi.product_price)}</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>运费 {formatPrice(pi.freight)}</Text>
             {pi.discounted_price > 0 && (
-              <div style={{ fontSize: 12, color: '#f50', lineHeight: '18px' }}>优惠 -{formatPrice(pi.discounted_price)}</div>
+              <>
+                <br />
+                <Text type="danger" style={{ fontSize: 12 }}>优惠 -{formatPrice(pi.discounted_price)}</Text>
+              </>
             )}
           </div>
         );
@@ -211,31 +214,25 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           <div>
             <Tag color={cfg.color} style={{ marginBottom: 4 }}>{cfg.text}</Tag>
             {payInfo?.payment_method && (
-              <div style={labelStyle}>{PAYMENT_METHOD[payInfo.payment_method] || `支付方式${payInfo.payment_method}`}</div>
+              <Text type="secondary" style={{ fontSize: 12 }}>{PAYMENT_METHOD[payInfo.payment_method] || `支付方式${payInfo.payment_method}`}</Text>
             )}
             {record.status === OrderStatusEnum.PendingShipment && product?.delivery_deadline && (
-              <div style={{ fontSize: 12, color: '#fa8c16', lineHeight: '18px' }}>
+              <div style={{ fontSize: 12, color: '#fa8c16' }}>
                 发货时限: {formatTime(product.delivery_deadline)}
               </div>
             )}
             {record.status === OrderStatusEnum.PendingShipment && (
-              <Button
-                size="small"
-                type="primary"
-                icon={<SendOutlined />}
-                style={{ marginTop: 4, fontSize: 12 }}
-                onClick={() => openBrowser('default', 'https://www.taobao.com')}
-              >
+              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={() => openBrowser('default', 'https://www.taobao.com')}>
                 淘宝发货
               </Button>
             )}
             {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
               <>
                 {deliveryInfos.map((d, i) => (
-                  <div key={i} style={{ borderTop: i > 0 ? '1px dashed #e8e8e8' : undefined, paddingTop: i > 0 ? 4 : 0, marginTop: i > 0 ? 4 : 0 }}>
-                    <div style={labelStyle}>{d.delivery_name || d.delivery_id}</div>
-                    <div style={valueStyle}>{d.waybill_id}</div>
-                    {d.delivery_time > 0 && <div style={labelStyle}>发货: {formatTime(d.delivery_time)}</div>}
+                  <div key={i} style={{ borderTop: i > 0 ? '1px dashed #f0f0f0' : undefined, paddingTop: i > 0 ? 4 : 0, marginTop: i > 0 ? 4 : 0 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{d.delivery_name || d.delivery_id}</Text>
+                    <div style={{ fontSize: 12, color: '#333' }}>{d.waybill_id}</div>
+                    {d.delivery_time > 0 && <Text type="secondary" style={{ fontSize: 12 }}>发货: {formatTime(d.delivery_time)}</Text>}
                   </div>
                 ))}
               </>
@@ -258,28 +255,17 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         const isDecoding = decodingOrderIds.has(record.order_id);
         return (
           <div>
-            <div style={valueStyle}>{addr.user_name} {addr.tel_number}</div>
-            <div style={labelStyle} title={fullAddr}>
+            <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name} {addr.tel_number}</div>
+            <Text type="secondary" style={{ fontSize: 12 }} title={fullAddr}>
               {fullAddr.length > 25 ? fullAddr.substring(0, 25) + '...' : fullAddr}
-            </div>
+            </Text>
             {!isDecoded && canDecodeAddress(record.status) && (
-              <Button
-                type="link"
-                size="small"
-                loading={isDecoding}
-                onClick={() => handleDecodeAddress(record.order_id)}
-                style={{ padding: 0, height: 'auto', fontSize: 12 }}
-              >
+              <Button type="link" size="small" loading={isDecoding} onClick={() => handleDecodeAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                 查看真实地址
               </Button>
             )}
             {isDecoded && (
-              <Button
-                type="link"
-                size="small"
-                onClick={() => handleCopyAddress(real!)}
-                style={{ padding: 0, height: 'auto', fontSize: 12 }}
-              >
+              <Button type="link" size="small" onClick={() => handleCopyAddress(real!)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                 复制地址
               </Button>
             )}
@@ -293,26 +279,26 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       width: 140,
       render: (_: unknown, record: Order) => {
         const ext = record.order_detail?.ext_info;
-        if (!ext) return <span style={labelStyle}>无</span>;
+        if (!ext) return <Text type="secondary">无</Text>;
         const hasCustomer = ext.customer_notes && ext.customer_notes.trim();
         const hasMerchant = ext.merchant_notes && ext.merchant_notes.trim();
-        if (!hasCustomer && !hasMerchant) return <span style={labelStyle}>无</span>;
+        if (!hasCustomer && !hasMerchant) return <Text type="secondary">无</Text>;
         return (
           <div>
             {hasCustomer && (
               <div>
-                <span style={{ fontSize: 11, color: '#999' }}>买家: </span>
-                <span style={{ fontSize: 12, color: '#333' }} title={ext.customer_notes}>
+                <Text type="secondary" style={{ fontSize: 11 }}>买家: </Text>
+                <Text style={{ fontSize: 12 }} title={ext.customer_notes}>
                   {ext.customer_notes!.length > 15 ? ext.customer_notes!.substring(0, 15) + '...' : ext.customer_notes}
-                </span>
+                </Text>
               </div>
             )}
             {hasMerchant && (
               <div>
-                <span style={{ fontSize: 11, color: '#999' }}>商家: </span>
-                <span style={{ fontSize: 12, color: '#1890ff' }} title={ext.merchant_notes}>
+                <Text type="secondary" style={{ fontSize: 11 }}>商家: </Text>
+                <Text style={{ fontSize: 12, color: '#1890ff' }} title={ext.merchant_notes}>
                   {ext.merchant_notes!.length > 15 ? ext.merchant_notes!.substring(0, 15) + '...' : ext.merchant_notes}
-                </span>
+                </Text>
               </div>
             )}
           </div>
@@ -333,39 +319,33 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Toolbar: fixed height */}
-      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-          {STATUS_FILTERS.map(f => (
-            <Tag.CheckableTag
-              key={f.label}
-              checked={activeStatus === f.status}
-              onChange={() => handleStatusFilter(f.status)}
-            >
-              {f.label}
-            </Tag.CheckableTag>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Select value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} size="small" />
-          <Input
-            value={searchKeyword}
-            onChange={e => setSearchKeyword(e.target.value)}
-            onPressEnter={handleSearch}
-            placeholder="输入关键字搜索"
+      <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
+        <Tag.CheckableTagGroup
+          options={STATUS_FILTER_OPTIONS}
+          value={activeStatus ?? 'all'}
+          onChange={handleStatusChange}
+        />
+        <Flex gap={8} align="center">
+          <Input.Search
             size="small"
-            style={{ flex: 1, maxWidth: 320 }}
+            addonBefore={
+              <Select value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} />
+            }
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            onSearch={handleSearch}
+            placeholder="输入关键字搜索"
             allowClear
+            style={{ flex: 1, maxWidth: 480 }}
+            enterButton="搜索"
           />
-          <Button type="primary" size="small" icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => handleStatusFilter(activeStatus)}>刷新</Button>
-        </div>
-        <div style={{ minHeight: 20, marginTop: 4 }}>
-          {error && <Typography.Text type="danger" style={{ fontSize: 12 }}>{error}</Typography.Text>}
-        </div>
-      </div>
+          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
+        </Flex>
+        {error && (
+          <Alert type="error" title={error} showIcon closable={{ onClose: clearError }} />
+        )}
+      </Flex>
 
-      {/* Table area */}
       <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
         <Table
           dataSource={orders}
@@ -375,7 +355,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           loading={loading}
           pagination={false}
           scroll={{ x: 1100, y: scrollY }}
-          style={{ height: '100%' }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },
@@ -386,7 +365,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             if (hasMore) {
               return (
                 <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                  <Button size="small" onClick={handleLoadMore}>加载更多</Button>
+                  <Button size="small" loading={loading} onClick={handleLoadMore}>加载更多</Button>
                 </div>
               );
             }
@@ -395,7 +374,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         />
       </div>
 
-      {/* Detail Modal */}
       <Modal
         title="订单详情"
         open={detailModalOpen}
@@ -407,93 +385,120 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         {detailLoading ? (
           <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
         ) : detailOrder ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <Descriptions size="small" column={2} bordered>
-              <Descriptions.Item label="订单号">{detailOrder.order_id}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                {(() => {
-                  const cfg = STATUS_CONFIG[detailOrder.status] || { color: 'default', text: `未知(${detailOrder.status})` };
-                  return <Tag color={cfg.color}>{cfg.text}</Tag>;
-                })()}
-              </Descriptions.Item>
-              <Descriptions.Item label="下单时间">{formatTime(detailOrder.create_time)}</Descriptions.Item>
-              <Descriptions.Item label="更新时间">{formatTime(detailOrder.update_time)}</Descriptions.Item>
-            </Descriptions>
+          <Flex vertical gap={16}>
+            <Descriptions
+              size="small"
+              column={2}
+              bordered
+              items={[
+                { key: 'orderId', label: '订单号', children: detailOrder.order_id },
+                {
+                  key: 'status',
+                  label: '状态',
+                  children: <Tag color={(STATUS_CONFIG[detailOrder.status] || {}).color}>{(STATUS_CONFIG[detailOrder.status] || { text: `未知(${detailOrder.status})` }).text}</Tag>,
+                },
+                { key: 'createTime', label: '下单时间', children: formatTime(detailOrder.create_time) },
+                { key: 'updateTime', label: '更新时间', children: formatTime(detailOrder.update_time) },
+              ]}
+            />
 
-            {/* Products */}
-            <div>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>商品信息</div>
-              {(detailOrder.order_detail?.product_infos || []).map((p, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
-                  {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                    <div style={{ fontSize: 12, color: '#666' }}>
-                      {p.sku_attrs?.map(a => `${a.attr_key}: ${a.attr_value}`).join(' / ')}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#999', marginTop: 4, display: 'flex', gap: 16 }}>
-                      <span>数量: {p.sku_cnt}</span>
-                      <span>单价: {formatPrice(p.sale_price)}</span>
-                      <span>实付: {formatPrice(p.real_price)}</span>
+            {detailOrder.order_detail?.product_infos && (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>商品信息</div>
+                {detailOrder.order_detail.product_infos.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 0', borderBottom: '1px solid #f0f0f0', alignItems: 'center' }}>
+                    {p.thumb_img && <Image src={p.thumb_img} width={50} height={50} alt={p.title || '商品图片'} style={{ borderRadius: 4, objectFit: 'cover' }} preview={false} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {p.sku_attrs?.map(a => `${a.attr_key}: ${a.attr_value}`).join(' / ')}
+                      </Text>
+                      <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                        <Flex gap={16}>
+                          <span>数量: {p.sku_cnt}</span>
+                          <span>单价: {formatPrice(p.sale_price)}</span>
+                          <span>实付: {formatPrice(p.real_price)}</span>
+                        </Flex>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Price */}
-            {detailOrder.order_detail?.price_info && (
-              <Descriptions size="small" column={2} bordered title="价格信息">
-                <Descriptions.Item label="商品总价">{formatPrice(detailOrder.order_detail.price_info.product_price)}</Descriptions.Item>
-                <Descriptions.Item label="实付金额">{formatPrice(detailOrder.order_detail.price_info.order_price)}</Descriptions.Item>
-                <Descriptions.Item label="运费">{formatPrice(detailOrder.order_detail.price_info.freight)}</Descriptions.Item>
-                <Descriptions.Item label="优惠">{formatPrice(detailOrder.order_detail.price_info.discounted_price)}</Descriptions.Item>
-                <Descriptions.Item label="商家实收">{formatPrice(detailOrder.order_detail.price_info.merchant_receieve_price)}</Descriptions.Item>
-              </Descriptions>
-            )}
-
-            {/* Address */}
-            {detailOrder.order_detail?.delivery_info?.address_info && (
-              <Descriptions size="small" column={1} bordered title="收货信息">
-                <Descriptions.Item label="收货人">{detailOrder.order_detail.delivery_info.address_info.user_name}</Descriptions.Item>
-                <Descriptions.Item label="电话">{detailOrder.order_detail.delivery_info.address_info.tel_number}</Descriptions.Item>
-                <Descriptions.Item label="地址">
-                  {detailOrder.order_detail.delivery_info.address_info.province_name}
-                  {detailOrder.order_detail.delivery_info.address_info.city_name}
-                  {detailOrder.order_detail.delivery_info.address_info.county_name}
-                  {detailOrder.order_detail.delivery_info.address_info.detail_info}
-                </Descriptions.Item>
-              </Descriptions>
-            )}
-
-            {/* Delivery */}
-            {detailOrder.order_detail?.delivery_info?.delivery_product_info?.length > 0 && (
-              <Descriptions size="small" column={2} bordered title="物流信息">
-                {detailOrder.order_detail.delivery_info.delivery_product_info.map((d, i) => (
-                  <React.Fragment key={i}>
-                    <Descriptions.Item label="快递公司">{d.delivery_name || d.delivery_id}</Descriptions.Item>
-                    <Descriptions.Item label="快递单号">{d.waybill_id}</Descriptions.Item>
-                  </React.Fragment>
                 ))}
-              </Descriptions>
+              </div>
             )}
 
-            {/* Notes */}
+            {detailOrder.order_detail?.price_info && (
+              <Descriptions
+                size="small"
+                column={2}
+                bordered
+                title="价格信息"
+                items={[
+                  { key: 'productPrice', label: '商品总价', children: formatPrice(detailOrder.order_detail.price_info.product_price) },
+                  { key: 'orderPrice', label: '实付金额', children: formatPrice(detailOrder.order_detail.price_info.order_price) },
+                  { key: 'freight', label: '运费', children: formatPrice(detailOrder.order_detail.price_info.freight) },
+                  { key: 'discount', label: '优惠', children: formatPrice(detailOrder.order_detail.price_info.discounted_price) },
+                  { key: 'merchantReceive', label: '商家实收', children: formatPrice(detailOrder.order_detail.price_info.merchant_receieve_price), span: 2 },
+                ]}
+              />
+            )}
+
+            {detailOrder.order_detail?.delivery_info?.address_info && (
+              <Descriptions
+                size="small"
+                column={1}
+                bordered
+                title="收货信息"
+                items={[
+                  { key: 'userName', label: '收货人', children: detailOrder.order_detail.delivery_info.address_info.user_name },
+                  { key: 'telNumber', label: '电话', children: detailOrder.order_detail.delivery_info.address_info.tel_number },
+                  {
+                    key: 'address',
+                    label: '地址',
+                    children: `${detailOrder.order_detail.delivery_info.address_info.province_name}${detailOrder.order_detail.delivery_info.address_info.city_name}${detailOrder.order_detail.delivery_info.address_info.county_name}${detailOrder.order_detail.delivery_info.address_info.detail_info}`,
+                  },
+                ]}
+              />
+            )}
+
+            {detailOrder.order_detail?.delivery_info?.delivery_product_info?.length > 0 && (
+              <Descriptions
+                size="small"
+                column={2}
+                bordered
+                title="物流信息"
+                items={detailOrder.order_detail.delivery_info.delivery_product_info.flatMap((d, i) => [
+                  { key: `deliveryName${i}`, label: '快递公司', children: d.delivery_name || d.delivery_id },
+                  { key: `waybillId${i}`, label: '快递单号', children: d.waybill_id },
+                ])}
+              />
+            )}
+
             {detailOrder.order_detail?.ext_info && (
-              <Descriptions size="small" column={1} bordered title="备注">
-                <Descriptions.Item label="买家备注">{detailOrder.order_detail.ext_info.customer_notes || '无'}</Descriptions.Item>
-                <Descriptions.Item label="商家备注">{detailOrder.order_detail.ext_info.merchant_notes || '无'}</Descriptions.Item>
-              </Descriptions>
+              <Descriptions
+                size="small"
+                column={1}
+                bordered
+                title="备注"
+                items={[
+                  { key: 'customerNotes', label: '买家备注', children: detailOrder.order_detail.ext_info.customer_notes || '无' },
+                  { key: 'merchantNotes', label: '商家备注', children: detailOrder.order_detail.ext_info.merchant_notes || '无' },
+                ]}
+              />
             )}
 
-            {/* Pay Info */}
             {detailOrder.order_detail?.pay_info && (
-              <Descriptions size="small" column={2} bordered title="支付信息">
-                <Descriptions.Item label="支付时间">{formatTime(detailOrder.order_detail.pay_info.pay_time)}</Descriptions.Item>
-                <Descriptions.Item label="交易号">{detailOrder.order_detail.pay_info.transaction_id || '-'}</Descriptions.Item>
-              </Descriptions>
+              <Descriptions
+                size="small"
+                column={2}
+                bordered
+                title="支付信息"
+                items={[
+                  { key: 'payTime', label: '支付时间', children: formatTime(detailOrder.order_detail.pay_info.pay_time) },
+                  { key: 'transactionId', label: '交易号', children: detailOrder.order_detail.pay_info.transaction_id || '-' },
+                ]}
+              />
             )}
-          </div>
+          </Flex>
         ) : (
           <Empty description="获取订单详情失败" />
         )}
