@@ -1,6 +1,6 @@
 {
   "name": "wishop",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "description": "微信小店上架助手",
   "main": "dist/main/index.js",
   "scripts": {
