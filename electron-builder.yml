@@ -16,3 +16,5 @@ nsis:
   allowToChangeInstallationDirectory: true
 mac:
   target: zip
+linux:
+  target: AppImage
