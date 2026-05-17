@@ -1,162 +1,119 @@
-import { app, BrowserWindow, session } from 'electron';
-import fs from 'fs';
+import { BrowserWindow, app } from 'electron';
+import { fork, ChildProcess } from 'child_process';
 import path from 'path';
-import { FingerprintGenerator } from 'fingerprint-generator';
-import { FingerprintInjector } from 'fingerprint-injector';
-import Store from 'electron-store';
-import type { BrowserFingerprintWithHeaders } from 'fingerprint-generator';
 
-const PARTITION_PREFIX = 'persist:taobao-';
+type BrowserMessage = { type: string; message?: string };
 
-interface BrowserConfig {
-  preloadPath: string;
-  userAgent: string;
+let childProcess: ChildProcess | null = null;
+let browserReady = false;
+let readyResolve: (() => void) | null = null;
+let doneResolve: ((message: string) => void) | null = null;
+
+function getUserDataDir(profileId: string): string {
+  return path.join(app.getPath('userData'), 'browser-data', profileId);
 }
 
-const store = new Store<{ fingerprints?: Record<string, BrowserFingerprintWithHeaders> }>();
-
-const generator = new FingerprintGenerator({
-  browsers: [{ name: 'chrome', minVersion: 134, maxVersion: 138 }],
-  devices: ['desktop'],
-  locales: ['zh-CN', 'zh'],
-});
-
-const injector = new FingerprintInjector();
-const configs = new Map<string, BrowserConfig>();
-let browserWindow: BrowserWindow | null = null;
-let isQuitting = false;
-
-export function setBrowserQuitting(v: boolean) {
-  isQuitting = v;
+function getLauncherPath(): string {
+  return path.join(__dirname, 'browser-launcher.js');
 }
 
-export async function flushBrowserSession(profileId = 'default'): Promise<void> {
-  const partition = `${PARTITION_PREFIX}${profileId}`;
-  const ses = session.fromPartition(partition);
-  ses.flushStorageData();
-  await ses.cookies.flushStore();
+function resetState(): void {
+  childProcess = null;
+  browserReady = false;
+  readyResolve = null;
+  doneResolve = null;
 }
 
-function prepare(profileId: string): BrowserConfig {
-  const existing = configs.get(profileId);
-  if (existing) return existing;
+function waitReady(): Promise<void> {
+  return new Promise((resolve) => {
+    if (browserReady) { resolve(); return; }
+    readyResolve = resolve;
+  });
+}
 
-  const fingerprints = store.get('fingerprints', {});
-  let fp = fingerprints[profileId];
-  if (!fp) {
-    fp = generator.getFingerprint();
-    fingerprints[profileId] = fp;
-    store.set('fingerprints', fingerprints);
+function waitDone(): Promise<string> {
+  return new Promise((resolve) => {
+    doneResolve = resolve;
+  });
+}
+
+function ensureProcess(): void {
+  if (childProcess && !childProcess.killed) return;
+
+  childProcess = fork(getLauncherPath(), [], { execPath: 'node' });
+
+  childProcess.on('message', (msg: BrowserMessage) => {
+    switch (msg.type) {
+      case 'ready':
+        browserReady = true;
+        if (readyResolve) { readyResolve(); readyResolve = null; }
+        break;
+      case 'done':
+        if (doneResolve) { doneResolve(msg.message || '操作完成'); doneResolve = null; }
+        break;
+      case 'closed':
+      case 'error':
+        if (doneResolve) { doneResolve(msg.message || '浏览器异常'); doneResolve = null; }
+        resetState();
+        break;
+    }
+  });
+
+  childProcess.on('exit', () => {
+    if (doneResolve) { doneResolve('浏览器已退出'); doneResolve = null; }
+    resetState();
+  });
+}
+
+export async function openBrowserWindow(
+  parent: BrowserWindow,
+  profileId: string,
+  url?: string,
+  keyword?: string,
+): Promise<string> {
+  const bounds = parent.getBounds();
+  const width = Math.min(1280, Math.floor(bounds.width * 0.85));
+  const height = Math.min(800, Math.floor(bounds.height * 0.85));
+  const x = bounds.x + Math.floor((bounds.width - width) / 2);
+  const y = bounds.y + Math.floor((bounds.height - height) / 2);
+
+  ensureProcess();
+
+  if (!browserReady) {
+    childProcess!.send({
+      type: 'launch',
+      url: url || 'https://www.taobao.com',
+      x,
+      y,
+      width,
+      height,
+      userDataDir: getUserDataDir(profileId),
+    });
+    await waitReady();
   }
 
-  const injectionScript = injector.getInjectableScript(fp);
-  const dir = path.join(app.getPath('userData'), 'browser-preloads');
-  fs.mkdirSync(dir, { recursive: true });
-  const preloadPath = path.join(dir, `${profileId}.js`);
-
-  const permissionsOverride = `
-;(function patchPermissions() {
-  const stateMap = {
-    notifications: Notification.permission,
-    geolocation: 'prompt',
-    camera: 'prompt',
-    microphone: 'prompt',
-    midi: 'prompt',
-    'clipboard-read': 'prompt',
-    'clipboard-write': 'prompt',
-    'payment-handler': 'prompt',
-    'persistent-storage': 'prompt',
-    'screen-wake-lock': 'prompt',
-    accelerometer: 'prompt',
-    gyroscope: 'prompt',
-    magnetometer: 'prompt',
-    'ambient-light-sensor': 'prompt',
-    fullscreen: 'prompt',
-  };
-  const origQuery = Permissions.prototype.query;
-  Permissions.prototype.query = function(desc) {
-    const name = typeof desc === 'string' ? desc : (desc && desc.name) || '';
-    const state = stateMap[name] || 'prompt';
-    return Promise.resolve(Object.setPrototypeOf({ state, onchange: null }, PermissionStatus.prototype));
-  };
-})();
-`;
-  fs.writeFileSync(preloadPath, injectionScript + permissionsOverride, 'utf8');
-
-  const partition = `${PARTITION_PREFIX}${profileId}`;
-  const ses = session.fromPartition(partition);
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = fp!.headers;
-    if (headers['user-agent']) details.requestHeaders['User-Agent'] = headers['user-agent'];
-    if (headers['accept-language']) details.requestHeaders['Accept-Language'] = headers['accept-language'];
-    if (headers['accept']) details.requestHeaders['Accept'] = headers['accept'];
-    if (headers['sec-ch-ua']) details.requestHeaders['Sec-CH-UA'] = headers['sec-ch-ua'];
-    if (headers['sec-ch-ua-mobile']) details.requestHeaders['Sec-CH-UA-Mobile'] = headers['sec-ch-ua-mobile'];
-    if (headers['sec-ch-ua-platform']) details.requestHeaders['Sec-CH-UA-Platform'] = headers['sec-ch-ua-platform'];
-    callback({ requestHeaders: details.requestHeaders });
-  });
-
-  const config: BrowserConfig = { preloadPath, userAgent: fp.fingerprint.navigator.userAgent };
-  configs.set(profileId, config);
-  return config;
-}
-
-export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?: string): void {
-  if (browserWindow) {
-    browserWindow.show();
-    browserWindow.focus();
-    return;
+  if (browserReady && childProcess && !childProcess.killed) {
+    childProcess.send({ type: 'search', keyword: keyword || '' });
+    return waitDone();
   }
 
-  const config = prepare(profileId);
-  const partition = `${PARTITION_PREFIX}${profileId}`;
-  const parentBounds = parent.getBounds();
-
-  const width = Math.min(1280, Math.floor(parentBounds.width * 0.85));
-  const height = Math.min(800, Math.floor(parentBounds.height * 0.85));
-  const x = parentBounds.x + Math.floor((parentBounds.width - width) / 2);
-  const y = parentBounds.y + Math.floor((parentBounds.height - height) / 2);
-
-  browserWindow = new BrowserWindow({
-    width,
-    height,
-    x,
-    y,
-    parent,
-    closable: true,
-    minimizable: false,
-    maximizable: false,
-    resizable: true,
-    title: '淘宝',
-    webPreferences: {
-      preload: config.preloadPath,
-      partition,
-      contextIsolation: false,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  browserWindow.webContents.setUserAgent(config.userAgent);
-
-  browserWindow.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    browserWindow?.loadURL(newUrl);
-    return { action: 'deny' };
-  });
-
-  browserWindow.on('close', (e) => {
-    if (isQuitting) return;
-    e.preventDefault();
-    browserWindow!.hide();
-    flushBrowserSession();
-  });
-
-  if (url) {
-    browserWindow.loadURL(url);
-  }
+  return '浏览器启动失败';
 }
 
 export function closeBrowserWindow(): void {
-  if (!browserWindow) return;
-  browserWindow.hide();
+  if (childProcess && !childProcess.killed) {
+    const proc = childProcess;
+    resetState();
+    proc.send({ type: 'close' });
+    // 100s 兜底，正常情况下浏览器会自己优雅关闭
+    setTimeout(() => {
+      if (!proc.killed) proc.kill();
+    }, 100_000);
+  }
+}
+
+export async function flushBrowserSession(): Promise<void> {}
+
+export function setBrowserQuitting(_v: boolean): void {
+  closeBrowserWindow();
 }

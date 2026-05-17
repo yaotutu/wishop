@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, message } from 'antd';
+import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
 import { ReloadOutlined, EyeOutlined, SendOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
 import { BrowserContext } from '../../components/Layout';
@@ -223,7 +223,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               </div>
             )}
             {record.status === OrderStatusEnum.PendingShipment && (
-              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={() => openBrowser('default', 'https://www.taobao.com')}>
+              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={async () => {
+                const title = product?.title || '';
+                const result = await openBrowser('default', 'https://www.taobao.com', title);
+                if (result) message.success(result);
+              }}>
                 淘宝发货
               </Button>
             )}
@@ -327,19 +331,19 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           onChange={handleStatusChange}
         />
         <Flex gap={8} align="center">
-          <Input.Search
-            size="small"
-            addonBefore={
-              <Select value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} />
-            }
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            onSearch={handleSearch}
-            placeholder="输入关键字搜索"
-            allowClear
-            style={{ flex: 1, maxWidth: 480 }}
-            enterButton="搜索"
-          />
+          <Space.Compact style={{ flex: 1, maxWidth: 480 }}>
+            <Select size="small" value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} />
+            <Input.Search
+              size="small"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              onSearch={handleSearch}
+              placeholder="输入关键字搜索"
+              allowClear
+              style={{ width: '100%' }}
+              enterButton="搜索"
+            />
+          </Space.Compact>
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
           <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
         </Flex>

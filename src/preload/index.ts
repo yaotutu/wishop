@@ -59,8 +59,8 @@ const electronAPI = {
       ipcRenderer.invoke('scheduler:remove', accountId, taskId),
   },
   browser: {
-    open: (profileId: string, url?: string): Promise<void> =>
-      ipcRenderer.invoke('browser:open', profileId, url),
+    open: (profileId: string, url?: string, keyword?: string): Promise<string> =>
+      ipcRenderer.invoke('browser:open', profileId, url, keyword),
     close: (): Promise<void> =>
       ipcRenderer.invoke('browser:close'),
   },
