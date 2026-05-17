@@ -212,9 +212,26 @@ export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?
 
   browserWin.webContents.setUserAgent(fp.fingerprint.navigator.userAgent);
 
-  // 拦截新窗口，在当前窗口内导航
+  // 允许新窗口打开（淘宝登录等流程依赖 popup + window.opener 通信）
   browserWin.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    browserWin.webContents.loadURL(newUrl);
+    const child = new BrowserWindow({
+      parent: browserWin,
+      width: 800,
+      height: 600,
+      webPreferences: {
+        preload: preloadPath,
+        partition,
+        contextIsolation: false,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+    child.webContents.setUserAgent(fp.fingerprint.navigator.userAgent);
+    child.webContents.setWindowOpenHandler(({ url: childUrl }) => {
+      child.webContents.loadURL(childUrl);
+      return { action: 'deny' };
+    });
+    child.loadURL(newUrl);
     return { action: 'deny' };
   });
 
