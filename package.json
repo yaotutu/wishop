@@ -1,6 +1,6 @@
 {
   "name": "wishop",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "description": "微店管家",
   "main": "dist/main/index.js",
   "scripts": {
