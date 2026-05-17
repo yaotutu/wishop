@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Wishop 是微信小店上架助手桌面应用，支持 **多账户** 管理 — 一个用户管理多个微信小店，每个店铺独立数据（配置、日志、调度、违规词）。账户上下文在基础设施层解析，业务逻辑与账户无关。
+微店管家 (Wishop) 是微信小店上架助手桌面应用，支持 **多账户** 管理 — 一个用户管理多个微信小店，每个店铺独立数据（配置、日志、调度、违规词）。账户上下文在基础设施层解析，业务逻辑与账户无关。
 
 ## Commands
 
