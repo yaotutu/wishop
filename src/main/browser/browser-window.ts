@@ -200,7 +200,7 @@ export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?
     width: 1280,
     height: 800,
     parent,
-    title: 'Wishop 浏览器',
+    title: '微店管家 浏览器',
     webPreferences: {
       preload: preloadPath,
       partition,

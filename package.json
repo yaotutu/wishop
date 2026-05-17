@@ -1,7 +1,7 @@
 {
   "name": "wishop",
   "version": "0.0.44",
-  "description": "微信小店上架助手",
+  "description": "微店管家",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",

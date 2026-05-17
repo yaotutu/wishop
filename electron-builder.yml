@@ -1,5 +1,5 @@
 appId: com.wishop.app
-productName: Wishop
+productName: 微店管家
 directories:
   output: release
 files:
