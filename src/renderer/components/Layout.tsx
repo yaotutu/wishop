@@ -1,8 +1,5 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Layout as AntLayout, Tabs, Empty, Button, Flex, Typography, Card, Space, Input } from 'antd';
-import { ArrowLeftOutlined, ArrowRightOutlined, ReloadOutlined, CloseOutlined, GlobalOutlined, LoadingOutlined } from '@ant-design/icons';
-
-const { Text } = Typography;
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Layout as AntLayout, Tabs, Empty } from 'antd';
 import StoreManagement from '../pages/store-management/StoreManagement';
 import SettingsPage from '../pages/settings/SettingsPage';
 import OrdersPage from '../pages/orders/OrdersPage';
@@ -29,11 +26,7 @@ const MODULES: { key: ModuleType; label: string }[] = [
 
 export const BrowserContext = React.createContext<{
   openBrowser: (profileId?: string, url?: string) => Promise<void>;
-  closeBrowser: () => Promise<void>;
-  goBack: () => Promise<void>;
-  goForward: () => Promise<void>;
-  goRefresh: () => Promise<void>;
-}>({ openBrowser: async () => {}, closeBrowser: async () => {}, goBack: async () => {}, goForward: async () => {}, goRefresh: async () => {} });
+}>({ openBrowser: async () => {} });
 
 /** 账户侧边栏 */
 const AccountSider: React.FC<{
@@ -112,41 +105,15 @@ const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const { openBrowser, closeBrowser, goBack, goForward, goRefresh, goStop, url: browserUrl, loading: browserLoading } = useBrowser();
-  const browserAreaRef = useRef<HTMLDivElement>(null);
-  const [browserVisible, setBrowserVisible] = useState(false);
+  const { openBrowser } = useBrowser();
 
   useEffect(() => {
     fetchAccounts();
     window.appVersion?.get().then((v: string) => setVersion(v));
   }, []);
 
-  // 测量内嵌浏览器区域位置并通知主进程
-  useLayoutEffect(() => {
-    if (!browserVisible) return;
-    const el = browserAreaRef.current;
-    if (!el) return;
-    const updateBounds = () => {
-      const rect = el.getBoundingClientRect();
-      window.electronAPI.browser.setBounds?.(Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), Math.round(rect.height));
-    };
-    updateBounds();
-    window.addEventListener('resize', updateBounds);
-    return () => window.removeEventListener('resize', updateBounds);
-  }, [browserVisible]);
-
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-  const browserValue = useMemo(() => ({
-    openBrowser: async (profileId?: string, url?: string) => {
-      await openBrowser(profileId, url);
-      setBrowserVisible(true);
-    },
-    closeBrowser: async () => {
-      await closeBrowser();
-      setBrowserVisible(false);
-    },
-    goBack, goForward, goRefresh,
-  }), [openBrowser, closeBrowser, goBack, goForward, goRefresh]);
+  const browserValue = useMemo(() => ({ openBrowser }), [openBrowser]);
 
   const navigateToStoreManagement = useCallback(() => {
     setActiveModule('storeManagement');
@@ -182,60 +149,26 @@ const Layout: React.FC = () => {
             {isAccountModule && (
               <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
             )}
-            <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-              {/* 业务内容区 */}
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
-                <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-                  <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
-                </div>
-                {/* 店铺管理 */}
-                <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
-                  <StoreManagement
-                    accounts={accounts}
-                    addAccount={addAccount}
-                    updateAccount={updateAccount}
-                    removeAccount={removeAccount}
-                    switchAccount={switchAccount}
-                    activeAccountId={activeAccountId}
-                  />
-                </div>
-                {/* 设置 */}
-                <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
-                  <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-                </div>
+            <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
+              <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+                <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
               </div>
-              {/* 浏览器浮动窗口 — 绝对定位覆盖在内容区上方 */}
-              {browserVisible && (
-                <div style={{
-                  position: 'absolute', inset: 0, zIndex: 10,
-                  display: 'flex', flexDirection: 'column',
-                }}>
-                  <Card
-                    size="small"
-                    style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
-                    styles={{ body: { flex: 1, minHeight: 0, padding: 0 } }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderBottom: '1px solid #f0f0f0' }}>
-                      <Button size="small" icon={<ArrowLeftOutlined />} onClick={goBack} />
-                      <Button size="small" icon={<ArrowRightOutlined />} onClick={goForward} />
-                      {browserLoading
-                        ? <Button size="small" icon={<CloseOutlined />} onClick={goStop} />
-                        : <Button size="small" icon={<ReloadOutlined />} onClick={goRefresh} />
-                      }
-                      <Input
-                        size="small"
-                        value={browserUrl}
-                        readOnly
-                        style={{ flex: 1, fontSize: 12, color: '#666' }}
-                        prefix={browserLoading ? <LoadingOutlined /> : <GlobalOutlined style={{ color: '#999' }} />}
-                      />
-                      <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={async () => { await closeBrowser(); setBrowserVisible(false); }}>关闭</Button>
-                    </div>
-                    <div ref={browserAreaRef} style={{ flex: 1, minHeight: 0 }} />
-                  </Card>
-                </div>
-              )}
+              {/* 店铺管理 */}
+              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <StoreManagement
+                  accounts={accounts}
+                  addAccount={addAccount}
+                  updateAccount={updateAccount}
+                  removeAccount={removeAccount}
+                  switchAccount={switchAccount}
+                  activeAccountId={activeAccountId}
+                />
+              </div>
+              {/* 设置 */}
+              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+              </div>
             </Content>
           </AntLayout>
         </AntLayout>

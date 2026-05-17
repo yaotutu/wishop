@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContentsView, session, app } from 'electron';
+import { BrowserWindow, session, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { FingerprintGenerator } from 'fingerprint-generator';
@@ -8,8 +8,8 @@ import type { BrowserFingerprintWithHeaders } from 'fingerprint-generator';
 
 const PARTITION_PREFIX = 'persist:taobao-';
 
-interface ViewState {
-  view: WebContentsView;
+interface BrowserState {
+  win: BrowserWindow;
   fp: BrowserFingerprintWithHeaders;
 }
 
@@ -23,11 +23,9 @@ const generator = new FingerprintGenerator({
 
 const injector = new FingerprintInjector();
 
-let state: ViewState | null = null;
+let state: BrowserState | null = null;
 
-function prepare(profileId: string): ViewState {
-  if (state) return state;
-
+function prepareSession(profileId: string): BrowserFingerprintWithHeaders {
   const fingerprints = store.get('fingerprints', {});
   let fp = fingerprints[profileId];
   if (!fp) {
@@ -58,26 +56,7 @@ function prepare(profileId: string): ViewState {
     callback({ requestHeaders: details.requestHeaders });
   });
 
-  const view = new WebContentsView({
-    webPreferences: {
-      preload: preloadPath,
-      partition,
-      contextIsolation: false,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
-
-  view.webContents.setUserAgent(fp.fingerprint.navigator.userAgent);
-
-  // 拦截新窗口打开，改为当前 View 内导航，避免新窗口丢失登录态
-  view.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    view.webContents.loadURL(newUrl);
-    return { action: 'deny' };
-  });
-
-  state = { view, fp };
-  return state;
+  return fp;
 }
 
 // Electron 专项反检测补丁
@@ -205,70 +184,51 @@ const ELECTRON_PATCHES = `
 })();
 `;
 
-export function openBrowserView(parent: BrowserWindow, profileId: string, url?: string): void {
-  const { view } = prepare(profileId);
+export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?: string): void {
+  // 已存在则聚焦并导航
+  if (state && !state.win.isDestroyed()) {
+    state.win.focus();
+    if (url) state.win.webContents.loadURL(url);
+    return;
+  }
 
-  // 转发 URL 和加载状态事件到渲染进程
-  const sendUrl = () => parent.webContents.send('browser:url', view.webContents.getURL());
-  view.webContents.on('did-navigate', sendUrl);
-  view.webContents.on('did-navigate-in-page', sendUrl);
-  view.webContents.on('did-start-loading', () => parent.webContents.send('browser:loading', true));
-  view.webContents.on('did-stop-loading', () => {
-    parent.webContents.send('browser:loading', false);
-    sendUrl();
+  const fp = prepareSession(profileId);
+  const partition = `${PARTITION_PREFIX}${profileId}`;
+  const preloadPath = path.join(app.getPath('userData'), 'browser-preloads', `${profileId}.js`);
+
+  const browserWin = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    parent,
+    title: 'Wishop 浏览器',
+    webPreferences: {
+      preload: preloadPath,
+      partition,
+      contextIsolation: false,
+      nodeIntegration: false,
+      sandbox: false,
+    },
   });
 
-  if (!parent.contentView.children.includes(view)) {
-    parent.contentView.addChildView(view);
-  }
+  browserWin.webContents.setUserAgent(fp.fingerprint.navigator.userAgent);
 
-  if (url) {
-    view.webContents.loadURL(url);
-  }
+  // 拦截新窗口，在当前窗口内导航
+  browserWin.webContents.setWindowOpenHandler(({ url: newUrl }) => {
+    browserWin.webContents.loadURL(newUrl);
+    return { action: 'deny' };
+  });
+
+  browserWin.on('closed', () => {
+    state = null;
+  });
+
+  browserWin.loadURL(url || 'about:blank');
+  state = { win: browserWin, fp };
 }
 
-export function setBrowserBounds(x: number, y: number, width: number, height: number): void {
-  if (!state) return;
-  state.view.setBounds({ x, y, width, height });
-}
-
-export function hideBrowserView(parent: BrowserWindow): void {
-  if (!state) return;
-  if (parent.contentView.children.includes(state.view)) {
-    parent.contentView.removeChildView(state.view);
-  }
-}
-
-export function navigateBack(): void {
-  if (state && state.view.webContents.canGoBack()) {
-    state.view.webContents.goBack();
-  }
-}
-
-export function navigateForward(): void {
-  if (state && state.view.webContents.canGoForward()) {
-    state.view.webContents.goForward();
-  }
-}
-
-export function navigateRefresh(): void {
-  if (!state) return;
-  state.view.webContents.loadURL(state.view.webContents.getURL());
-}
-
-export function navigateStop(): void {
-  if (!state) return;
-  state.view.webContents.stop();
-}
-
-export function isBrowserVisible(): boolean {
-  return state !== null;
-}
-
-export function closeBrowserView(): void {
-  if (!state) return;
-  state.view.webContents.close();
-  state = null;
+export function closeBrowserWindow(): void {
+  if (!state || state.win.isDestroyed()) return;
+  state.win.close();
 }
 
 export async function flushBrowserSession(profileId = 'default'): Promise<void> {

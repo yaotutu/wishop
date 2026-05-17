@@ -5,7 +5,7 @@ import { registerHandlers } from './ipc/handler';
 import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall, checkForUpdates } from './updater';
-import { closeBrowserView, flushBrowserSession } from './browser/browser-window';
+import { closeBrowserWindow, flushBrowserSession } from './browser/browser-window';
 import { log } from './utils/logger';
 
 dotenv.config();
@@ -109,7 +109,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  closeBrowserView();
+  closeBrowserWindow();
 });
 
 app.on('will-quit', async (e) => {
