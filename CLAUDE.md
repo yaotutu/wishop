@@ -42,7 +42,10 @@ npm run push         # 版本号 patch + git push --follow-tags
 **Key constraint: Business 和 API 层不 import store。依赖通过参数注入。**
 
 ### Shared Types (`src/shared/types.ts`)
-所有层共享的类型定义：`Config`, `Account`, `FullAccount`, `ScheduledTask`, `TaskConfig`, `LogEntry`, `DraftProduct`, `QuotaResult`, `TaskCycleResult`, `Order*`, `ViolationMatch`, `ViolationScanResult`, `AddLogFn`, `OrderStatus` (enum), `BlacklistRule`, `StatusAction`, `StatusRule`。
+所有层共享的类型定义：`Config`, `Account`, `FullAccount`, `ScheduledTask`, `TaskConfig`, `LogEntry`, `DraftProduct`, `QuotaResult`, `TaskCycleResult`, `ErrorCodeSummary`, `Order*`, `OrderSearchParams`, `OrderListResult`, `ViolationMatch`, `ViolationScanResult`, `AddLogFn`, `OrderStatus` (enum), `BlacklistRule`, `StatusAction`, `StatusRule`。
+
+### Shared Errors (`src/shared/errors.ts`)
+凭证错误工具函数：`isCredentialError(error)` 判断是否为凭证错误，`getCredentialMessage(error)` 提取错误消息。主进程在 API 返回凭证类错误时抛出带 `[CREDENTIAL]` 前缀的 Error，renderer 层通过 `CredentialErrorContext` 统一拦截并弹窗引导用户去店铺管理页配置。
 
 ### Main Process (`src/main/`)
 - **index.ts** - Electron 入口，创建窗口，注册 IPC handlers，启动调度器，管理 auto-updater
@@ -72,17 +75,19 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `list-unreviewed-products.ts` - 列出待审商品，接收 `api` + `addLog`
   - `violation-detect.ts` - 违规词扫描，接收 `api` + `addLog`
 - **scheduler/listing-scheduler.ts** - 每账户 cron 调度，`Map<accountId, ScheduledTask>`
-- **browser/browser-window.ts** - 浏览器窗口管理，集成 fingerprint-generator/injector
-- **updater.ts** - 基于 electron-updater 的自动更新
+- **browser/browser-window.ts** - 浏览器窗口管理，独立 BrowserWindow（非内嵌），集成 fingerprint-generator/injector，支持 popup 窗口正常打开
+- **updater.ts** - 基于 electron-updater 的自动更新，支持进度和状态事件推送到 renderer
 
 ### Preload (`src/preload/`)
-- **index.ts** - Context bridge，所有 IPC 调用以 `accountId` 为首参。暴露 `window.electronAPI` 和 `window.updater`。
+- **index.ts** - Context bridge，所有 IPC 调用以 `accountId` 为首参。暴露 `window.electronAPI`、`window.appVersion` 和 `window.updater`（含 check/onAvailable/onProgress/onDownloaded/onNotAvailable/onError/install）。
 
 ### Renderer (`src/renderer/`)
+- **main.tsx** - Renderer 入口，挂载 App 组件
 - **App.tsx** - 根组件
-- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 左侧账户侧边栏 + 内容区。`BrowserContext` 提供浏览器控制。账户模块使用 `display:none/contents` 策略保持所有账户页面组件实例，切换账户不销毁组件。
+- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 右上角版本号（点击跳转设置关于页）+ 左侧账户侧边栏 + 内容区。`BrowserContext` 提供浏览器控制，`CredentialErrorProvider` 包裹全局拦截凭证错误弹窗。账户模块使用 `display:none/contents` 策略保持所有账户页面组件实例，切换账户不销毁组件。
 - **components/AccountModals.tsx** - 账户添加/编辑/删除弹窗
 - **components/StatCard.tsx** - 统计卡片组件
+- **contexts/CredentialErrorContext.tsx** - 凭证错误上下文，拦截 `[CREDENTIAL]` 前缀错误并弹窗引导用户去店铺管理页
 - **pages/** - 页面组件：
   - `orders/OrdersPage.tsx` - 订单管理（列表、搜索、详情、地址解码），React.memo 包裹
   - `store-management/StoreManagement.tsx` - 店铺管理（占位）
@@ -117,14 +122,15 @@ npm run push         # 版本号 patch + git push --follow-tags
 | logs:get/clear                                      | renderer→main | 获取/清除日志                                |
 | scheduler:list/add/update/remove                    | renderer→main | 调度任务管理                                 |
 | taskConfig:get/set                                  | renderer→main | 任务配置管理                                 |
-| task:run/batchDelete/stop                           | renderer→main | 任务执行控制                                 |
-| blacklistRules:get/set                              | renderer→main | 停止黑名单规则管理                           |
+| task:run/stop                                       | renderer→main | 任务执行控制                                 |
+| blacklistRules:get/getDefaultCodes/set              | renderer→main | 停止黑名单规则管理                           |
 | skipKeywords:get/set                                | renderer→main | 保留关键词管理                               |
 | statusRules:get/set/reset                           | renderer→main | 处理规则管理（editStatus→action映射）        |
 | violation:getWords/setWords/batchScan/scanStep/batchDelete/stop | renderer→main | 违规词检测                       |
 | browser:open/close                                  | renderer→main | 浏览器窗口控制                               |
 | app:version                                         | renderer→main | 获取应用版本                                 |
-| update:install                                      | renderer→main | 安装更新                                     |
+| update:check/install                                | renderer→main | 检查/安装更新                                |
+| update:available/progress/downloaded/not-available/error | main→renderer | 更新状态事件推送                       |
 | log:added:{accountId}                               | main→renderer | 实时日志推送                                 |
 | violation:log:{accountId}                           | main→renderer | 违规词扫描日志推送                           |
 
@@ -151,21 +157,24 @@ npm run push         # 版本号 patch + git push --follow-tags
 
 ## Key Files
 - `src/shared/types.ts` - 所有层共享的 TypeScript 类型定义
+- `src/shared/errors.ts` - 凭证错误工具函数（`isCredentialError`, `getCredentialMessage`）
 - `src/main/utils/logger.ts` - `createLogger(module, accountId)` 封装
 - `src/main/wxshop/client.ts` - WeChat API client factory, token caching
 - `src/main/wxshop/client-registry.ts` - 客户端注册表
 - `src/main/store/index.ts` - Multi-account electron-store
 - `src/main/ipc/handler.ts` - IPC handler 注册入口
 - `src/main/ipc/handlers/*.ts` - 按 domain 拆分的 handler
-- `src/main/browser/browser-window.ts` - 浏览器窗口 + 指纹注入
-- `src/main/updater.ts` - 自动更新逻辑
+- `src/main/browser/browser-window.ts` - 浏览器窗口 + 指纹注入（独立 BrowserWindow）
+- `src/main/updater.ts` - 自动更新逻辑，支持进度和状态事件推送
 - `src/renderer/hooks/*.ts` - 按 domain 拆分的 React hooks
 - `src/renderer/components/Layout.tsx` - 主布局 + 路由（display:none/contents 账户切换策略）
+- `src/renderer/contexts/CredentialErrorContext.tsx` - 凭证错误全局拦截弹窗
 
 
 # 重要规则，改规则由用户手动添加，claude在生成代码时必须遵守并且禁止修改：
 - 直接展示原始错误信息 — 不对错误做过度包装或美化，将后端/API返回的原始错误信息直接呈现给用户，保留完整的错误上下文（如状态码、错误码、错误消息）。
 - 错误信息要可定位 — 在日志和UI中标注错误发生的位置（如哪个账户、哪个商品、哪一步操作），方便用户自行排查问题。
+- 技术栈先查技能再动手 — 涉及 Electron 的改动必须先调用 electron 技能查阅最新 API，涉及 Ant Design 的改动必须先调用 ant-design 技能查阅组件用法，禁止凭知识库记忆直接写代码，避免用过时 API 出错。
 
 ## 日志规范
 
