@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
-import { ReloadOutlined, EyeOutlined, SendOutlined } from '@ant-design/icons';
+import { ReloadOutlined, EyeOutlined, SendOutlined, LoginOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
 import { BrowserContext } from '../../components/Layout';
 import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
@@ -71,6 +71,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
+  const [shipModalOpen, setShipModalOpen] = useState(false);
+  const [shipUrl, setShipUrl] = useState('');
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
 
@@ -223,10 +225,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               </div>
             )}
             {record.status === OrderStatusEnum.PendingShipment && (
-              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={async () => {
-                const title = product?.title || '';
-                const result = await openBrowser('default', 'https://www.taobao.com', title);
-                if (result) message.success(result);
+              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={() => {
+                setShipModalOpen(true);
+                setShipUrl('');
               }}>
                 淘宝发货
               </Button>
@@ -345,6 +346,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             />
           </Space.Compact>
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
+          <Button size="small" icon={<LoginOutlined />} onClick={() => openBrowser('default', 'https://member1.taobao.com/member/fresh/account_security.htm')}>淘宝登录</Button>
+          <Button size="small" icon={<SendOutlined />} onClick={() => openBrowser('default', 'https://detail.tmall.com/item.htm?id=771068071648')}>发货测试</Button>
           <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
         </Flex>
         {error && (
@@ -508,6 +511,33 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         ) : (
           <Empty description="获取订单详情失败" />
         )}
+      </Modal>
+
+      <Modal
+        title="淘宝发货"
+        open={shipModalOpen}
+        onCancel={() => setShipModalOpen(false)}
+        onOk={() => {
+          if (shipUrl.trim()) {
+            openBrowser('default', shipUrl.trim());
+            setShipModalOpen(false);
+          }
+        }}
+        okText="去发货"
+        okButtonProps={{ disabled: !shipUrl.trim() }}
+        destroyOnHidden
+      >
+        <Input
+          placeholder="粘贴淘宝商品链接"
+          value={shipUrl}
+          onChange={(e) => setShipUrl(e.target.value)}
+          onPressEnter={() => {
+            if (shipUrl.trim()) {
+              openBrowser('default', shipUrl.trim());
+              setShipModalOpen(false);
+            }
+          }}
+        />
       </Modal>
     </div>
   );

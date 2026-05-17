@@ -36,7 +36,7 @@ export function useIpcFetch<T>(
     if (options?.autoFetch !== false) {
       fetch().catch(() => {});
     }
-  }, [accountId]);
+  }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { data, loading, fetch, setData };
 }

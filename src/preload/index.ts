@@ -59,10 +59,30 @@ const electronAPI = {
       ipcRenderer.invoke('scheduler:remove', accountId, taskId),
   },
   browser: {
-    open: (profileId: string, url?: string, keyword?: string): Promise<string> =>
-      ipcRenderer.invoke('browser:open', profileId, url, keyword),
+    open: (profileId: string, url?: string): Promise<void> =>
+      ipcRenderer.invoke('browser:open', profileId, url),
     close: (): Promise<void> =>
       ipcRenderer.invoke('browser:close'),
+    back: (): Promise<void> =>
+      ipcRenderer.invoke('browser:back'),
+    forward: (): Promise<void> =>
+      ipcRenderer.invoke('browser:forward'),
+    refresh: (): Promise<void> =>
+      ipcRenderer.invoke('browser:refresh'),
+    stop: (): Promise<void> =>
+      ipcRenderer.invoke('browser:stop'),
+    setBounds: (x: number, y: number, width: number, height: number): Promise<void> =>
+      ipcRenderer.invoke('browser:setBounds', x, y, width, height),
+    onUrlChange: (callback: (url: string) => void) => {
+      const handler = (_: any, url: string) => callback(url);
+      ipcRenderer.on('browser:url', handler);
+      return () => ipcRenderer.removeListener('browser:url', handler);
+    },
+    onLoadingChange: (callback: (loading: boolean) => void) => {
+      const handler = (_: any, loading: boolean) => callback(loading);
+      ipcRenderer.on('browser:loading', handler);
+      return () => ipcRenderer.removeListener('browser:loading', handler);
+    },
   },
   taskConfig: {
     get: (accountId: string): Promise<TaskConfig> =>
