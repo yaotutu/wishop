@@ -1,10 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
 import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
 import { useIpcFetch } from './useIpcFetch';
+import { isCredentialError } from '../../shared/errors';
+import { useCredentialError } from '../contexts/CredentialErrorContext';
 
 export function useOrders(accountId: string) {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { reportCredentialError } = useCredentialError();
 
   // 用 ref 传递 status 给 fetcher，避免 fetcher 频繁变化导致 fetch 重建
   const statusRef = useRef<OrderStatus | undefined>(undefined);
@@ -31,7 +34,13 @@ export function useOrders(accountId: string) {
     if (!append) {
       // 全量刷新：走 useIpcFetch.fetch()，loading 状态正确更新
       statusRef.current = status;
-      await fetch();
+      try {
+        await fetch();
+      } catch (err: any) {
+        if (fetchIdRef.current !== fetchId) return;
+        if (isCredentialError(err)) reportCredentialError(err);
+        setError(err.message || '获取订单列表失败');
+      }
     } else {
       // 追加加载：直接 IPC，不更新 loading
       try {
@@ -41,6 +50,7 @@ export function useOrders(accountId: string) {
         setHasMore(result.hasMore);
       } catch (err: any) {
         if (fetchIdRef.current !== fetchId) return;
+        if (isCredentialError(err)) reportCredentialError(err);
         setError(err.message || '获取订单列表失败');
       }
     }
@@ -50,10 +60,11 @@ export function useOrders(accountId: string) {
     try {
       return await window.electronAPI.orders.detail(accountId, orderId);
     } catch (err: any) {
+      if (isCredentialError(err)) reportCredentialError(err);
       setError(err.message || '获取订单详情失败');
       return null;
     }
-  }, [accountId]);
+  }, [accountId, reportCredentialError]);
 
   const searchOrders = useCallback(async (params: OrderSearchParams) => {
     if (!accountId) return;
@@ -66,18 +77,20 @@ export function useOrders(accountId: string) {
       setHasMore(result.hasMore);
     } catch (err: any) {
       if (fetchIdRef.current !== fetchId) return;
+      if (isCredentialError(err)) reportCredentialError(err);
       setError(err.message || '搜索订单失败');
     }
-  }, [accountId, setOrders]);
+  }, [accountId, setOrders, reportCredentialError]);
 
   const decodeAddress = useCallback(async (orderId: string): Promise<OrderAddressInfo | null> => {
     try {
       return await window.electronAPI.orders.decodeAddress(accountId, orderId);
     } catch (err: any) {
+      if (isCredentialError(err)) reportCredentialError(err);
       setError(err.message || '解密收货信息失败');
       return null;
     }
-  }, [accountId]);
+  }, [accountId, reportCredentialError]);
 
   const clearError = useCallback(() => setError(null), []);
 

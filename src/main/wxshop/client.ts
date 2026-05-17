@@ -31,7 +31,7 @@ export function createWxShopClient(config: Config) {
     }
 
     if (!config.appId || !config.appSecret) {
-      throw new Error('请先配置 AppID 和 AppSecret');
+      throw new Error('[CREDENTIAL] 请先配置 AppID 和 AppSecret');
     }
 
     const url = `${BASE_URL}/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
@@ -41,6 +41,10 @@ export function createWxShopClient(config: Config) {
     if (data.errcode) {
       if (data.errcode === 40001 || data.errcode === 42001) {
         tokenCache = null;
+        const msg = data.errcode === 40001
+          ? 'AppSecret 不正确或已失效，请前往店铺管理更新配置'
+          : 'access_token 已过期，请前往店铺管理更新配置';
+        throw new Error(`[CREDENTIAL] ${msg}`);
       }
       throw new Error(data.errmsg || `获取 token 失败: ${data.errcode}`);
     }
