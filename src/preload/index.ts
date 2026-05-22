@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult } from '../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../shared/notification';
+import type { AppSettings, AppSettingsPatch } from '../shared/settings';
 
 export type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState };
 
@@ -117,6 +118,12 @@ const electronAPI = {
       ipcRenderer.invoke('license:refresh'),
     clear: (): Promise<LicenseState> =>
       ipcRenderer.invoke('license:clear'),
+  },
+  settings: {
+    get: (): Promise<AppSettings> =>
+      ipcRenderer.invoke('settings:get'),
+    update: (patch: AppSettingsPatch): Promise<AppSettings> =>
+      ipcRenderer.invoke('settings:update', patch),
   },
   scheduler: {
     list: (accountId: string): Promise<ScheduledTask[]> =>

@@ -4,6 +4,7 @@ import type { Config, DraftProduct, QuotaResult, Order, OrderListParams, OrderLi
 export type { Config, DraftProduct, QuotaResult };
 
 const BASE_URL = 'https://api.weixin.qq.com';
+const CREDENTIAL_PREFIX = '[CREDENTIAL] ';
 
 interface TokenData {
   accessToken: string;
@@ -50,7 +51,7 @@ export function createWxShopClient(config: Config) {
     }
 
     if (!config.appId || !config.appSecret) {
-      throw new Error('请先配置 AppID 和 AppSecret');
+      throw new Error(`${CREDENTIAL_PREFIX}请先配置 AppID 和 AppSecret`);
     }
 
     const url = `${BASE_URL}/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
@@ -60,6 +61,12 @@ export function createWxShopClient(config: Config) {
     if (data.errcode) {
       if (data.errcode === 40001 || data.errcode === 42001) {
         tokenCache = null;
+      }
+      if (data.errcode === 40001) {
+        throw new Error(`${CREDENTIAL_PREFIX}AppSecret 不正确或已失效，请前往店铺管理更新配置`);
+      }
+      if (data.errcode === 42001) {
+        throw new Error(`${CREDENTIAL_PREFIX}access_token 已过期，请前往店铺管理更新配置`);
       }
       throw new Error(data.errmsg || `获取 token 失败: ${data.errcode}`);
     }

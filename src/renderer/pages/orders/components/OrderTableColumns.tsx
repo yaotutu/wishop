@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Flex, Image, Space, Tag, Typography } from 'antd';
-import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutlined, SendOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { CopyOutlined, EyeOutlined, LinkOutlined, PictureOutlined, RollbackOutlined, SendOutlined, ShoppingCartOutlined, SyncOutlined } from '@ant-design/icons';
 import type { Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../../shared/types';
 import { formatOrderAddressLine, getOrderPhoneDisplay } from '../../../../shared/address-format';
@@ -15,6 +15,7 @@ interface CreateOrderColumnsOptions {
   decodingOrderIds: Set<string>;
   productSources: Record<string, ProductSourceItem[]>;
   orderAssociations: Record<string, OrderAssociation>;
+  checkingPurchaseOrderIds: Set<string>;
   shippingFromPurchaseOrderIds: Set<string>;
   preparingTaobaoRefundOrderIds: Set<string>;
   onCopyText: (text: string | undefined, label: string) => void;
@@ -26,6 +27,7 @@ interface CreateOrderColumnsOptions {
   onOpenSourceManager: (product: OrderProductInfo) => void;
   onOpenShipSources: (order: Order, product: OrderProductInfo) => void;
   onEditAssociation: (order: Order) => void;
+  onCheckPurchaseOrder: (order: Order) => void;
   onShipFromPurchase: (order: Order) => void;
   onPrepareTaobaoRefund: (order: Order) => void;
 }
@@ -41,7 +43,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const ext = record.order_detail?.ext_info;
         const customerNote = ext?.customer_notes?.trim();
         const merchantNote = ext?.merchant_notes?.trim();
-        const specs = product?.sku_attrs?.map(item => item.attr_value).filter(Boolean).join(', ') || '';
+        const specs = product?.sku_attrs?.map(a => a.attr_value).filter(Boolean).join(', ') || '';
         return (
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             {product?.thumb_img && (
@@ -133,6 +135,7 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const payInfo = record.order_detail?.pay_info;
         const deliveryInfos = record.order_detail?.delivery_info?.delivery_product_info;
         const product = firstProduct(record);
+
         return (
           <div>
             <Tag color={cfg.color} style={{ marginBottom: 4 }}>{cfg.text}</Tag>
@@ -140,15 +143,17 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
               <Text type="secondary" style={{ fontSize: 12 }}>{PAYMENT_METHOD[payInfo.payment_method] || `支付方式${payInfo.payment_method}`}</Text>
             )}
             {record.status === OrderStatusEnum.PendingShipment && product?.delivery_deadline && (
-              <div style={{ fontSize: 12, color: '#fa8c16' }}>发货时限: {formatTime(product.delivery_deadline)}</div>
+              <div style={{ fontSize: 12, color: '#fa8c16' }}>
+                发货时限: {formatTime(product.delivery_deadline)}
+              </div>
             )}
             {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
               <>
-                {deliveryInfos.map((delivery, index) => (
-                  <div key={index} style={{ borderTop: index > 0 ? '1px dashed #f0f0f0' : undefined, paddingTop: index > 0 ? 4 : 0, marginTop: index > 0 ? 4 : 0 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{delivery.delivery_name || delivery.delivery_id}</Text>
-                    <div style={{ fontSize: 12, color: '#333' }}>{delivery.waybill_id}</div>
-                    {delivery.delivery_time > 0 && <Text type="secondary" style={{ fontSize: 12 }}>发货: {formatTime(delivery.delivery_time)}</Text>}
+                {deliveryInfos.map((d, i) => (
+                  <div key={i} style={{ borderTop: i > 0 ? '1px dashed #f0f0f0' : undefined, paddingTop: i > 0 ? 4 : 0, marginTop: i > 0 ? 4 : 0 }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{d.delivery_name || d.delivery_id}</Text>
+                    <div style={{ fontSize: 12, color: '#333' }}>{d.waybill_id}</div>
+                    {d.delivery_time > 0 && <Text type="secondary" style={{ fontSize: 12 }}>发货: {formatTime(d.delivery_time)}</Text>}
                   </div>
                 ))}
               </>
@@ -170,15 +175,24 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const phone = getOrderPhoneDisplay(addr);
         const isDecoded = !!real;
         const isDecoding = options.decodingOrderIds.has(record.order_id);
-        const fetchedAt = real ? new Date(real.fetchedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+        const fetchedAt = real ? new Date(real.fetchedAt).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }) : '';
         return (
           <div>
             <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name}</div>
-            <div style={{ fontSize: 12, color: phone.isVirtual ? '#1677ff' : '#333' }}>{phone.label}：{phone.value || '-'}</div>
+            <div style={{ fontSize: 12, color: phone.isVirtual ? '#1677ff' : '#333' }}>
+              {phone.label}：{phone.value || '-'}
+            </div>
             <Text type="secondary" style={{ fontSize: 12, display: 'block', whiteSpace: isDecoded ? 'normal' : 'nowrap' }} title={fullAddr}>
               {isDecoded || fullAddr.length <= 25 ? fullAddr : `${fullAddr.substring(0, 25)}...`}
             </Text>
-            {isDecoded && <div style={{ fontSize: 12, color: '#8c8c8c' }}>获取：{fetchedAt}</div>}
+            {isDecoded && (
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>获取：{fetchedAt}</div>
+            )}
             {!isDecoded && hasAddressInfo(record) && (
               <Button type="link" size="small" loading={isDecoding} onClick={() => options.onDecodeAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
                 查看真实地址
@@ -186,8 +200,12 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
             )}
             {isDecoded && (
               <Space size={6}>
-                <Button type="link" size="small" onClick={() => options.onCopyAddress(real)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>复制地址</Button>
-                <Button type="link" size="small" loading={isDecoding} onClick={() => options.onRefreshAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>刷新</Button>
+                <Button type="link" size="small" onClick={() => options.onCopyAddress(real)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+                  复制地址
+                </Button>
+                <Button type="link" size="small" loading={isDecoding} onClick={() => options.onRefreshAddress(record.order_id)} style={{ padding: 0, height: 'auto', fontSize: 12 }}>
+                  刷新
+                </Button>
               </Space>
             )}
           </div>
@@ -220,12 +238,21 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                 <Text style={{ fontSize: 12, color: '#0958d9' }} title={linked.platformOrderId}>
                   {linked.platform === 'taobao' ? '淘宝' : linked.platform}：{linked.platformOrderId || '-'}
                 </Text>
-                {linked.platformOrderStatus && <Text type="secondary" style={{ fontSize: 12 }}>状态：{linked.platformOrderStatus}</Text>}
-                {linked.logisticsStatus && <Text type="secondary" style={{ fontSize: 12 }}>物流：{linked.logisticsStatus}</Text>}
+                {linked.platformOrderStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>状态：{linked.platformOrderStatus}</Text>
+                )}
+                {linked.logisticsStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>物流：{linked.logisticsStatus}</Text>
+                )}
                 {linked.trackingNumber && (
                   <Text type="secondary" style={{ fontSize: 12 }} title={linked.trackingNumber}>
                     单号：{linked.trackingNumber.length > 18 ? `${linked.trackingNumber.substring(0, 18)}...` : linked.trackingNumber}
                   </Text>
+                )}
+                {linked.platformOrderId && linked.platform === 'taobao' && (
+                  <Button type="link" size="small" icon={<SyncOutlined />} loading={options.checkingPurchaseOrderIds.has(record.order_id)} onClick={() => options.onCheckPurchaseOrder(record)} style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}>
+                    检查发货状态
+                  </Button>
                 )}
                 {linked.trackingNumber && (
                   <Button type="link" size="small" icon={<SendOutlined />} disabled={!canShipFromPurchase} loading={options.shippingFromPurchaseOrderIds.has(record.order_id)} onClick={() => options.onShipFromPurchase(record)} title={!canShipFromPurchase ? '仅待发货订单且已读取快递公司和快递单号时可回填' : undefined} style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}>
@@ -237,7 +264,9 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
                     申请退款
                   </Button>
                 )}
-                {taobaoRefundFinished && <Text type="secondary" style={{ fontSize: 12 }}>退款流程已结束</Text>}
+                {taobaoRefundFinished && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>退款流程已结束</Text>
+                )}
               </>
             ) : (
               !internalRemark && <Text type="secondary" style={{ fontSize: 12 }}>未关联采购单</Text>
@@ -258,10 +287,16 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
         const sources = product?.product_id ? options.productSources[product.product_id] || [] : [];
         return (
           <Flex vertical align="flex-start">
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record.order_id)}>详情</Button>
-            <Button type="link" size="small" icon={<LinkOutlined />} disabled={!product?.product_id} onClick={() => product && options.onOpenSourceManager(product)}>管理货源</Button>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record.order_id)}>
+              详情
+            </Button>
+            <Button type="link" size="small" icon={<LinkOutlined />} disabled={!product?.product_id} onClick={() => product && options.onOpenSourceManager(product)}>
+              管理货源
+            </Button>
             {product?.product_id && sources.length > 0 && (
-              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => options.onOpenShipSources(record, product)}>去发货</Button>
+              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => options.onOpenShipSources(record, product)}>
+                去发货
+              </Button>
             )}
           </Flex>
         );

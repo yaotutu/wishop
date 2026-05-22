@@ -6,6 +6,8 @@ import { createLogger } from '../utils/logger';
 import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
+import type { AppSettings, AppSettingsPatch } from '../../shared/settings';
+import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings';
 
 export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 export type Account = FullAccount;
@@ -31,12 +33,14 @@ export interface StoreSchema {
   globalLogs?: GlobalLogEntry[];
   notifications?: NotificationEntry[];
   notificationPreference?: NotificationPreference;
+  appSettings?: AppSettings;
 }
 
 const store = new Store<StoreSchema>({
   defaults: {
     accounts: [],
     activeAccountId: '',
+    appSettings: DEFAULT_APP_SETTINGS,
   },
 });
 
@@ -724,6 +728,26 @@ export function markAllNotificationsRead(): NotificationEntry[] {
 
 export function clearNotifications(): void {
   store.set('notifications', []);
+}
+
+// --- App settings ---
+
+export function getAppSettings(): AppSettings {
+  return normalizeAppSettings(store.get('appSettings') || DEFAULT_APP_SETTINGS);
+}
+
+export function updateAppSettings(patch: AppSettingsPatch): AppSettings {
+  const current = getAppSettings();
+  const next = normalizeAppSettings({
+    ...current,
+    ...patch,
+    shipmentCheck: {
+      ...current.shipmentCheck,
+      ...patch.shipmentCheck,
+    },
+  });
+  store.set('appSettings', next);
+  return next;
 }
 
 export default store;

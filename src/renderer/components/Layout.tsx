@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty } from 'antd';
 import StoreManagement from '../pages/store-management/StoreManagement';
 import SettingsPage from '../pages/settings/SettingsPage';
@@ -11,6 +11,7 @@ import type { Account } from '../../shared/types';
 import { useBrowser } from '../hooks/useBrowser';
 import GlobalLogDrawer from './GlobalLogDrawer';
 import NotificationCenter from './NotificationCenter';
+import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -124,59 +125,65 @@ const Layout: React.FC = () => {
     setActiveModule('settings');
   };
 
+  const navigateToStoreManagement = useCallback(() => {
+    setActiveModule('storeManagement');
+  }, []);
+
   return (
     <BrowserContext.Provider value={browserValue}>
-      <AntLayout style={{ height: '100vh' }}>
-        <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
-          <Tabs
-            activeKey={activeModule}
-            onChange={(key) => setActiveModule(key as ModuleType)}
-            items={MODULES.map(m => ({ key: m.key, label: m.label }))}
-            size="small"
-            style={{ flex: 1, minWidth: 0 }}
-            tabBarStyle={{ margin: 0 }}
-          />
-          <span
-            onClick={handleVersionClick}
-            style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
-          >
-            v{version}
-          </span>
-        </Header>
-        <AntLayout>
-          {/* 账户侧边栏 — 仅账户模块显示 */}
-          {isAccountModule && (
-            <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
-          )}
-          <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
-            <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-              <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
-            </div>
-            {/* 店铺管理 */}
-            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <StoreManagement
-                accounts={accounts}
-                addAccount={addAccount}
-                updateAccount={updateAccount}
-                removeAccount={removeAccount}
-                switchAccount={switchAccount}
-                activeAccountId={activeAccountId}
-              />
-            </div>
-            {/* 调度任务 */}
-            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <ScheduledJobsPage accounts={accounts} />
-            </div>
-            {/* 设置 */}
-            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-            </div>
-          </Content>
+      <CredentialErrorProvider onNavigateToSettings={navigateToStoreManagement}>
+        <AntLayout style={{ height: '100vh' }}>
+          <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
+            <Tabs
+              activeKey={activeModule}
+              onChange={(key) => setActiveModule(key as ModuleType)}
+              items={MODULES.map(m => ({ key: m.key, label: m.label }))}
+              size="small"
+              style={{ flex: 1, minWidth: 0 }}
+              tabBarStyle={{ margin: 0 }}
+            />
+            <span
+              onClick={handleVersionClick}
+              style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
+            >
+              v{version}
+            </span>
+          </Header>
+          <AntLayout>
+            {/* 账户侧边栏 — 仅账户模块显示 */}
+            {isAccountModule && (
+              <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
+            )}
+            <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
+              <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+                <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
+              </div>
+              {/* 店铺管理 */}
+              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <StoreManagement
+                  accounts={accounts}
+                  addAccount={addAccount}
+                  updateAccount={updateAccount}
+                  removeAccount={removeAccount}
+                  switchAccount={switchAccount}
+                  activeAccountId={activeAccountId}
+                />
+              </div>
+              {/* 调度任务 */}
+              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <ScheduledJobsPage accounts={accounts} />
+              </div>
+              {/* 设置 */}
+              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+                <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+              </div>
+            </Content>
+          </AntLayout>
+          <NotificationCenter />
+          <GlobalLogDrawer />
         </AntLayout>
-        <NotificationCenter />
-        <GlobalLogDrawer />
-      </AntLayout>
+      </CredentialErrorProvider>
     </BrowserContext.Provider>
   );
 };

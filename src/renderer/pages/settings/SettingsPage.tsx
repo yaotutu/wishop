@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Card, Menu, Button, Progress, Space, Descriptions, Typography, Image, Input, Tag, message } from 'antd';
+import { Alert, Card, Menu, Button, Progress, Space, Descriptions, Typography, Image, Input, InputNumber, Switch, Tag, message } from 'antd';
 import {
   CheckCircleOutlined,
   CloudDownloadOutlined,
@@ -8,14 +8,17 @@ import {
   CustomerServiceOutlined,
   ReloadOutlined,
   SafetyCertificateOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { LicenseState } from '../../../shared/types';
+import type { AppSettings } from '../../../shared/settings';
+import { DEFAULT_APP_SETTINGS } from '../../../shared/settings';
 
 const { Title, Paragraph, Text } = Typography;
 
-type SettingsTab = 'about' | 'product' | 'license' | 'contact';
+type SettingsTab = 'about' | 'product' | 'license' | 'automation' | 'contact';
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
 interface SettingsPageProps {
@@ -26,6 +29,7 @@ const MENU_ITEMS = [
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
+  { key: 'automation', label: '自动化设置', icon: <SettingOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
 
@@ -227,6 +231,98 @@ const LicensePanel: React.FC = () => {
   );
 };
 
+const AutomationSettingsPanel: React.FC = () => {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [loading, setLoading] = useState(false);
+
+  const loadSettings = async () => {
+    const next = await window.electronAPI.settings.get();
+    setSettings(next);
+  };
+
+  useEffect(() => {
+    void loadSettings();
+  }, []);
+
+  const patchShipmentCheck = async (patch: Partial<AppSettings['shipmentCheck']>) => {
+    setLoading(true);
+    try {
+      const next = await window.electronAPI.settings.update({
+        shipmentCheck: patch,
+      });
+      setSettings(next);
+      message.success('自动化设置已保存');
+    } catch (error: any) {
+      message.error(error?.message || '保存自动化设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const itemStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: '220px 220px', gap: 12, alignItems: 'center' };
+  const shipment = settings.shipmentCheck;
+
+  return (
+    <Card title="自动化设置">
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        message="淘宝自动化保持显式触发"
+        description="这里配置采购发货状态检测的节奏、冷却和单轮数量。淘宝窗口仍保持干净窗口，不做 UA、请求头或指纹伪装。"
+      />
+      <Space orientation="vertical" size={14} style={{ width: '100%', maxWidth: 720 }}>
+        <div style={itemStyle}>
+          <span>采购发货状态检测</span>
+          <Switch
+            checked={shipment.enabled}
+            loading={loading}
+            checkedChildren="启用"
+            unCheckedChildren="停用"
+            onChange={(enabled) => void patchShipmentCheck({ enabled })}
+          />
+        </div>
+        <div style={itemStyle}>
+          <span>检测窗口（分钟）</span>
+          <InputNumber min={5} max={120} value={shipment.windowMinutes} onChange={(value) => void patchShipmentCheck({ windowMinutes: value || 10 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>每账号每窗口最多检测</span>
+          <InputNumber min={1} max={10} value={shipment.maxChecksPerAccountPerWindow} onChange={(value) => void patchShipmentCheck({ maxChecksPerAccountPerWindow: value || 3 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>最小派发延迟（秒）</span>
+          <InputNumber min={10} max={3600} value={shipment.minDispatchDelaySeconds} onChange={(value) => void patchShipmentCheck({ minDispatchDelaySeconds: value || 30 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>最大派发延迟（秒）</span>
+          <InputNumber min={30} max={7200} value={shipment.maxDispatchDelaySeconds} onChange={(value) => void patchShipmentCheck({ maxDispatchDelaySeconds: value || 540 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>任务最小间隔（秒）</span>
+          <InputNumber min={30} max={1800} value={shipment.minTaskSpacingSeconds} onChange={(value) => void patchShipmentCheck({ minTaskSpacingSeconds: value || 60 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>订单回看天数</span>
+          <InputNumber min={1} max={7} value={shipment.orderLookbackDays} onChange={(value) => void patchShipmentCheck({ orderLookbackDays: value || 7 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>正常冷却（分钟）</span>
+          <InputNumber min={10} max={1440} value={shipment.normalCooldownMinutes} onChange={(value) => void patchShipmentCheck({ normalCooldownMinutes: value || 60 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>验证冷却（分钟）</span>
+          <InputNumber min={30} max={10080} value={shipment.verificationCooldownMinutes} onChange={(value) => void patchShipmentCheck({ verificationCooldownMinutes: value || 360 })} />
+        </div>
+        <div style={itemStyle}>
+          <span>失败冷却（分钟）</span>
+          <InputNumber min={10} max={1440} value={shipment.failureCooldownMinutes} onChange={(value) => void patchShipmentCheck({ failureCooldownMinutes: value || 60 })} />
+        </div>
+      </Space>
+    </Card>
+  );
+};
+
 /** 联系我们 */
 const ContactPanel: React.FC = () => (
   <Card title="联系我们">
@@ -281,6 +377,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about' }) => 
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
+        {activeTab === 'automation' && <AutomationSettingsPanel />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>
     </div>

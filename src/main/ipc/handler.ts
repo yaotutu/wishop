@@ -13,6 +13,7 @@ import { registerQuotaHandlers } from './handlers/quota';
 import { registerRealAddressHandlers } from './handlers/realAddresses';
 import { registerSchedulerHandlers } from './handlers/scheduler';
 import { registerScheduledJobHandlers } from './handlers/scheduledJobs';
+import { registerSettingsHandlers } from './handlers/settings';
 import { registerTaskHandlers } from './handlers/task';
 import { registerTaobaoAutomationHandlers } from './handlers/taobaoAutomation';
 import { registerViolationHandlers } from './handlers/violation';
@@ -63,6 +64,7 @@ export function registerHandlers(): void {
   registerRealAddressHandlers();
   registerSchedulerHandlers();
   registerScheduledJobHandlers();
+  registerSettingsHandlers();
   registerTaobaoAutomationHandlers();
   registerTaskHandlers(context);
   registerViolationHandlers(context);

@@ -3,6 +3,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
 import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
+import { startAllScheduledJobs, stopAllScheduledJobs } from './scheduler/scheduled-job-runner';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall, checkForUpdates } from './updater';
 import { flushBrowserSession, setBrowserQuitting } from './browser/browser-window';
@@ -95,6 +96,7 @@ app.whenReady().then(() => {
   registerHandlers();
   startAllTasks();
   createWindow();
+  startAllScheduledJobs(() => mainWindow);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -105,6 +107,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopAllTasks();
+  stopAllScheduledJobs();
 });
 
 app.on('before-quit', () => {
