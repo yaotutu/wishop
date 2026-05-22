@@ -294,6 +294,19 @@ export interface CheckoutAddressFillResult {
   warnings: string[];
 }
 
+export interface ShippingAssistantSession {
+  accountId: string;
+  orderId: string;
+  product: OrderProductInfo;
+  source: ProductSourceItem;
+  address?: OrderAddressInfo;
+  customerNotes?: string;
+  merchantNotes?: string;
+  createTime?: number;
+  payTime?: number;
+  orderPrice?: number;
+}
+
 export interface ShipOrderFromPurchaseInput {
   accountId: string;
   orderId: string;

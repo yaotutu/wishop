@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult } from '../shared/types';
+import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult, ShippingAssistantSession } from '../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../shared/settings';
@@ -150,6 +150,8 @@ const electronAPI = {
       ipcRenderer.invoke('browser:open', profileId, url),
     openClean: (profileId: string, url?: string): Promise<void> =>
       ipcRenderer.invoke('browser:openClean', profileId, url),
+    openShippingAssistant: (profileId: string, url: string, session: ShippingAssistantSession): Promise<void> =>
+      ipcRenderer.invoke('browser:openShippingAssistant', profileId, url, session),
     close: (): Promise<void> =>
       ipcRenderer.invoke('browser:close'),
   },

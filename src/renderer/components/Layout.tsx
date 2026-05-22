@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
 import { useAccounts } from '../hooks/useAccounts';
-import type { Account } from '../../shared/types';
+import type { Account, ShippingAssistantSession } from '../../shared/types';
 import { useBrowser } from '../hooks/useBrowser';
 import GlobalLogDrawer from './GlobalLogDrawer';
 import NotificationCenter from './NotificationCenter';
@@ -58,7 +58,8 @@ function requestIdleWork(callback: () => void): () => void {
 export const BrowserContext = React.createContext<{
   openBrowser: (profileId?: string, url?: string) => void;
   openCleanBrowser: (profileId?: string, url?: string) => void;
-}>({ openBrowser: () => {}, openCleanBrowser: () => {} });
+  openShippingAssistant: (profileId: string, url: string, session: ShippingAssistantSession) => void;
+}>({ openBrowser: () => {}, openCleanBrowser: () => {}, openShippingAssistant: () => {} });
 
 const PageFallback: React.FC = () => (
   <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -129,7 +130,7 @@ const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const { openBrowser, openCleanBrowser } = useBrowser();
+  const { openBrowser, openCleanBrowser, openShippingAssistant } = useBrowser();
   const moduleSwitchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -153,7 +154,7 @@ const Layout: React.FC = () => {
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
   const activeModuleMounted = mountedModules.includes(activeModule);
-  const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser }), [openBrowser, openCleanBrowser]);
+  const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser, openShippingAssistant }), [openBrowser, openCleanBrowser, openShippingAssistant]);
 
   const switchModule = useCallback((module: ModuleType) => {
     setActiveModule(module);

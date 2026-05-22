@@ -2,12 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Empty, Modal, Select, Table, message } from 'antd';
 import { BrowserContext } from '../../components/Layout';
 import { useOrderAssociations, useOrders, useProductSources, useRealAddressCaches } from '../../hooks/useIpc';
-import type { DeliveryCompanyOption, Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, OrderSearchParams, OrderAddressInfo, ProductSourceItem, OrderStatus, OrderTimeScope } from '../../../shared/types';
+import type { DeliveryCompanyOption, Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, OrderSearchParams, ProductSourceItem, OrderStatus, OrderTimeScope, ShippingAssistantSession } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressForCopy } from '../../../shared/address-format';
 import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../../shared/errors';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
-import { ShippingAssistantDrawer, type ShippingAssistantSession } from './components/ShippingAssistantDrawer';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { createOrderColumns } from './components/OrderTableColumns';
@@ -40,7 +39,7 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders } = useOrders(accountId);
-  const { openCleanBrowser } = React.useContext(BrowserContext);
+  const { openShippingAssistant } = React.useContext(BrowserContext);
   const { productSources, saveProductSources } = useProductSources(accountId);
   const { realAddressCaches, fetchRealAddress } = useRealAddressCaches(accountId);
   const { orderAssociations, fetchAssociations, saveAssociation } = useOrderAssociations(accountId);
@@ -63,8 +62,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
   const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
   const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
-  const [shippingAssistantOpen, setShippingAssistantOpen] = useState(false);
-  const [shippingSession, setShippingSession] = useState<ShippingAssistantSession | null>(null);
   const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
   const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
   const [preparingTaobaoRefundOrderIds, setPreparingTaobaoRefundOrderIds] = useState<Set<string>>(new Set());
@@ -464,8 +461,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
     const address = realAddressCaches[shipSourceOrder.order_id]?.address;
     const url = normalizeUrl(source.url);
-    await openCleanBrowser('baseline', url);
-    setShippingSession({
+    const session: ShippingAssistantSession = {
       accountId,
       orderId: shipSourceOrder.order_id,
       product: shipSourceProduct,
@@ -476,15 +472,11 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       createTime: shipSourceOrder.create_time,
       payTime: shipSourceOrder.order_detail?.pay_info?.pay_time,
       orderPrice: shipSourceOrder.order_detail?.price_info?.order_price,
-    });
-    setShippingAssistantOpen(true);
+    };
+    await openShippingAssistant('baseline', url, session);
     setShipSourceModalOpen(false);
     message.success(address ? '已打开淘宝发货页' : '已打开淘宝发货页，真实地址需手动获取');
-  }, [accountId, openCleanBrowser, realAddressCaches, shipSourceOrder, shipSourceProduct]);
-
-  const handleFillCheckoutAddress = useCallback(async (address: OrderAddressInfo) => {
-    return window.electronAPI.taobaoAutomation.fillCheckoutAddress(address);
-  }, []);
+  }, [accountId, openShippingAssistant, realAddressCaches, shipSourceOrder, shipSourceProduct]);
 
   const columns = useMemo(() => createOrderColumns({
     realAddressCaches,
@@ -600,15 +592,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         sources={shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []}
         onCancel={() => setShipSourceModalOpen(false)}
         onOpenShipping={handleOpenShippingSession}
-      />
-
-      <ShippingAssistantDrawer
-        open={shippingAssistantOpen}
-        session={shippingSession}
-        addressCache={shippingSession ? realAddressCaches[shippingSession.orderId] : undefined}
-        onClose={() => setShippingAssistantOpen(false)}
-        onFetchAddress={fetchRealAddress}
-        onFillCheckoutAddress={handleFillCheckoutAddress}
       />
 
       <OrderAssociationModal
