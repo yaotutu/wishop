@@ -9,12 +9,19 @@ import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 
 const { Header, Sider, Content } = AntLayout;
 
-const StoreManagement = lazy(() => import('../pages/store-management/StoreManagement'));
-const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
-const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
-const ListingPage = lazy(() => import('../pages/common-functions/ListingPage'));
-const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
-const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
+const loadStoreManagement = () => import('../pages/store-management/StoreManagement');
+const loadSettingsPage = () => import('../pages/settings/SettingsPage');
+const loadOrdersPage = () => import('../pages/orders/OrdersPage');
+const loadListingPage = () => import('../pages/common-functions/ListingPage');
+const loadViolationPage = () => import('../pages/violation/ViolationPage');
+const loadScheduledJobsPage = () => import('../pages/scheduled-jobs/ScheduledJobsPage');
+
+const StoreManagement = lazy(loadStoreManagement);
+const SettingsPage = lazy(loadSettingsPage);
+const OrdersPage = lazy(loadOrdersPage);
+const ListingPage = lazy(loadListingPage);
+const ViolationPage = lazy(loadViolationPage);
+const ScheduledJobsPage = lazy(loadScheduledJobsPage);
 
 type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 
@@ -28,6 +35,25 @@ const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
+
+const preloadByModule: Record<ModuleType, () => Promise<unknown>> = {
+  orders: loadOrdersPage,
+  storeManagement: loadStoreManagement,
+  commonFunctions: loadListingPage,
+  scheduledJobs: loadScheduledJobsPage,
+  violation: loadViolationPage,
+  settings: loadSettingsPage,
+};
+
+function requestIdleWork(callback: () => void): () => void {
+  const requestIdle = window.requestIdleCallback;
+  if (requestIdle) {
+    const id = requestIdle(callback, { timeout: 2500 });
+    return () => window.cancelIdleCallback?.(id);
+  }
+  const id = window.setTimeout(callback, 800);
+  return () => window.clearTimeout(id);
+}
 
 export const BrowserContext = React.createContext<{
   openBrowser: (profileId?: string, url?: string) => void;
@@ -109,6 +135,14 @@ const Layout: React.FC = () => {
     window.appVersion?.get().then((v: string) => setVersion(v));
   }, []);
 
+  useEffect(() => requestIdleWork(() => {
+    void preloadByModule.scheduledJobs();
+    void preloadByModule.storeManagement();
+    void preloadByModule.settings();
+    void preloadByModule.commonFunctions();
+    void preloadByModule.violation();
+  }), []);
+
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
   const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser }), [openBrowser, openCleanBrowser]);
 
@@ -129,7 +163,14 @@ const Layout: React.FC = () => {
             <Tabs
               activeKey={activeModule}
               onChange={(key) => setActiveModule(key as ModuleType)}
-              items={MODULES.map(m => ({ key: m.key, label: m.label }))}
+              items={MODULES.map(m => ({
+                key: m.key,
+                label: (
+                  <span onMouseEnter={() => void preloadByModule[m.key]()} onFocus={() => void preloadByModule[m.key]()}>
+                    {m.label}
+                  </span>
+                ),
+              }))}
               size="small"
               style={{ flex: 1, minWidth: 0 }}
               tabBarStyle={{ margin: 0 }}
