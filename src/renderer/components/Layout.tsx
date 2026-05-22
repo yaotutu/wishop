@@ -157,11 +157,11 @@ const Layout: React.FC = () => {
 
   const switchModule = useCallback((module: ModuleType) => {
     setActiveModule(module);
-    setRenderedModule(null);
     void preloadByModule[module]();
     if (moduleSwitchTimerRef.current !== null) {
       window.clearTimeout(moduleSwitchTimerRef.current);
     }
+    // Let the tab selection paint before unmounting/mounting heavy page trees.
     moduleSwitchTimerRef.current = window.setTimeout(() => {
       setRenderedModule(module);
       moduleSwitchTimerRef.current = null;
