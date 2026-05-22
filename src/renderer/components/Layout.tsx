@@ -100,12 +100,12 @@ const AccountSider: React.FC<{
   </Sider>
 );
 
-/** 账户作用域的模块内容：只挂载当前模块和当前账号，避免隐藏页发起无效请求。 */
+/** 账户作用域的模块内容：模块首次打开后常驻，切 tab 只切 display。 */
 const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
-  activeModule: ModuleType;
-}> = ({ accounts, activeAccountId, activeModule }) => {
+  module: ModuleType;
+}> = ({ accounts, activeAccountId, module }) => {
   if (accounts.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -116,16 +116,16 @@ const AccountModuleContent: React.FC<{
   const activeAccount = accounts.find(account => account.id === activeAccountId) || accounts[0];
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {activeModule === 'orders' && <OrdersPage accountId={activeAccount.id} />}
-      {activeModule === 'commonFunctions' && <ListingPage accountId={activeAccount.id} />}
-      {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
+      {module === 'orders' && <OrdersPage accountId={activeAccount.id} />}
+      {module === 'commonFunctions' && <ListingPage accountId={activeAccount.id} />}
+      {module === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
   );
 };
 
 const Layout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('orders');
-  const [renderedModule, setRenderedModule] = useState<ModuleType | null>('orders');
+  const [mountedModules, setMountedModules] = useState<ModuleType[]>(['orders']);
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
@@ -152,7 +152,7 @@ const Layout: React.FC = () => {
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-  const isRenderedAccountModule = renderedModule ? ACCOUNT_MODULES.has(renderedModule) : false;
+  const activeModuleMounted = mountedModules.includes(activeModule);
   const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser }), [openBrowser, openCleanBrowser]);
 
   const switchModule = useCallback((module: ModuleType) => {
@@ -161,9 +161,9 @@ const Layout: React.FC = () => {
     if (moduleSwitchTimerRef.current !== null) {
       window.clearTimeout(moduleSwitchTimerRef.current);
     }
-    // Let the tab selection paint before unmounting/mounting heavy page trees.
+    // Let the tab selection paint before mounting a module for the first time.
     moduleSwitchTimerRef.current = window.setTimeout(() => {
-      setRenderedModule(module);
+      setMountedModules(prev => prev.includes(module) ? prev : [...prev, module]);
       moduleSwitchTimerRef.current = null;
     }, 0);
   }, []);
@@ -210,37 +210,56 @@ const Layout: React.FC = () => {
               <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
             )}
             <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {renderedModule === null ? (
+              {!activeModuleMounted && (
                 <PageFallback />
-              ) : (
-                <Suspense fallback={<PageFallback />}>
-                  <div style={{ flex: 1, minHeight: 0, display: isRenderedAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-                    {isRenderedAccountModule && (
-                      <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={renderedModule} />
-                    )}
+              )}
+              {mountedModules.includes('orders') && (
+                <Suspense fallback={activeModule === 'orders' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'orders' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="orders" />
                   </div>
-                  {renderedModule === 'storeManagement' && (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                      <StoreManagement
-                        accounts={accounts}
-                        addAccount={addAccount}
-                        updateAccount={updateAccount}
-                        removeAccount={removeAccount}
-                        switchAccount={switchAccount}
-                        activeAccountId={activeAccountId}
-                      />
-                    </div>
-                  )}
-                  {renderedModule === 'scheduledJobs' && (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                      <ScheduledJobsPage accounts={accounts} />
-                    </div>
-                  )}
-                  {renderedModule === 'settings' && (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                      <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-                    </div>
-                  )}
+                </Suspense>
+              )}
+              {mountedModules.includes('commonFunctions') && (
+                <Suspense fallback={activeModule === 'commonFunctions' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="commonFunctions" />
+                  </div>
+                </Suspense>
+              )}
+              {mountedModules.includes('violation') && (
+                <Suspense fallback={activeModule === 'violation' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="violation" />
+                  </div>
+                </Suspense>
+              )}
+              {mountedModules.includes('storeManagement') && (
+                <Suspense fallback={activeModule === 'storeManagement' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <StoreManagement
+                      accounts={accounts}
+                      addAccount={addAccount}
+                      updateAccount={updateAccount}
+                      removeAccount={removeAccount}
+                      switchAccount={switchAccount}
+                      activeAccountId={activeAccountId}
+                    />
+                  </div>
+                </Suspense>
+              )}
+              {mountedModules.includes('scheduledJobs') && (
+                <Suspense fallback={activeModule === 'scheduledJobs' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <ScheduledJobsPage accounts={accounts} />
+                  </div>
+                </Suspense>
+              )}
+              {mountedModules.includes('settings') && (
+                <Suspense fallback={activeModule === 'settings' ? <PageFallback /> : null}>
+                  <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+                    <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+                  </div>
                 </Suspense>
               )}
             </Content>
