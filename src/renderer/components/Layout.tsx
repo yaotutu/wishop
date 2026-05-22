@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
@@ -125,10 +125,12 @@ const AccountModuleContent: React.FC<{
 
 const Layout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ModuleType>('orders');
+  const [renderedModule, setRenderedModule] = useState<ModuleType | null>('orders');
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const { openBrowser, openCleanBrowser } = useBrowser();
+  const moduleSwitchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     fetchAccounts();
@@ -143,17 +145,37 @@ const Layout: React.FC = () => {
     void preloadByModule.violation();
   }), []);
 
+  useEffect(() => () => {
+    if (moduleSwitchTimerRef.current !== null) {
+      window.clearTimeout(moduleSwitchTimerRef.current);
+    }
+  }, []);
+
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
+  const isRenderedAccountModule = renderedModule ? ACCOUNT_MODULES.has(renderedModule) : false;
   const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser }), [openBrowser, openCleanBrowser]);
 
-  const handleVersionClick = () => {
+  const switchModule = useCallback((module: ModuleType) => {
+    setActiveModule(module);
+    setRenderedModule(null);
+    void preloadByModule[module]();
+    if (moduleSwitchTimerRef.current !== null) {
+      window.clearTimeout(moduleSwitchTimerRef.current);
+    }
+    moduleSwitchTimerRef.current = window.setTimeout(() => {
+      setRenderedModule(module);
+      moduleSwitchTimerRef.current = null;
+    }, 0);
+  }, []);
+
+  const handleVersionClick = useCallback(() => {
     setSettingsTab('about');
-    setActiveModule('settings');
-  };
+    switchModule('settings');
+  }, [switchModule]);
 
   const navigateToStoreManagement = useCallback(() => {
-    setActiveModule('storeManagement');
-  }, []);
+    switchModule('storeManagement');
+  }, [switchModule]);
 
   return (
     <BrowserContext.Provider value={browserValue}>
@@ -162,7 +184,7 @@ const Layout: React.FC = () => {
           <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
             <Tabs
               activeKey={activeModule}
-              onChange={(key) => setActiveModule(key as ModuleType)}
+              onChange={(key) => switchModule(key as ModuleType)}
               items={MODULES.map(m => ({
                 key: m.key,
                 label: (
@@ -188,33 +210,39 @@ const Layout: React.FC = () => {
               <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
             )}
             <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              <Suspense fallback={<PageFallback />}>
-                <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-                  <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
-                </div>
-                {activeModule === 'storeManagement' && (
-                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <StoreManagement
-                      accounts={accounts}
-                      addAccount={addAccount}
-                      updateAccount={updateAccount}
-                      removeAccount={removeAccount}
-                      switchAccount={switchAccount}
-                      activeAccountId={activeAccountId}
-                    />
+              {renderedModule === null ? (
+                <PageFallback />
+              ) : (
+                <Suspense fallback={<PageFallback />}>
+                  <div style={{ flex: 1, minHeight: 0, display: isRenderedAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+                    {isRenderedAccountModule && (
+                      <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={renderedModule} />
+                    )}
                   </div>
-                )}
-                {activeModule === 'scheduledJobs' && (
-                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <ScheduledJobsPage accounts={accounts} />
-                  </div>
-                )}
-                {activeModule === 'settings' && (
-                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-                  </div>
-                )}
-              </Suspense>
+                  {renderedModule === 'storeManagement' && (
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                      <StoreManagement
+                        accounts={accounts}
+                        addAccount={addAccount}
+                        updateAccount={updateAccount}
+                        removeAccount={removeAccount}
+                        switchAccount={switchAccount}
+                        activeAccountId={activeAccountId}
+                      />
+                    </div>
+                  )}
+                  {renderedModule === 'scheduledJobs' && (
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                      <ScheduledJobsPage accounts={accounts} />
+                    </div>
+                  )}
+                  {renderedModule === 'settings' && (
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                      <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+                    </div>
+                  )}
+                </Suspense>
+              )}
             </Content>
           </AntLayout>
           <NotificationCenter />
