@@ -282,6 +282,52 @@ function getAssistantInitialBounds(referenceWindow: BrowserWindow): Electron.Rec
   return { x, y, width, height };
 }
 
+function showAssistantWithTaobao(assistant: BrowserWindow): void {
+  if (assistant.isDestroyed()) return;
+  if (assistant.isMinimized()) assistant.restore();
+  assistant.showInactive();
+  assistant.setAlwaysOnTop(true, 'floating');
+  assistant.moveTop();
+}
+
+function bindAssistantVisibilityToTaobao(taobaoWindow: BrowserWindow, assistant: BrowserWindow): void {
+  const showWithTaobao = () => showAssistantWithTaobao(assistant);
+  const hideWithTaobao = () => {
+    if (!assistant.isDestroyed()) assistant.hide();
+  };
+  const releaseIfNotActive = () => {
+    setTimeout(() => {
+      if (assistant.isDestroyed()) return;
+      const taobaoActive = !taobaoWindow.isDestroyed() && taobaoWindow.isFocused();
+      const assistantActive = assistant.isFocused();
+      if (!taobaoActive && !assistantActive) {
+        assistant.setAlwaysOnTop(false);
+        assistant.hide();
+      }
+    }, 120);
+  };
+
+  taobaoWindow.on('focus', showWithTaobao);
+  taobaoWindow.on('show', showWithTaobao);
+  taobaoWindow.on('restore', showWithTaobao);
+  taobaoWindow.on('blur', releaseIfNotActive);
+  taobaoWindow.on('hide', hideWithTaobao);
+  taobaoWindow.on('minimize', hideWithTaobao);
+  taobaoWindow.on('closed', hideWithTaobao);
+  assistant.on('blur', releaseIfNotActive);
+  assistant.on('focus', () => assistant.setAlwaysOnTop(true, 'floating'));
+
+  assistant.on('closed', () => {
+    taobaoWindow.off('focus', showWithTaobao);
+    taobaoWindow.off('show', showWithTaobao);
+    taobaoWindow.off('restore', showWithTaobao);
+    taobaoWindow.off('blur', releaseIfNotActive);
+    taobaoWindow.off('hide', hideWithTaobao);
+    taobaoWindow.off('minimize', hideWithTaobao);
+    taobaoWindow.off('closed', hideWithTaobao);
+  });
+}
+
 export function openCleanBrowserShippingAssistant(
   parent: BrowserWindow,
   profileId: string,
@@ -293,7 +339,7 @@ export function openCleanBrowserShippingAssistant(
   if (existing && !existing.isDestroyed()) {
     shippingAssistantSessions.set(existing.webContents.id, session);
     existing.webContents.reload();
-    existing.show();
+    showAssistantWithTaobao(existing);
     return;
   }
 
@@ -323,9 +369,10 @@ export function openCleanBrowserShippingAssistant(
     shippingAssistantWindows.delete(profileId);
     shippingAssistantSessions.delete(assistant.webContents.id);
   });
+  bindAssistantVisibilityToTaobao(taobaoWindow, assistant);
 
   assistant.once('ready-to-show', () => {
-    assistant.show();
+    showAssistantWithTaobao(assistant);
     assistant.focus();
   });
   assistant.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(assistantHtml())}`);
