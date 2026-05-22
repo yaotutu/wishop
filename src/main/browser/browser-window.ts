@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, session } from 'electron';
+import { BrowserWindow, ipcMain, screen, session } from 'electron';
 import path from 'path';
 import type { CheckoutAddressFillResult, OrderRealAddressCache, ShippingAssistantSession } from '../../shared/types';
 import { getRealAddressCache, setRealAddressCache } from '../store';
@@ -122,7 +122,7 @@ function assistantHtml(): string {
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; color: #1f1f1f; }
-    .shell { height: 100vh; display: flex; flex-direction: column; border-left: 1px solid #e8e8e8; box-shadow: -8px 0 24px rgba(0,0,0,.12); }
+    .shell { height: 100vh; display: flex; flex-direction: column; }
     .header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid #f0f0f0; font-weight: 600; }
     .close { border: 0; background: transparent; font-size: 20px; cursor: pointer; color: #666; width: 28px; height: 28px; }
     .content { flex: 1; overflow: auto; padding: 12px; display: grid; gap: 12px; }
@@ -265,15 +265,21 @@ function normalizeAssistantSession(session: ShippingAssistantSession): ShippingA
   };
 }
 
-function positionAssistantWindow(parent: BrowserWindow, assistant: BrowserWindow): void {
-  if (parent.isDestroyed() || assistant.isDestroyed()) return;
-  const bounds = parent.getBounds();
-  assistant.setBounds({
-    x: bounds.x + bounds.width - SHIPPING_ASSISTANT_WIDTH - 16,
-    y: bounds.y + 58,
-    width: SHIPPING_ASSISTANT_WIDTH,
-    height: Math.max(480, bounds.height - 86),
-  });
+function getAssistantInitialBounds(referenceWindow: BrowserWindow): Electron.Rectangle {
+  const bounds = referenceWindow.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const area = display.workArea;
+  const width = SHIPPING_ASSISTANT_WIDTH;
+  const height = Math.min(720, Math.max(560, area.height - 120));
+  const rightSideX = bounds.x + bounds.width + 12;
+  const leftSideX = bounds.x - width - 12;
+  const x = rightSideX + width <= area.x + area.width
+    ? rightSideX
+    : leftSideX >= area.x
+      ? leftSideX
+      : area.x + area.width - width - 16;
+  const y = Math.min(Math.max(bounds.y + 40, area.y + 16), area.y + area.height - height - 16);
+  return { x, y, width, height };
 }
 
 export function openCleanBrowserShippingAssistant(
@@ -288,21 +294,19 @@ export function openCleanBrowserShippingAssistant(
     shippingAssistantSessions.set(existing.webContents.id, session);
     existing.webContents.reload();
     existing.show();
-    positionAssistantWindow(taobaoWindow, existing);
     return;
   }
 
+  const assistantBounds = getAssistantInitialBounds(taobaoWindow);
   const assistant = new BrowserWindow({
-    width: SHIPPING_ASSISTANT_WIDTH,
-    height: 720,
-    parent: taobaoWindow,
-    frame: false,
+    ...assistantBounds,
+    frame: true,
     show: false,
-    resizable: false,
-    minimizable: false,
+    resizable: true,
+    minimizable: true,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: true,
+    skipTaskbar: false,
     title: '发货助手',
     webPreferences: {
       preload: path.join(__dirname, '..', '..', 'preload', 'shipping-assistant.js'),
@@ -315,25 +319,14 @@ export function openCleanBrowserShippingAssistant(
   shippingAssistantWindows.set(profileId, assistant);
   shippingAssistantSessions.set(assistant.webContents.id, session);
 
-  const syncPosition = () => positionAssistantWindow(taobaoWindow, assistant);
-  taobaoWindow.on('move', syncPosition);
-  taobaoWindow.on('resize', syncPosition);
-  taobaoWindow.on('show', () => assistant.show());
-  taobaoWindow.on('hide', () => assistant.hide());
-  taobaoWindow.on('closed', () => {
-    if (!assistant.isDestroyed()) assistant.close();
-  });
-
   assistant.on('closed', () => {
     shippingAssistantWindows.delete(profileId);
     shippingAssistantSessions.delete(assistant.webContents.id);
-    taobaoWindow.off('move', syncPosition);
-    taobaoWindow.off('resize', syncPosition);
   });
 
   assistant.once('ready-to-show', () => {
-    positionAssistantWindow(taobaoWindow, assistant);
     assistant.show();
+    assistant.focus();
   });
   assistant.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(assistantHtml())}`);
 }
