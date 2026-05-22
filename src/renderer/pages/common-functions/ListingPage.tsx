@@ -6,28 +6,10 @@ import { useBlacklistRules } from '../../hooks/useBlacklistRules';
 import { useSkipKeywords } from '../../hooks/useSkipKeywords';
 import { useStatusRules } from '../../hooks/useStatusRules';
 import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary, StatusRule } from '../../../shared/types';
+import { cronToTimeInput, dailyCronPresets, formatCron, timeInputToDailyCron } from '../../utils/cron';
 
 interface ListingProps {
   accountId: string;
-}
-
-const cronPresets = [
-  { label: '每天 6:00', value: '0 6 * * *' },
-  { label: '每天 9:00', value: '0 9 * * *' },
-  { label: '每天 12:00', value: '0 12 * * *' },
-  { label: '每天 14:00', value: '0 14 * * *' },
-  { label: '每天 18:00', value: '0 18 * * *' },
-  { label: '每天 21:00', value: '0 21 * * *' },
-  { label: '每 2 小时', value: '0 */2 * * *' },
-  { label: '每 4 小时', value: '0 */4 * * *' },
-];
-
-function cronToLabel(cron: string): string {
-  const preset = cronPresets.find(p => p.value === cron);
-  if (preset) return preset.label;
-  const m = cron.match(/^(\d+)\s+(\d+)\s+\*\s+\*\s+\*$/);
-  if (m) return `每天 ${m[2]}:${m[1].padStart(2, '0')}`;
-  return cron;
 }
 
 const defaultTaskConfig: TaskConfig = {
@@ -446,7 +428,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                   onChange={checked => updateTask(task.id, { enabled: checked })}
                 />
                 <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100 }}>{task.name}</span>
-                <Tag color={task.enabled ? 'blue' : 'default'}>{cronToLabel(task.cronExpression)}</Tag>
+                <Tag color={task.enabled ? 'blue' : 'default'}>{formatCron(task.cronExpression)}</Tag>
                 <span style={{ color: '#999', fontSize: 13 }}>
                   今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
                 </span>
@@ -725,7 +707,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           <div>
             <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>执行时间</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {cronPresets.map(preset => (
+              {dailyCronPresets.map(preset => (
                 <Tag
                   key={preset.value}
                   color={formData.cronExpression === preset.value ? 'blue' : 'default'}
@@ -740,12 +722,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               <span style={{ fontSize: 12, color: '#666' }}>自定义时间：</span>
               <Input
                 placeholder="HH:mm"
-                value={formData.cronExpression.split(' ').slice(0, 2).reverse().join(':').replace(/^\d{1,2}:/, m => m.padStart(3, '0'))}
+                value={cronToTimeInput(formData.cronExpression)}
                 onChange={e => {
-                  const match = e.target.value.match(/^(\d{1,2}):(\d{1,2})$/);
-                  if (match) {
-                    setFormData(prev => ({ ...prev, cronExpression: `${match[2]} ${match[1]} * * *` }));
-                  }
+                  const cron = timeInputToDailyCron(e.target.value);
+                  if (cron) setFormData(prev => ({ ...prev, cronExpression: cron }));
                 }}
                 style={{ width: 100 }}
               />

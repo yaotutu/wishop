@@ -1,11 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Layout as AntLayout, Tabs, Empty } from 'antd';
-import StoreManagement from '../pages/store-management/StoreManagement';
-import SettingsPage from '../pages/settings/SettingsPage';
-import OrdersPage from '../pages/orders/OrdersPage';
-import ListingPage from '../pages/common-functions/ListingPage';
-import ViolationPage from '../pages/violation/ViolationPage';
-import ScheduledJobsPage from '../pages/scheduled-jobs/ScheduledJobsPage';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
 import { useBrowser } from '../hooks/useBrowser';
@@ -14,6 +8,13 @@ import NotificationCenter from './NotificationCenter';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 
 const { Header, Sider, Content } = AntLayout;
+
+const StoreManagement = lazy(() => import('../pages/store-management/StoreManagement'));
+const SettingsPage = lazy(() => import('../pages/settings/SettingsPage'));
+const OrdersPage = lazy(() => import('../pages/orders/OrdersPage'));
+const ListingPage = lazy(() => import('../pages/common-functions/ListingPage'));
+const ViolationPage = lazy(() => import('../pages/violation/ViolationPage'));
+const ScheduledJobsPage = lazy(() => import('../pages/scheduled-jobs/ScheduledJobsPage'));
 
 type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 
@@ -32,6 +33,12 @@ export const BrowserContext = React.createContext<{
   openBrowser: (profileId?: string, url?: string) => void;
   openCleanBrowser: (profileId?: string, url?: string) => void;
 }>({ openBrowser: () => {}, openCleanBrowser: () => {} });
+
+const PageFallback: React.FC = () => (
+  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Spin />
+  </div>
+);
 
 /** 账户侧边栏 */
 const AccountSider: React.FC<{
@@ -67,7 +74,7 @@ const AccountSider: React.FC<{
   </Sider>
 );
 
-/** 账户作用域的模块内容（所有页面同时挂载，切换 display 保留状态） */
+/** 账户作用域的模块内容：只挂载当前模块和当前账号，避免隐藏页发起无效请求。 */
 const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
@@ -80,27 +87,12 @@ const AccountModuleContent: React.FC<{
       </div>
     );
   }
+  const activeAccount = accounts.find(account => account.id === activeAccountId) || accounts[0];
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
-      {accounts.map(account => (
-        <div
-          key={account.id}
-          style={{
-            height: '100%',
-            display: account.id === activeAccountId ? 'contents' : 'none',
-          }}
-        >
-          <div style={{ height: '100%', display: activeModule === 'orders' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <OrdersPage accountId={account.id} />
-          </div>
-          <div style={{ height: '100%', display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <ListingPage accountId={account.id} />
-          </div>
-          <div style={{ height: '100%', display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <ViolationPage accountId={account.id} />
-          </div>
-        </div>
-      ))}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {activeModule === 'orders' && <OrdersPage accountId={activeAccount.id} />}
+      {activeModule === 'commonFunctions' && <ListingPage accountId={activeAccount.id} />}
+      {activeModule === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
   );
 };
@@ -155,29 +147,33 @@ const Layout: React.FC = () => {
               <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
             )}
             <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
-              <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-                <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
-              </div>
-              {/* 店铺管理 */}
-              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
-                <StoreManagement
-                  accounts={accounts}
-                  addAccount={addAccount}
-                  updateAccount={updateAccount}
-                  removeAccount={removeAccount}
-                  switchAccount={switchAccount}
-                  activeAccountId={activeAccountId}
-                />
-              </div>
-              {/* 调度任务 */}
-              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
-                <ScheduledJobsPage accounts={accounts} />
-              </div>
-              {/* 设置 */}
-              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
-                <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-              </div>
+              <Suspense fallback={<PageFallback />}>
+                <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+                  <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
+                </div>
+                {activeModule === 'storeManagement' && (
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <StoreManagement
+                      accounts={accounts}
+                      addAccount={addAccount}
+                      updateAccount={updateAccount}
+                      removeAccount={removeAccount}
+                      switchAccount={switchAccount}
+                      activeAccountId={activeAccountId}
+                    />
+                  </div>
+                )}
+                {activeModule === 'scheduledJobs' && (
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <ScheduledJobsPage accounts={accounts} />
+                  </div>
+                )}
+                {activeModule === 'settings' && (
+                  <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+                  </div>
+                )}
+              </Suspense>
             </Content>
           </AntLayout>
           <NotificationCenter />
