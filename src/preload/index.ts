@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule } from '../shared/types';
+import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult } from '../shared/types';
+import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
+import type { NotificationEntry, NotificationPreference } from '../shared/notification';
 
-export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
+export type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState };
 
 const electronAPI = {
   accounts: {
@@ -29,14 +31,50 @@ const electronAPI = {
       ipcRenderer.invoke('drafts:list', accountId, productId),
   },
   orders: {
-    list: (accountId: string, status?: OrderStatus, pageSize?: number): Promise<{ orders: Order[]; hasMore: boolean }> =>
-      ipcRenderer.invoke('orders:list', accountId, status, pageSize),
+    list: (accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope?: OrderTimeScope): Promise<{ orders: Order[]; hasMore: boolean }> =>
+      ipcRenderer.invoke('orders:list', accountId, status, pageSize, reset, timeScope),
     detail: (accountId: string, orderId: string): Promise<Order> =>
       ipcRenderer.invoke('orders:detail', accountId, orderId),
     search: (accountId: string, params: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> =>
       ipcRenderer.invoke('orders:search', accountId, params),
     decodeAddress: (accountId: string, orderId: string): Promise<OrderAddressInfo> =>
       ipcRenderer.invoke('orders:decodeAddress', accountId, orderId),
+    listDeliveryCompanies: (accountId: string): Promise<DeliveryCompanyOption[]> =>
+      ipcRenderer.invoke('orders:listDeliveryCompanies', accountId),
+    shipFromPurchase: (input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> =>
+      ipcRenderer.invoke('orders:shipFromPurchase', input),
+  },
+  productSources: {
+    list: (accountId: string): Promise<ProductSourceBinding[]> =>
+      ipcRenderer.invoke('productSources:list', accountId),
+    set: (accountId: string, productId: string, sources: ProductSourceItem[]): Promise<ProductSourceBinding> =>
+      ipcRenderer.invoke('productSources:set', accountId, productId, sources),
+    remove: (accountId: string, productId: string, sourceId: string): Promise<ProductSourceBinding> =>
+      ipcRenderer.invoke('productSources:remove', accountId, productId, sourceId),
+  },
+  orderAssociations: {
+    list: (accountId: string): Promise<OrderAssociation[]> =>
+      ipcRenderer.invoke('orderAssociations:list', accountId),
+    set: (accountId: string, orderId: string, input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>): Promise<OrderAssociation> =>
+      ipcRenderer.invoke('orderAssociations:set', accountId, orderId, input),
+  },
+  orderRealAddresses: {
+    list: (accountId: string): Promise<OrderRealAddressCache[]> =>
+      ipcRenderer.invoke('orderRealAddresses:list', accountId),
+    get: (accountId: string, orderId: string): Promise<OrderRealAddressCache | null> =>
+      ipcRenderer.invoke('orderRealAddresses:get', accountId, orderId),
+    fetch: (accountId: string, orderId: string): Promise<OrderRealAddressCache> =>
+      ipcRenderer.invoke('orderRealAddresses:fetch', accountId, orderId),
+    refresh: (accountId: string, orderId: string): Promise<OrderRealAddressCache> =>
+      ipcRenderer.invoke('orderRealAddresses:refresh', accountId, orderId),
+  },
+  taobaoAutomation: {
+    lookupPurchase: (input: PurchaseLookupAutomationInput): Promise<PurchaseLookupAutomationResult> =>
+      ipcRenderer.invoke('taobaoAutomation:lookupPurchase', input),
+    prepareRefund: (input: TaobaoRefundAutomationInput): Promise<TaobaoRefundAutomationResult> =>
+      ipcRenderer.invoke('taobaoAutomation:prepareRefund', input),
+    fillCheckoutAddress: (address: OrderAddressInfo): Promise<CheckoutAddressFillResult> =>
+      ipcRenderer.invoke('taobaoAutomation:fillCheckoutAddress', address),
   },
   quota: {
     get: (accountId: string): Promise<QuotaResult> =>
@@ -48,6 +86,38 @@ const electronAPI = {
     clear: (accountId: string): Promise<void> =>
       ipcRenderer.invoke('logs:clear', accountId),
   },
+  globalLogs: {
+    list: (): Promise<GlobalLogEntry[]> =>
+      ipcRenderer.invoke('globalLogs:list'),
+    add: (input: GlobalLogInput): Promise<GlobalLogEntry> =>
+      ipcRenderer.invoke('globalLogs:add', input),
+    clear: (): Promise<void> =>
+      ipcRenderer.invoke('globalLogs:clear'),
+  },
+  notifications: {
+    list: (): Promise<NotificationEntry[]> =>
+      ipcRenderer.invoke('notifications:list'),
+    markRead: (notificationId: string): Promise<NotificationEntry[]> =>
+      ipcRenderer.invoke('notifications:markRead', notificationId),
+    markAllRead: (): Promise<NotificationEntry[]> =>
+      ipcRenderer.invoke('notifications:markAllRead'),
+    clear: (): Promise<void> =>
+      ipcRenderer.invoke('notifications:clear'),
+    getPreference: (): Promise<NotificationPreference> =>
+      ipcRenderer.invoke('notifications:getPreference'),
+    updatePreference: (patch: Partial<NotificationPreference>): Promise<NotificationPreference> =>
+      ipcRenderer.invoke('notifications:updatePreference', patch),
+  },
+  license: {
+    get: (): Promise<LicenseState> =>
+      ipcRenderer.invoke('license:get'),
+    activate: (input: LicenseActivationInput): Promise<LicenseState> =>
+      ipcRenderer.invoke('license:activate', input),
+    refresh: (): Promise<LicenseState> =>
+      ipcRenderer.invoke('license:refresh'),
+    clear: (): Promise<LicenseState> =>
+      ipcRenderer.invoke('license:clear'),
+  },
   scheduler: {
     list: (accountId: string): Promise<ScheduledTask[]> =>
       ipcRenderer.invoke('scheduler:list', accountId),
@@ -58,9 +128,21 @@ const electronAPI = {
     remove: (accountId: string, taskId: string): Promise<void> =>
       ipcRenderer.invoke('scheduler:remove', accountId, taskId),
   },
+  scheduledJobs: {
+    list: (): Promise<ScheduledJob[]> =>
+      ipcRenderer.invoke('scheduledJobs:list'),
+    add: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
+      ipcRenderer.invoke('scheduledJobs:add', job),
+    update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> =>
+      ipcRenderer.invoke('scheduledJobs:update', jobId, patch),
+    remove: (jobId: string): Promise<void> =>
+      ipcRenderer.invoke('scheduledJobs:remove', jobId),
+  },
   browser: {
     open: (profileId: string, url?: string): Promise<void> =>
       ipcRenderer.invoke('browser:open', profileId, url),
+    openClean: (profileId: string, url?: string): Promise<void> =>
+      ipcRenderer.invoke('browser:openClean', profileId, url),
     close: (): Promise<void> =>
       ipcRenderer.invoke('browser:close'),
   },

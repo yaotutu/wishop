@@ -5,6 +5,42 @@ export interface Config {
   appSecret: string;
 }
 
+export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobScope = 'account' | 'global';
+export type ScheduledJobType =
+  | 'listing.submitDrafts'
+  | 'orders.checkShipmentStatus'
+  | 'violation.scanProducts';
+export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+
+export interface ScheduledJobRunStats {
+  lastRunDate: string;
+  todayRunCount: number;
+  lastRunAt?: number;
+  lastFinishedAt?: number;
+  lastStatus?: ScheduledJobStatus;
+  lastError?: string;
+}
+
+export interface ScheduledJob<TPayload = unknown> {
+  id: string;
+  name: string;
+  enabled: boolean;
+  module: ScheduledJobModule;
+  jobType: ScheduledJobType;
+  scope: ScheduledJobScope;
+  accountId?: string;
+  excludedAccountIds?: string[];
+  cronExpression: string;
+  staggerMinutes?: number;
+  dailyLimit?: number;
+  payload: TPayload;
+  stats: ScheduledJobRunStats;
+  accountStats?: Record<string, ScheduledJobRunStats>;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ScheduledTask {
   id: string;
   name: string;
@@ -74,6 +110,104 @@ export interface Account {
 
 export type AddLogFn = (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 
+export interface ProductSourceItem {
+  id: string;
+  url: string;
+  quantity: number;
+  remark: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductSourceBinding {
+  productId: string;
+  sources: ProductSourceItem[];
+}
+
+export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
+export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+
+export interface LinkedPlatformOrder {
+  id: string;
+  platform: LinkedOrderPlatform;
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+  lastShipmentCheckQueuedAt?: number;
+  lastShipmentCheckStartedAt?: number;
+  lastShipmentCheckFinishedAt?: number;
+  lastShipmentCheckStatus?: PurchaseShipmentCheckStatus;
+  lastShipmentCheckError?: string;
+  nextShipmentCheckAfter?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderAssociation {
+  orderId: string;
+  internalRemark: string;
+  linkedOrders: LinkedPlatformOrder[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
+
+export interface TaobaoSecurityChallengeSnapshot {
+  detected: boolean;
+  kind: TaobaoSecurityChallengeKind;
+  reason: string;
+  title: string;
+  url: string;
+  matchedSignals: string[];
+}
+
+export interface TaobaoPurchaseOrderSnapshot {
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+}
+
+export interface PurchaseLookupAutomationInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+}
+
+export interface PurchaseLookupAutomationResult {
+  snapshot: TaobaoPurchaseOrderSnapshot;
+  association: OrderAssociation;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+}
+
+export interface TaobaoRefundAutomationInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+  reason?: string;
+  autoSubmit?: boolean;
+}
+
+export interface TaobaoRefundPrepareSnapshot {
+  platformOrderId: string;
+  selectedReason: string;
+  refundAmountText: string;
+  submitReady: boolean;
+  autoSubmitted?: boolean;
+  url: string;
+}
+
+export interface TaobaoRefundAutomationResult {
+  snapshot: TaobaoRefundPrepareSnapshot;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+}
+
 // Order types
 
 export enum OrderStatus {
@@ -87,6 +221,8 @@ export enum OrderStatus {
   CancelledByAfterSale = 200,
   CancelledByUser = 250,
 }
+
+export type OrderTimeScope = 'all' | '7d' | '30d' | '90d';
 
 export interface OrderSkuAttr {
   attr_key: string;
@@ -119,6 +255,11 @@ export interface OrderPriceInfo {
   merchant_receieve_price: number;
 }
 
+export interface OrderSettleInfo {
+  commission_fee?: number;
+  predict_commission_fee?: number;
+}
+
 export interface OrderAddressInfo {
   user_name: string;
   postal_code: string;
@@ -127,7 +268,50 @@ export interface OrderAddressInfo {
   county_name: string;
   detail_info: string;
   tel_number: string;
+  purchaser_tel_number?: string;
+  virtual_order_tel_number?: string;
+  national_code?: string;
   house_number: string;
+  virtual_number_info?: OrderVirtualNumberInfo;
+}
+
+export interface OrderVirtualNumberInfo {
+  virtual_number: string;
+  extension: string;
+  expiration: number;
+  number_state: number;
+}
+
+export interface OrderRealAddressCache {
+  orderId: string;
+  address: OrderAddressInfo;
+  fetchedAt: number;
+  updatedAt: number;
+}
+
+export interface CheckoutAddressFillResult {
+  filledFields: string[];
+  warnings: string[];
+}
+
+export interface ShipOrderFromPurchaseInput {
+  accountId: string;
+  orderId: string;
+  logisticsCompany: string;
+  trackingNumber: string;
+  deliveryId?: string;
+}
+
+export interface ShipOrderFromPurchaseResult {
+  order: Order;
+  deliveryId: string;
+  deliveryName: string;
+  waybillId: string;
+}
+
+export interface DeliveryCompanyOption {
+  deliveryId: string;
+  deliveryName: string;
 }
 
 export interface OrderDeliveryProductInfo {
@@ -159,6 +343,7 @@ export interface OrderPayInfo {
 export interface OrderDetail {
   product_infos: OrderProductInfo[];
   price_info: OrderPriceInfo;
+  settle_info?: OrderSettleInfo;
   pay_info: OrderPayInfo;
   delivery_info: OrderDeliveryInfo;
   ext_info: OrderExtInfo;
@@ -224,6 +409,24 @@ export interface StatusRule {
   action: StatusAction; // 对应操作：submit=提交审核, delete=删除, skip=跳过
 }
 
+export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
+
+export interface LicenseActivationInput {
+  licenseKey: string;
+}
+
+export interface LicenseState {
+  enforcementEnabled: boolean;
+  status: 'inactive' | 'active' | 'expired' | 'invalid' | 'grace';
+  plan: 'none' | 'paid';
+  licenseKey?: string;
+  deviceId: string;
+  activatedAt?: number;
+  expiresAt?: number;
+  checkedAt?: number;
+  lastError?: string;
+}
+
 // Full account with all data (main process only)
 export interface FullAccount {
   id: string;
@@ -233,5 +436,8 @@ export interface FullAccount {
   taskConfig: TaskConfig;
   logs: LogEntry[];
   violationWords: string[];
+  productSources: ProductSourceBinding[];
+  orderAssociations: OrderAssociation[];
+  realAddressCaches: OrderRealAddressCache[];
   createdAt: number;
 }

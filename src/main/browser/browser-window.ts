@@ -1,162 +1,83 @@
-import { app, BrowserWindow, session } from 'electron';
-import fs from 'fs';
-import path from 'path';
-import { FingerprintGenerator } from 'fingerprint-generator';
-import { FingerprintInjector } from 'fingerprint-injector';
-import Store from 'electron-store';
-import type { BrowserFingerprintWithHeaders } from 'fingerprint-generator';
+import { BrowserWindow, session } from 'electron';
 
-const PARTITION_PREFIX = 'persist:taobao-';
+const CLEAN_PARTITION_PREFIX = 'persist:taobao-clean-';
 
-interface BrowserConfig {
-  preloadPath: string;
-  userAgent: string;
-}
-
-const store = new Store<{ fingerprints?: Record<string, BrowserFingerprintWithHeaders> }>();
-
-const generator = new FingerprintGenerator({
-  browsers: [{ name: 'chrome', minVersion: 134, maxVersion: 138 }],
-  devices: ['desktop'],
-  locales: ['zh-CN', 'zh'],
-});
-
-const injector = new FingerprintInjector();
-const configs = new Map<string, BrowserConfig>();
-let browserWindow: BrowserWindow | null = null;
+const cleanBrowserWindows = new Map<string, BrowserWindow>();
 let isQuitting = false;
 
-export function setBrowserQuitting(v: boolean) {
-  isQuitting = v;
+export function setBrowserQuitting(value: boolean): void {
+  isQuitting = value;
 }
 
-export async function flushBrowserSession(profileId = 'default'): Promise<void> {
-  const partition = `${PARTITION_PREFIX}${profileId}`;
-  const ses = session.fromPartition(partition);
+export async function flushBrowserSession(profileId = 'baseline'): Promise<void> {
+  const ses = session.fromPartition(`${CLEAN_PARTITION_PREFIX}${profileId}`);
   ses.flushStorageData();
   await ses.cookies.flushStore();
 }
 
-function prepare(profileId: string): BrowserConfig {
-  const existing = configs.get(profileId);
-  if (existing) return existing;
-
-  const fingerprints = store.get('fingerprints', {});
-  let fp = fingerprints[profileId];
-  if (!fp) {
-    fp = generator.getFingerprint();
-    fingerprints[profileId] = fp;
-    store.set('fingerprints', fingerprints);
-  }
-
-  const injectionScript = injector.getInjectableScript(fp);
-  const dir = path.join(app.getPath('userData'), 'browser-preloads');
-  fs.mkdirSync(dir, { recursive: true });
-  const preloadPath = path.join(dir, `${profileId}.js`);
-
-  const permissionsOverride = `
-;(function patchPermissions() {
-  const stateMap = {
-    notifications: Notification.permission,
-    geolocation: 'prompt',
-    camera: 'prompt',
-    microphone: 'prompt',
-    midi: 'prompt',
-    'clipboard-read': 'prompt',
-    'clipboard-write': 'prompt',
-    'payment-handler': 'prompt',
-    'persistent-storage': 'prompt',
-    'screen-wake-lock': 'prompt',
-    accelerometer: 'prompt',
-    gyroscope: 'prompt',
-    magnetometer: 'prompt',
-    'ambient-light-sensor': 'prompt',
-    fullscreen: 'prompt',
-  };
-  const origQuery = Permissions.prototype.query;
-  Permissions.prototype.query = function(desc) {
-    const name = typeof desc === 'string' ? desc : (desc && desc.name) || '';
-    const state = stateMap[name] || 'prompt';
-    return Promise.resolve(Object.setPrototypeOf({ state, onchange: null }, PermissionStatus.prototype));
-  };
-})();
-`;
-  fs.writeFileSync(preloadPath, injectionScript + permissionsOverride, 'utf8');
-
-  const partition = `${PARTITION_PREFIX}${profileId}`;
-  const ses = session.fromPartition(partition);
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = fp!.headers;
-    if (headers['user-agent']) details.requestHeaders['User-Agent'] = headers['user-agent'];
-    if (headers['accept-language']) details.requestHeaders['Accept-Language'] = headers['accept-language'];
-    if (headers['accept']) details.requestHeaders['Accept'] = headers['accept'];
-    if (headers['sec-ch-ua']) details.requestHeaders['Sec-CH-UA'] = headers['sec-ch-ua'];
-    if (headers['sec-ch-ua-mobile']) details.requestHeaders['Sec-CH-UA-Mobile'] = headers['sec-ch-ua-mobile'];
-    if (headers['sec-ch-ua-platform']) details.requestHeaders['Sec-CH-UA-Platform'] = headers['sec-ch-ua-platform'];
-    callback({ requestHeaders: details.requestHeaders });
-  });
-
-  const config: BrowserConfig = { preloadPath, userAgent: fp.fingerprint.navigator.userAgent };
-  configs.set(profileId, config);
-  return config;
-}
-
-export function openBrowserWindow(parent: BrowserWindow, profileId: string, url?: string): void {
-  if (browserWindow) {
-    browserWindow.show();
-    browserWindow.focus();
+export function openCleanBrowserWindow(parent: BrowserWindow, profileId: string, url = 'https://www.taobao.com'): void {
+  const existingWindow = cleanBrowserWindows.get(profileId);
+  if (existingWindow && !existingWindow.isDestroyed()) {
+    existingWindow.show();
+    existingWindow.focus();
+    if (existingWindow.webContents.getURL() !== url) {
+      existingWindow.loadURL(url);
+    }
     return;
   }
 
-  const config = prepare(profileId);
-  const partition = `${PARTITION_PREFIX}${profileId}`;
+  const partition = `${CLEAN_PARTITION_PREFIX}${profileId}`;
   const parentBounds = parent.getBounds();
-
-  const width = Math.min(1280, Math.floor(parentBounds.width * 0.85));
-  const height = Math.min(800, Math.floor(parentBounds.height * 0.85));
+  const width = Math.min(1280, Math.floor(parentBounds.width * 0.9));
+  const height = Math.min(860, Math.floor(parentBounds.height * 0.9));
   const x = parentBounds.x + Math.floor((parentBounds.width - width) / 2);
   const y = parentBounds.y + Math.floor((parentBounds.height - height) / 2);
 
-  browserWindow = new BrowserWindow({
+  const cleanBrowserWindow = new BrowserWindow({
     width,
     height,
     x,
     y,
     parent,
     closable: true,
-    minimizable: false,
-    maximizable: false,
+    minimizable: true,
+    maximizable: true,
     resizable: true,
     title: '淘宝',
     webPreferences: {
-      preload: config.preloadPath,
       partition,
-      contextIsolation: false,
+      contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
+      webSecurity: true,
     },
   });
 
-  browserWindow.webContents.setUserAgent(config.userAgent);
-
-  browserWindow.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    browserWindow?.loadURL(newUrl);
+  cleanBrowserWindow.webContents.setWindowOpenHandler(({ url: newUrl }) => {
+    cleanBrowserWindow.loadURL(newUrl);
     return { action: 'deny' };
   });
 
-  browserWindow.on('close', (e) => {
+  cleanBrowserWindow.on('close', (event) => {
     if (isQuitting) return;
-    e.preventDefault();
-    browserWindow!.hide();
-    flushBrowserSession();
+    event.preventDefault();
+    cleanBrowserWindow.hide();
   });
 
-  if (url) {
-    browserWindow.loadURL(url);
-  }
+  cleanBrowserWindow.on('closed', () => {
+    cleanBrowserWindows.delete(profileId);
+  });
+
+  cleanBrowserWindows.set(profileId, cleanBrowserWindow);
+  cleanBrowserWindow.loadURL(url);
+}
+
+export function getCleanBrowserWindow(): BrowserWindow | null {
+  return cleanBrowserWindows.get('baseline') || cleanBrowserWindows.values().next().value || null;
 }
 
 export function closeBrowserWindow(): void {
-  if (!browserWindow) return;
-  browserWindow.hide();
+  cleanBrowserWindows.forEach(win => {
+    if (!win.isDestroyed()) win.hide();
+  });
 }

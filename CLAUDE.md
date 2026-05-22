@@ -72,7 +72,7 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `list-unreviewed-products.ts` - 列出待审商品，接收 `api` + `addLog`
   - `violation-detect.ts` - 违规词扫描，接收 `api` + `addLog`
 - **scheduler/listing-scheduler.ts** - 每账户 cron 调度，`Map<accountId, ScheduledTask>`
-- **browser/browser-window.ts** - 浏览器窗口管理，集成 fingerprint-generator/injector
+- **browser/browser-window.ts** - 淘宝干净浏览器窗口管理；不做 UA/请求头/指纹伪装
 - **updater.ts** - 基于 electron-updater 的自动更新
 
 ### Preload (`src/preload/`)
@@ -122,7 +122,8 @@ npm run push         # 版本号 patch + git push --follow-tags
 | skipKeywords:get/set                                | renderer→main | 保留关键词管理                               |
 | statusRules:get/set/reset                           | renderer→main | 处理规则管理（editStatus→action映射）        |
 | violation:getWords/setWords/batchScan/scanStep/batchDelete/stop | renderer→main | 违规词检测                       |
-| browser:open/close                                  | renderer→main | 浏览器窗口控制                               |
+| browser:open/openClean/close                        | renderer→main | 干净淘宝浏览器窗口控制                       |
+| taobaoAutomation:lookupPurchase/prepareRefund/fillCheckoutAddress | renderer→main | 用户显式触发的淘宝业务自动化       |
 | app:version                                         | renderer→main | 获取应用版本                                 |
 | update:install                                      | renderer→main | 安装更新                                     |
 | log:added:{accountId}                               | main→renderer | 实时日志推送                                 |
@@ -147,7 +148,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 - electron-updater 6.x (auto-update)
 - node-cron 4 (scheduling)
 - axios (HTTP client)
-- fingerprint-generator/injector 2.x (浏览器指纹)
+- 淘宝窗口不使用 fingerprint-generator/injector，不做浏览器指纹伪装
 
 ## Key Files
 - `src/shared/types.ts` - 所有层共享的 TypeScript 类型定义
@@ -157,7 +158,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 - `src/main/store/index.ts` - Multi-account electron-store
 - `src/main/ipc/handler.ts` - IPC handler 注册入口
 - `src/main/ipc/handlers/*.ts` - 按 domain 拆分的 handler
-- `src/main/browser/browser-window.ts` - 浏览器窗口 + 指纹注入
+- `src/main/browser/browser-window.ts` - 干净淘宝窗口；禁止 UA/请求头/指纹伪装
 - `src/main/updater.ts` - 自动更新逻辑
 - `src/renderer/hooks/*.ts` - 按 domain 拆分的 React hooks
 - `src/renderer/components/Layout.tsx` - 主布局 + 路由（display:none/contents 账户切换策略）

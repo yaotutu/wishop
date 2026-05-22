@@ -5,13 +5,16 @@ import SettingsPage from '../pages/settings/SettingsPage';
 import OrdersPage from '../pages/orders/OrdersPage';
 import ListingPage from '../pages/common-functions/ListingPage';
 import ViolationPage from '../pages/violation/ViolationPage';
+import ScheduledJobsPage from '../pages/scheduled-jobs/ScheduledJobsPage';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
 import { useBrowser } from '../hooks/useBrowser';
+import GlobalLogDrawer from './GlobalLogDrawer';
+import NotificationCenter from './NotificationCenter';
 
 const { Header, Sider, Content } = AntLayout;
 
-type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
+type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
 
@@ -19,13 +22,15 @@ const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
   { key: 'commonFunctions', label: '商品提审' },
+  { key: 'scheduledJobs', label: '调度任务' },
   { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
 
 export const BrowserContext = React.createContext<{
   openBrowser: (profileId?: string, url?: string) => void;
-}>({ openBrowser: () => {} });
+  openCleanBrowser: (profileId?: string, url?: string) => void;
+}>({ openBrowser: () => {}, openCleanBrowser: () => {} });
 
 /** 账户侧边栏 */
 const AccountSider: React.FC<{
@@ -104,7 +109,7 @@ const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const { openBrowser } = useBrowser();
+  const { openBrowser, openCleanBrowser } = useBrowser();
 
   useEffect(() => {
     fetchAccounts();
@@ -112,7 +117,7 @@ const Layout: React.FC = () => {
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-  const browserValue = useMemo(() => ({ openBrowser }), [openBrowser]);
+  const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser }), [openBrowser, openCleanBrowser]);
 
   const handleVersionClick = () => {
     setSettingsTab('about');
@@ -159,12 +164,18 @@ const Layout: React.FC = () => {
                 activeAccountId={activeAccountId}
               />
             </div>
+            {/* 调度任务 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <ScheduledJobsPage accounts={accounts} />
+            </div>
             {/* 设置 */}
             <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
               <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
             </div>
           </Content>
         </AntLayout>
+        <NotificationCenter />
+        <GlobalLogDrawer />
       </AntLayout>
     </BrowserContext.Provider>
   );

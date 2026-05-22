@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo, OrderTimeScope } from '../../shared/types';
 import { useIpcFetch } from './useIpcFetch';
 
 export function useOrders(accountId: string) {
@@ -8,11 +8,12 @@ export function useOrders(accountId: string) {
 
   // 用 ref 传递 status 给 fetcher，避免 fetcher 频繁变化导致 fetch 重建
   const statusRef = useRef<OrderStatus | undefined>(undefined);
+  const timeScopeRef = useRef<OrderTimeScope>('all');
 
   const { data: orders, loading, fetch, setData: setOrders } = useIpcFetch<Order[]>(
     accountId,
     useCallback(async () => {
-      const result = await window.electronAPI.orders.list(accountId, statusRef.current);
+      const result = await window.electronAPI.orders.list(accountId, statusRef.current, 50, true, timeScopeRef.current);
       setHasMore(result.hasMore);
       return result.orders;
     }, [accountId]),
@@ -23,7 +24,7 @@ export function useOrders(accountId: string) {
   // 竞态保护：请求版本号，忽略过期响应
   const fetchIdRef = useRef(0);
 
-  const fetchOrders = useCallback(async (status?: OrderStatus, append = false) => {
+  const fetchOrders = useCallback(async (status?: OrderStatus, append = false, timeScope: OrderTimeScope = timeScopeRef.current) => {
     if (!accountId) return;
     const fetchId = ++fetchIdRef.current;
     setError(null);
@@ -31,11 +32,12 @@ export function useOrders(accountId: string) {
     if (!append) {
       // 全量刷新：走 useIpcFetch.fetch()，loading 状态正确更新
       statusRef.current = status;
+      timeScopeRef.current = timeScope;
       await fetch();
     } else {
       // 追加加载：直接 IPC，不更新 loading
       try {
-        const result = await window.electronAPI.orders.list(accountId, status);
+        const result = await window.electronAPI.orders.list(accountId, status, 50, false, timeScope);
         if (fetchIdRef.current !== fetchId) return;
         setOrders(prev => [...prev, ...result.orders]);
         setHasMore(result.hasMore);

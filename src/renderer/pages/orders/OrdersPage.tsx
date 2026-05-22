@@ -1,10 +1,16 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, message } from 'antd';
-import { ReloadOutlined, EyeOutlined, SendOutlined } from '@ant-design/icons';
-import { useOrders } from '../../hooks/useIpc';
+import { Table, Tag, Button, Modal, Descriptions, Image, Spin, Empty, Flex, Space, Typography, message } from 'antd';
+import { LinkOutlined, EyeOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { useOrderAssociations, useOrders, useProductSources, useRealAddressCaches } from '../../hooks/useIpc';
 import { BrowserContext } from '../../components/Layout';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
+import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo, ProductSourceItem, OrderAssociation, OrderTimeScope } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
+import { formatOrderAddressForCopy, formatOrderAddressLine, getOrderPhoneDisplay } from '../../../shared/address-format';
+import { SourceManagementModal, ShippingSourceModal, newProductSourceRow } from './components/ProductSourceModals';
+import { ShippingAssistantDrawer, type ShippingAssistantSession } from './components/ShippingAssistantDrawer';
+import { OrderAssociationModal } from './components/OrderAssociationModal';
+import { OrderToolbar } from './components/OrderToolbar';
+import { hasLinkedPurchaseLogistics, isLinkedPurchaseRefundFinished } from './purchase-refund';
 
 const { Text } = Typography;
 
@@ -61,9 +67,13 @@ const canDecodeAddress = (status: OrderStatus): boolean =>
   [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
-  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
-  const { openBrowser } = React.useContext(BrowserContext);
+  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders } = useOrders(accountId);
+  const { openCleanBrowser } = React.useContext(BrowserContext);
+  const { productSources, saveProductSources } = useProductSources(accountId);
+  const { realAddressCaches, fetchRealAddress } = useRealAddressCaches(accountId);
+  const { orderAssociations, fetchAssociations, saveAssociation } = useOrderAssociations(accountId);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
+  const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -71,6 +81,21 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
+  const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [sourceProduct, setSourceProduct] = useState<OrderProductInfo | null>(null);
+  const [sourceRows, setSourceRows] = useState<ProductSourceItem[]>([]);
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [shipSourceModalOpen, setShipSourceModalOpen] = useState(false);
+  const [shipSourceOrder, setShipSourceOrder] = useState<Order | null>(null);
+  const [shipSourceProduct, setShipSourceProduct] = useState<OrderProductInfo | null>(null);
+  const [shippingAssistantOpen, setShippingAssistantOpen] = useState(false);
+  const [shippingSession, setShippingSession] = useState<ShippingAssistantSession | null>(null);
+  const [associationModalOpen, setAssociationModalOpen] = useState(false);
+  const [associationOrder, setAssociationOrder] = useState<Order | null>(null);
+  const [associationSaving, setAssociationSaving] = useState(false);
+  const [checkingPurchaseOrderIds, setCheckingPurchaseOrderIds] = useState<Set<string>>(new Set());
+  const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
+  const [preparingTaobaoRefundOrderIds, setPreparingTaobaoRefundOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
 
@@ -90,7 +115,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   useEffect(() => {
     if (accountId) {
       setActiveStatus(undefined);
-      fetchOrders();
+      setTimeScope('all');
+      fetchOrders(undefined, false, 'all');
     }
   }, [accountId, fetchOrders]);
 
@@ -99,20 +125,26 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     const status = val === 'all' ? undefined : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
-    fetchOrders(status);
-  }, [fetchOrders]);
+    fetchOrders(status, false, timeScope);
+  }, [fetchOrders, timeScope]);
+
+  const handleTimeScopeChange = useCallback((value: OrderTimeScope) => {
+    setTimeScope(value);
+    setSearchKeyword('');
+    fetchOrders(activeStatus, false, value);
+  }, [activeStatus, fetchOrders]);
 
   const handleSearch = useCallback((value: string) => {
     if (!value?.trim()) {
-      fetchOrders(activeStatus);
+      fetchOrders(activeStatus, false, timeScope);
       return;
     }
     searchOrders({ search_type: searchType, keyword: value.trim() });
-  }, [activeStatus, searchType, fetchOrders, searchOrders]);
+  }, [activeStatus, timeScope, searchType, fetchOrders, searchOrders]);
 
   const handleLoadMore = useCallback(() => {
-    fetchOrders(activeStatus, true);
-  }, [activeStatus, fetchOrders]);
+    fetchOrders(activeStatus, true, timeScope);
+  }, [activeStatus, fetchOrders, timeScope]);
 
   const handleViewDetail = useCallback(async (orderId: string) => {
     setDetailModalOpen(true);
@@ -125,19 +157,215 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   const handleDecodeAddress = useCallback(async (orderId: string) => {
     setDecodingOrderIds(prev => new Set(prev).add(orderId));
-    const addr = await decodeAddress(orderId);
-    if (addr) {
-      setDecodedAddresses(prev => ({ ...prev, [orderId]: addr }));
-      const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
-      navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
+    try {
+      const cache = await fetchRealAddress(orderId, false);
+      if (cache?.address) {
+        setDecodedAddresses(prev => ({ ...prev, [orderId]: cache.address }));
+        const text = formatOrderAddressForCopy(cache.address);
+        navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
+      }
+    } catch (err: any) {
+      message.error(`获取真实地址失败: ${err.message}`);
+    } finally {
+      setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
-    setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
-  }, [decodeAddress]);
+  }, [fetchRealAddress]);
 
   const handleCopyAddress = useCallback((addr: OrderAddressInfo) => {
-    const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
+    const text = formatOrderAddressForCopy(addr);
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
+
+  const normalizeUrl = useCallback((url: string): string => {
+    const trimmed = url.trim();
+    if (!trimmed) return trimmed;
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }, []);
+
+  const openSourceManager = useCallback((product: OrderProductInfo) => {
+    setSourceProduct(product);
+    const sources = (productSources[product.product_id] || []).map(source => ({ ...source }));
+    setSourceRows(sources.length > 0 ? sources : [newProductSourceRow()]);
+    setSourceModalOpen(true);
+  }, [productSources]);
+
+  const saveSources = useCallback(async () => {
+    if (!sourceProduct) return;
+    setSourceSaving(true);
+    try {
+      await saveProductSources(sourceProduct.product_id, sourceRows.filter(source => source.url.trim()));
+      setSourceModalOpen(false);
+      message.success('货源已保存');
+    } catch (err: any) {
+      message.error(`保存货源失败: ${err.message}`);
+    } finally {
+      setSourceSaving(false);
+    }
+  }, [saveProductSources, sourceProduct, sourceRows]);
+
+  const openShipSources = useCallback((order: Order, product: OrderProductInfo) => {
+    setShipSourceOrder(order);
+    setShipSourceProduct(product);
+    setShipSourceModalOpen(true);
+  }, []);
+
+  const openShippingSession = useCallback(async (source: ProductSourceItem) => {
+    if (!shipSourceOrder || !shipSourceProduct) return;
+    const address = realAddressCaches[shipSourceOrder.order_id]?.address || decodedAddresses[shipSourceOrder.order_id];
+    const url = normalizeUrl(source.url);
+    await openCleanBrowser('baseline', url);
+    setShippingSession({
+      accountId,
+      orderId: shipSourceOrder.order_id,
+      product: shipSourceProduct,
+      source: { ...source, url },
+      address,
+      merchantNotes: shipSourceOrder.order_detail?.ext_info?.merchant_notes,
+      customerNotes: shipSourceOrder.order_detail?.ext_info?.customer_notes,
+      createTime: shipSourceOrder.create_time,
+      payTime: shipSourceOrder.order_detail?.pay_info?.pay_time,
+      orderPrice: shipSourceOrder.order_detail?.price_info?.order_price,
+    });
+    setShippingAssistantOpen(true);
+    setShipSourceModalOpen(false);
+    message.success(address ? '已打开淘宝货源页' : '已打开淘宝货源页，真实地址可在发货助手中获取');
+  }, [accountId, decodedAddresses, normalizeUrl, openCleanBrowser, realAddressCaches, shipSourceOrder, shipSourceProduct]);
+
+  const openAssociationEditor = useCallback((order: Order) => {
+    setAssociationOrder(order);
+    setAssociationModalOpen(true);
+  }, []);
+
+  const openTaobaoOrder = useCallback((platformOrderId: string) => {
+    const trimmed = platformOrderId.trim();
+    if (!trimmed) return;
+    const url = new URL('https://trade.taobao.com/trade/detail/trade_order_detail.htm');
+    url.searchParams.set('biz_order_id', trimmed);
+    void openCleanBrowser('baseline', url.toString());
+  }, [openCleanBrowser]);
+
+  const handleCheckPurchaseOrder = useCallback(async (order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
+    if (!platformOrderId) {
+      message.warning('当前订单还没有关联淘宝订单号');
+      return;
+    }
+    setCheckingPurchaseOrderIds(prev => new Set(prev).add(order.order_id));
+    try {
+      const result = await window.electronAPI.taobaoAutomation.lookupPurchase({
+        accountId,
+        orderId: order.order_id,
+        platformOrderId,
+      });
+      await fetchAssociations();
+      message.success(`淘宝订单已读取：${result.snapshot.platformOrderStatus || result.snapshot.logisticsStatus || '已回填'}`);
+    } catch (err: any) {
+      message.error(`读取淘宝订单失败: ${err.message}`);
+    } finally {
+      setCheckingPurchaseOrderIds(prev => {
+        const next = new Set(prev);
+        next.delete(order.order_id);
+        return next;
+      });
+    }
+  }, [accountId, fetchAssociations, orderAssociations]);
+
+  const handlePrepareTaobaoRefund = useCallback((order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    const platformOrderId = linked?.platform === 'taobao' ? linked.platformOrderId?.trim() : '';
+    if (!platformOrderId) {
+      message.warning('当前订单还没有关联淘宝订单号');
+      return;
+    }
+    if (order.status !== OrderStatusEnum.CancelledByAfterSale) {
+      message.warning('仅售后取消订单需要申请淘宝退款');
+      return;
+    }
+    if (isLinkedPurchaseRefundFinished(linked)) {
+      message.info('淘宝采购单已显示退款结束或交易关闭，无需重复申请退款');
+      return;
+    }
+    const hasLogistics = hasLinkedPurchaseLogistics(linked);
+    Modal.confirm({
+      title: hasLogistics ? '准备淘宝退款申请' : '自动提交淘宝退款申请',
+      content: hasLogistics
+        ? '当前采购单已有物流信息。将打开退款页并自动选择“不想要了”，不会自动提交。'
+        : '当前采购单未读取到物流信息。将打开退款页、选择“不想要了”，并自动点击淘宝提交。',
+      okText: hasLogistics ? '打开并选择原因' : '自动提交退款',
+      cancelText: '取消',
+      onOk: async () => {
+        setPreparingTaobaoRefundOrderIds(prev => new Set(prev).add(order.order_id));
+        try {
+          const result = await window.electronAPI.taobaoAutomation.prepareRefund({
+            accountId,
+            orderId: order.order_id,
+            platformOrderId,
+            reason: '不想要了',
+            autoSubmit: !hasLogistics,
+          });
+          message.success(result.snapshot.autoSubmitted ? '淘宝退款申请已自动提交' : '淘宝退款原因已选择，请人工确认提交');
+          if (result.snapshot.autoSubmitted) {
+            void handleCheckPurchaseOrder(order);
+          }
+        } catch (err: any) {
+          message.error(`淘宝退款申请准备失败: ${err.message}`);
+          throw err;
+        } finally {
+          setPreparingTaobaoRefundOrderIds(prev => {
+            const next = new Set(prev);
+            next.delete(order.order_id);
+            return next;
+          });
+        }
+      },
+    });
+  }, [accountId, handleCheckPurchaseOrder, orderAssociations]);
+
+  const handleFillCheckoutAddress = useCallback(async (address: OrderAddressInfo) => {
+    return window.electronAPI.taobaoAutomation.fillCheckoutAddress(address);
+  }, []);
+
+  const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
+    if (!associationOrder) return;
+    setAssociationSaving(true);
+    try {
+      await saveAssociation(associationOrder.order_id, input);
+      setAssociationModalOpen(false);
+      message.success('采购单详情已保存');
+    } catch (err: any) {
+      message.error(`保存采购单详情失败: ${err.message}`);
+    } finally {
+      setAssociationSaving(false);
+    }
+  }, [associationOrder, saveAssociation]);
+
+  const shipFromPurchase = useCallback(async (order: Order) => {
+    const linked = orderAssociations[order.order_id]?.linkedOrders[0];
+    if (!linked?.logisticsCompany || !linked?.trackingNumber) {
+      message.warning('采购单缺少快递公司或快递单号');
+      return;
+    }
+    setShippingFromPurchaseOrderIds(prev => new Set(prev).add(order.order_id));
+    try {
+      await window.electronAPI.orders.shipFromPurchase({
+        accountId,
+        orderId: order.order_id,
+        logisticsCompany: linked.logisticsCompany,
+        trackingNumber: linked.trackingNumber,
+      });
+      message.success('微信小店发货已回填');
+      fetchOrders(activeStatus, false, timeScope);
+    } catch (err: any) {
+      message.error(`回填发货失败: ${err.message}`);
+    } finally {
+      setShippingFromPurchaseOrderIds(prev => {
+        const next = new Set(prev);
+        next.delete(order.order_id);
+        return next;
+      });
+    }
+  }, [accountId, activeStatus, fetchOrders, orderAssociations, timeScope]);
 
   const columns = [
     {
@@ -222,11 +450,6 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
                 发货时限: {formatTime(product.delivery_deadline)}
               </div>
             )}
-            {record.status === OrderStatusEnum.PendingShipment && (
-              <Button size="small" type="primary" icon={<SendOutlined />} style={{ marginTop: 4, fontSize: 12 }} onClick={() => openBrowser('default', 'https://www.taobao.com')}>
-                淘宝发货
-              </Button>
-            )}
             {(record.status === OrderStatusEnum.PendingReceipt || record.status === OrderStatusEnum.Completed) && deliveryInfos?.length > 0 && (
               <>
                 {deliveryInfos.map((d, i) => (
@@ -248,15 +471,19 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       width: 180,
       render: (_: unknown, record: Order) => {
         const masked = record.order_detail?.delivery_info?.address_info;
-        const real = decodedAddresses[record.order_id];
+        const real = realAddressCaches[record.order_id]?.address || decodedAddresses[record.order_id];
         const addr = real || masked;
         if (!addr) return '-';
-        const fullAddr = `${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
+        const fullAddr = formatOrderAddressLine(addr);
+        const phone = getOrderPhoneDisplay(addr);
         const isDecoded = !!real;
         const isDecoding = decodingOrderIds.has(record.order_id);
         return (
           <div>
-            <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name} {addr.tel_number}</div>
+            <div style={{ fontSize: 12, color: '#333' }}>{addr.user_name}</div>
+            <div style={{ fontSize: 12, color: phone.isVirtual ? '#1677ff' : '#333' }}>
+              {phone.label}: {phone.value || '-'}
+            </div>
             <Text type="secondary" style={{ fontSize: 12 }} title={fullAddr}>
               {fullAddr.length > 25 ? fullAddr.substring(0, 25) + '...' : fullAddr}
             </Text>
@@ -307,46 +534,145 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       },
     },
     {
+      title: '采购单',
+      key: 'purchase',
+      width: 190,
+      render: (_: unknown, record: Order) => {
+        const association = orderAssociations[record.order_id];
+        const linked = association?.linkedOrders[0];
+        const internalRemark = association?.internalRemark?.trim();
+        const canShipFromPurchase = record.status === OrderStatusEnum.PendingShipment
+          && !!linked?.trackingNumber
+          && !!linked?.logisticsCompany
+          && !record.order_detail?.delivery_info?.delivery_product_info?.length;
+        const canOpenTaobaoRefund = record.status === OrderStatusEnum.CancelledByAfterSale
+          && linked?.platform === 'taobao'
+          && !!linked.platformOrderId;
+        return (
+          <div style={{ display: 'grid', gap: 3 }}>
+            {internalRemark && (
+              <Text style={{ fontSize: 12, color: '#cf1322' }} title={internalRemark}>
+                备注: {internalRemark.length > 22 ? `${internalRemark.substring(0, 22)}...` : internalRemark}
+              </Text>
+            )}
+            {linked ? (
+              <>
+                <Text style={{ fontSize: 12, color: '#0958d9' }} title={linked.platformOrderId}>
+                  {linked.platform === 'taobao' ? '淘宝' : linked.platform}: {linked.platformOrderId || '-'}
+                </Text>
+                {linked.platformOrderStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>状态: {linked.platformOrderStatus}</Text>
+                )}
+                {linked.logisticsStatus && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>物流: {linked.logisticsStatus}</Text>
+                )}
+                {linked.trackingNumber && (
+                  <Text type="secondary" style={{ fontSize: 12 }} title={linked.trackingNumber}>
+                    单号: {linked.trackingNumber.length > 18 ? `${linked.trackingNumber.substring(0, 18)}...` : linked.trackingNumber}
+                  </Text>
+                )}
+                {linked.platform === 'taobao' && linked.platformOrderId && (
+                  <>
+                    <Button type="link" size="small" onClick={() => openTaobaoOrder(linked.platformOrderId)} style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}>
+                      打开淘宝订单
+                    </Button>
+                    <Button
+                      type="link"
+                      size="small"
+                      loading={checkingPurchaseOrderIds.has(record.order_id)}
+                      onClick={() => handleCheckPurchaseOrder(record)}
+                      style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                    >
+                      检查发货状态
+                    </Button>
+                  </>
+                )}
+                {canOpenTaobaoRefund && (
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    loading={preparingTaobaoRefundOrderIds.has(record.order_id)}
+                    onClick={() => handlePrepareTaobaoRefund(record)}
+                    style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                  >
+                    申请退款
+                  </Button>
+                )}
+                {linked.trackingNumber && (
+                  <Button
+                    type="link"
+                    size="small"
+                    disabled={!canShipFromPurchase}
+                    loading={shippingFromPurchaseOrderIds.has(record.order_id)}
+                    onClick={() => shipFromPurchase(record)}
+                    title={!canShipFromPurchase ? '仅待发货订单且已填写快递公司和快递单号时可回填' : undefined}
+                    style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}
+                  >
+                    回填发货
+                  </Button>
+                )}
+              </>
+            ) : (
+              !internalRemark && <Text type="secondary" style={{ fontSize: 12 }}>未关联采购单</Text>
+            )}
+            <Button type="link" size="small" onClick={() => openAssociationEditor(record)} style={{ padding: 0, height: 18, fontSize: 12, justifySelf: 'start' }}>
+              {association ? '编辑采购单' : '添加采购单'}
+            </Button>
+          </div>
+        );
+      },
+    },
+    {
       title: '操作',
       key: 'action',
-      width: 70,
-      render: (_: unknown, record: Order) => (
-        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
-          详情
-        </Button>
-      ),
+      width: 110,
+      render: (_: unknown, record: Order) => {
+        const product = firstProduct(record);
+        const sources = product?.product_id ? productSources[product.product_id] || [] : [];
+        return (
+          <Flex vertical align="flex-start">
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
+              详情
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<LinkOutlined />}
+              disabled={!product?.product_id}
+              onClick={() => product && openSourceManager(product)}
+            >
+              管理货源
+            </Button>
+            {record.status === OrderStatusEnum.PendingShipment && product?.product_id && sources.length > 0 && (
+              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => openShipSources(record, product)}>
+                去发货
+              </Button>
+            )}
+          </Flex>
+        );
+      },
     },
   ];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
-        <Tag.CheckableTagGroup
-          options={STATUS_FILTER_OPTIONS}
-          value={activeStatus ?? 'all'}
-          onChange={handleStatusChange}
-        />
-        <Flex gap={8} align="center">
-          <Input.Search
-            size="small"
-            addonBefore={
-              <Select value={searchType} onChange={setSearchType} options={SEARCH_TYPE_OPTIONS} style={{ width: 120 }} />
-            }
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            onSearch={handleSearch}
-            placeholder="输入关键字搜索"
-            allowClear
-            style={{ flex: 1, maxWidth: 480 }}
-            enterButton="搜索"
-          />
-          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
-          <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
-        </Flex>
-        {error && (
-          <Alert type="error" title={error} showIcon closable={{ onClose: clearError }} />
-        )}
-      </Flex>
+      <OrderToolbar
+        activeStatus={activeStatus}
+        timeScope={timeScope}
+        searchActive={!!searchKeyword.trim()}
+        searchType={searchType}
+        searchKeyword={searchKeyword}
+        loading={loading}
+        error={error}
+        onStatusChange={handleStatusChange}
+        onTimeScopeChange={handleTimeScopeChange}
+        onSearchTypeChange={setSearchType}
+        onSearchKeywordChange={setSearchKeyword}
+        onSearch={handleSearch}
+        onRefresh={() => fetchOrders(activeStatus, false, timeScope)}
+        onClearError={clearError}
+      />
 
       <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
         <Table
@@ -356,7 +682,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           size="small"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1100, y: scrollY }}
+          scroll={{ x: 1290, y: scrollY }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },
@@ -445,21 +771,23 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             )}
 
             {detailOrder.order_detail?.delivery_info?.address_info && (
-              <Descriptions
-                size="small"
-                column={1}
-                bordered
-                title="收货信息"
-                items={[
-                  { key: 'userName', label: '收货人', children: detailOrder.order_detail.delivery_info.address_info.user_name },
-                  { key: 'telNumber', label: '电话', children: detailOrder.order_detail.delivery_info.address_info.tel_number },
-                  {
-                    key: 'address',
-                    label: '地址',
-                    children: `${detailOrder.order_detail.delivery_info.address_info.province_name}${detailOrder.order_detail.delivery_info.address_info.city_name}${detailOrder.order_detail.delivery_info.address_info.county_name}${detailOrder.order_detail.delivery_info.address_info.detail_info}`,
-                  },
-                ]}
-              />
+              (() => {
+                const address = detailOrder.order_detail.delivery_info.address_info;
+                const phone = getOrderPhoneDisplay(address);
+                return (
+                  <Descriptions
+                    size="small"
+                    column={1}
+                    bordered
+                    title="收货信息"
+                    items={[
+                      { key: 'userName', label: '收货人', children: address.user_name },
+                      { key: 'telNumber', label: phone.label, children: phone.value || '-' },
+                      { key: 'address', label: '地址', children: formatOrderAddressLine(address) },
+                    ]}
+                  />
+                );
+              })()
             )}
 
             {detailOrder.order_detail?.delivery_info?.delivery_product_info?.length > 0 && (
@@ -505,6 +833,42 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           <Empty description="获取订单详情失败" />
         )}
       </Modal>
+
+      <SourceManagementModal
+        open={sourceModalOpen}
+        product={sourceProduct}
+        rows={sourceRows}
+        saving={sourceSaving}
+        onRowsChange={setSourceRows}
+        onCancel={() => setSourceModalOpen(false)}
+        onSave={saveSources}
+      />
+
+      <ShippingSourceModal
+        open={shipSourceModalOpen}
+        product={shipSourceProduct}
+        sources={shipSourceProduct ? productSources[shipSourceProduct.product_id] || [] : []}
+        onCancel={() => setShipSourceModalOpen(false)}
+        onOpenShipping={openShippingSession}
+      />
+
+      <ShippingAssistantDrawer
+        open={shippingAssistantOpen}
+        session={shippingSession}
+        addressCache={shippingSession ? realAddressCaches[shippingSession.orderId] : undefined}
+        onClose={() => setShippingAssistantOpen(false)}
+        onFetchAddress={fetchRealAddress}
+        onFillCheckoutAddress={handleFillCheckoutAddress}
+      />
+
+      <OrderAssociationModal
+        open={associationModalOpen}
+        association={associationOrder ? orderAssociations[associationOrder.order_id] : undefined}
+        saving={associationSaving}
+        onCancel={() => setAssociationModalOpen(false)}
+        onSave={handleSaveAssociation}
+        onOpenTaobaoOrder={openTaobaoOrder}
+      />
     </div>
   );
 };

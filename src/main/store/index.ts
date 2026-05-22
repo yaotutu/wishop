@@ -1,8 +1,11 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, LinkedPlatformOrder, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
 import { createLogger } from '../utils/logger';
+import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
+import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
+import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
 
 export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 export type Account = FullAccount;
@@ -23,6 +26,11 @@ export interface StoreSchema {
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
+  licenseState?: LicenseState;
+  scheduledJobs?: ScheduledJob[];
+  globalLogs?: GlobalLogEntry[];
+  notifications?: NotificationEntry[];
+  notificationPreference?: NotificationPreference;
 }
 
 const store = new Store<StoreSchema>({
@@ -71,6 +79,18 @@ function migrateIfNeeded(): void {
         account.violationWords = [];
         changed = true;
       }
+      if (!('productSources' in account)) {
+        account.productSources = [];
+        changed = true;
+      }
+      if (!('orderAssociations' in account)) {
+        account.orderAssociations = [];
+        changed = true;
+      }
+      if (!('realAddressCaches' in account)) {
+        account.realAddressCaches = [];
+        changed = true;
+      }
     }
     if (changed) store.set('accounts', rawAccounts as FullAccount[]);
     return;
@@ -98,6 +118,9 @@ function migrateIfNeeded(): void {
     }] : [],
     taskConfig: oldTaskConfig,
     violationWords: [],
+    productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
     logs: store.get('logs') || [],
     createdAt: Date.now(),
   };
@@ -133,6 +156,9 @@ export function addAccount(name: string, config: Config): FullAccount {
     schedulers: [],
     taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
     violationWords: [],
+    productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
     logs: [],
     createdAt: Date.now(),
   };
@@ -224,6 +250,73 @@ export function removeScheduler(accountId: string, taskId: string): void {
   store.set('accounts', accounts);
 }
 
+// --- Global scheduled jobs ---
+
+const EMPTY_SCHEDULED_JOB_STATS: ScheduledJobRunStats = {
+  lastRunDate: '',
+  todayRunCount: 0,
+};
+
+export function getScheduledJobs(): ScheduledJob[] {
+  return store.get('scheduledJobs') || [];
+}
+
+export function addScheduledJob(input: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): ScheduledJob {
+  const timestamp = Date.now();
+  const job: ScheduledJob = {
+    ...input,
+    id: uuidv4(),
+    stats: { ...EMPTY_SCHEDULED_JOB_STATS },
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+  store.set('scheduledJobs', [...getScheduledJobs(), job]);
+  return job;
+}
+
+export function updateScheduledJob(jobId: string, patch: Partial<ScheduledJob>): void {
+  store.set('scheduledJobs', getScheduledJobs().map(job => (
+    job.id === jobId ? { ...job, ...patch, updatedAt: Date.now() } : job
+  )));
+}
+
+export function removeScheduledJob(jobId: string): void {
+  store.set('scheduledJobs', getScheduledJobs().filter(job => job.id !== jobId));
+}
+
+export function removeScheduledJobsForAccount(accountId: string): void {
+  store.set('scheduledJobs', getScheduledJobs()
+    .filter(job => job.scope !== 'account' || job.accountId !== accountId)
+    .map(job => {
+      if (job.scope !== 'global' || !job.accountStats?.[accountId]) return job;
+      const { [accountId]: _removed, ...accountStats } = job.accountStats;
+      return { ...job, accountStats, updatedAt: Date.now() };
+    }));
+}
+
+export function updateScheduledJobStats(jobId: string, patch: Partial<ScheduledJobRunStats>): void {
+  store.set('scheduledJobs', getScheduledJobs().map(job => (
+    job.id === jobId
+      ? { ...job, stats: { ...job.stats, ...patch }, updatedAt: Date.now() }
+      : job
+  )));
+}
+
+export function updateScheduledJobAccountStats(jobId: string, accountId: string, patch: Partial<ScheduledJobRunStats>): void {
+  store.set('scheduledJobs', getScheduledJobs().map(job => {
+    if (job.id !== jobId) return job;
+    const prev = job.accountStats?.[accountId] || EMPTY_SCHEDULED_JOB_STATS;
+    return {
+      ...job,
+      accountStats: {
+        ...(job.accountStats || {}),
+        [accountId]: { ...prev, ...patch },
+      },
+      updatedAt: Date.now(),
+    };
+  }));
+}
+
 // --- Per-account taskConfig ---
 
 export function getTaskConfig(accountId: string): TaskConfig {
@@ -305,6 +398,123 @@ export function setViolationWords(accountId: string, words: string[]): void {
   store.set('accounts', accounts);
 }
 
+// --- Per-account product sources ---
+
+export function getProductSources(accountId: string): ProductSourceBinding[] {
+  return getAccount(accountId)?.productSources || [];
+}
+
+export function setProductSources(accountId: string, productId: string, sources: ProductSourceItem[]): ProductSourceBinding {
+  const now = Date.now();
+  const normalizedSources: ProductSourceItem[] = sources
+    .map(source => ({
+      id: source.id || uuidv4(),
+      url: source.url.trim(),
+      quantity: Number.isFinite(source.quantity) && source.quantity > 0 ? source.quantity : 1,
+      remark: source.remark.trim(),
+      createdAt: source.createdAt || now,
+      updatedAt: now,
+    }))
+    .filter(source => source.url);
+  const binding: ProductSourceBinding = { productId, sources: normalizedSources };
+
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return binding;
+  const existing = accounts[idx].productSources || [];
+  accounts[idx].productSources = normalizedSources.length > 0
+    ? [...existing.filter(item => item.productId !== productId), binding]
+    : existing.filter(item => item.productId !== productId);
+  store.set('accounts', accounts);
+  return binding;
+}
+
+export function removeProductSource(accountId: string, productId: string, sourceId: string): ProductSourceBinding {
+  const sources = getProductSources(accountId)
+    .find(item => item.productId === productId)
+    ?.sources
+    .filter(source => source.id !== sourceId) || [];
+  return setProductSources(accountId, productId, sources);
+}
+
+// --- Per-account order associations ---
+
+function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number): LinkedPlatformOrder {
+  return {
+    id: order.id || uuidv4(),
+    platform: order.platform || 'taobao',
+    platformOrderId: order.platformOrderId?.trim() || '',
+    platformOrderStatus: order.platformOrderStatus?.trim() || '',
+    logisticsStatus: order.logisticsStatus?.trim() || '',
+    logisticsCompany: order.logisticsCompany?.trim() || '',
+    trackingNumber: order.trackingNumber?.trim() || '',
+    remark: order.remark?.trim() || '',
+    createdAt: order.createdAt || now,
+    updatedAt: now,
+  };
+}
+
+export function getOrderAssociations(accountId: string): OrderAssociation[] {
+  return getAccount(accountId)?.orderAssociations || [];
+}
+
+export function setOrderAssociation(
+  accountId: string,
+  orderId: string,
+  input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+): OrderAssociation {
+  const now = Date.now();
+  const existing = getOrderAssociations(accountId).find(item => item.orderId === orderId);
+  const linkedOrders = input.linkedOrders
+    .map(order => normalizeLinkedOrder(order, now))
+    .filter(order => order.platformOrderId || order.platformOrderStatus || order.logisticsStatus || order.logisticsCompany || order.trackingNumber || order.remark);
+  const association: OrderAssociation = {
+    orderId,
+    internalRemark: input.internalRemark.trim(),
+    linkedOrders,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return association;
+  const associations = accounts[idx].orderAssociations || [];
+  const hasContent = association.internalRemark || association.linkedOrders.length > 0;
+  accounts[idx].orderAssociations = hasContent
+    ? [...associations.filter(item => item.orderId !== orderId), association]
+    : associations.filter(item => item.orderId !== orderId);
+  store.set('accounts', accounts);
+  return association;
+}
+
+// --- Per-account real address cache ---
+
+export function getRealAddressCaches(accountId: string): OrderRealAddressCache[] {
+  return getAccount(accountId)?.realAddressCaches || [];
+}
+
+export function getRealAddressCache(accountId: string, orderId: string): OrderRealAddressCache | null {
+  return getRealAddressCaches(accountId).find(item => item.orderId === orderId) || null;
+}
+
+export function setRealAddressCache(accountId: string, orderId: string, address: OrderAddressInfo): OrderRealAddressCache {
+  const now = Date.now();
+  const cache: OrderRealAddressCache = {
+    orderId,
+    address,
+    fetchedAt: now,
+    updatedAt: now,
+  };
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return cache;
+  const caches = accounts[idx].realAddressCaches || [];
+  accounts[idx].realAddressCaches = [...caches.filter(item => item.orderId !== orderId), cache];
+  store.set('accounts', accounts);
+  return cache;
+}
+
 // --- Global blacklist rules ---
 
 const DEFAULT_BLACKLIST: BlacklistRule[] = [
@@ -370,6 +580,150 @@ export function setStatusRules(rules: StatusRule[]): void {
 
 export function getDefaultStatusRules(): StatusRule[] {
   return DEFAULT_STATUS_RULES;
+}
+
+// --- License state ---
+
+function createDefaultLicenseState(): LicenseState {
+  const stored = store.get('licenseState');
+  return {
+    enforcementEnabled: false,
+    status: 'inactive',
+    plan: 'none',
+    deviceId: stored?.deviceId || uuidv4(),
+  };
+}
+
+export function getLicenseState(): LicenseState {
+  const stored = store.get('licenseState');
+  return {
+    ...createDefaultLicenseState(),
+    ...stored,
+    enforcementEnabled: stored?.enforcementEnabled === true,
+  };
+}
+
+export function setLicenseState(patch: Partial<LicenseState>): LicenseState {
+  const next = { ...getLicenseState(), ...patch };
+  store.set('licenseState', next);
+  return next;
+}
+
+// --- Global logs ---
+
+export function getGlobalLogs(): GlobalLogEntry[] {
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return (store.get('globalLogs') || []).filter(log => log.timestamp > sevenDaysAgo);
+}
+
+export function addGlobalLog(input: GlobalLogInput): GlobalLogEntry {
+  const entry: GlobalLogEntry = {
+    ...input,
+    id: uuidv4(),
+    timestamp: Date.now(),
+  };
+  store.set('globalLogs', [entry, ...getGlobalLogs()].slice(0, 1000));
+  maybeCreateNotification(entry);
+  return entry;
+}
+
+export function clearGlobalLogs(): void {
+  store.set('globalLogs', []);
+}
+
+// --- Notifications ---
+
+export function getNotificationPreference(): NotificationPreference {
+  return {
+    ...DEFAULT_NOTIFICATION_PREFERENCE,
+    ...(store.get('notificationPreference') || {}),
+    levelEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.levelEnabled,
+      ...(store.get('notificationPreference')?.levelEnabled || {}),
+    },
+    moduleEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.moduleEnabled,
+      ...(store.get('notificationPreference')?.moduleEnabled || {}),
+    },
+    eventTypeEnabled: {
+      ...DEFAULT_NOTIFICATION_PREFERENCE.eventTypeEnabled,
+      ...(store.get('notificationPreference')?.eventTypeEnabled || {}),
+    },
+  };
+}
+
+export function updateNotificationPreference(patch: Partial<NotificationPreference>): NotificationPreference {
+  const current = getNotificationPreference();
+  const next: NotificationPreference = {
+    ...current,
+    ...patch,
+    levelEnabled: { ...current.levelEnabled, ...(patch.levelEnabled || {}) },
+    moduleEnabled: { ...current.moduleEnabled, ...(patch.moduleEnabled || {}) },
+    eventTypeEnabled: { ...current.eventTypeEnabled, ...(patch.eventTypeEnabled || {}) },
+  };
+  store.set('notificationPreference', next);
+  return next;
+}
+
+export function getNotifications(): NotificationEntry[] {
+  return store.get('notifications') || [];
+}
+
+function shouldNotify(log: GlobalLogEntry): boolean {
+  const preference = getNotificationPreference();
+  return preference.inAppEnabled
+    && preference.levelEnabled[log.level] !== false
+    && preference.moduleEnabled[log.module] !== false
+    && preference.eventTypeEnabled[log.eventType] !== false;
+}
+
+function maybeCreateNotification(log: GlobalLogEntry): void {
+  if (!shouldNotify(log)) return;
+  const notification: NotificationEntry = {
+    id: uuidv4(),
+    sourceLogId: log.id,
+    timestamp: log.timestamp,
+    channel: 'inApp',
+    deliveryStatus: 'delivered',
+    level: log.level,
+    module: log.module,
+    eventType: log.eventType,
+    title: log.title,
+    detail: log.detail,
+    errorMessage: log.error?.message,
+    accountId: log.accountId,
+    accountName: log.accountName,
+    taskKind: log.taskKind,
+    runId: log.runId,
+    metadata: log.metadata,
+  };
+  store.set('notifications', [notification, ...getNotifications()].slice(0, 500));
+}
+
+export function markNotificationRead(notificationId: string): NotificationEntry[] {
+  const timestamp = Date.now();
+  const next = getNotifications().map(notification => (
+    notification.id === notificationId
+      ? { ...notification, readAt: notification.readAt || timestamp, deliveryStatus: 'read' as const }
+      : notification
+  ));
+  store.set('notifications', next);
+  return next;
+}
+
+export function markAllNotificationsRead(): NotificationEntry[] {
+  const timestamp = Date.now();
+  const next = getNotifications().map(notification => ({
+    ...notification,
+    readAt: notification.readAt || timestamp,
+    deliveryStatus: 'read' as const,
+  }));
+  store.set('notifications', next);
+  return next;
+}
+
+export function clearNotifications(): void {
+  store.set('notifications', []);
 }
 
 export default store;

@@ -2,11 +2,19 @@ import { registerAccountHandlers } from './handlers/accounts';
 import { registerBrowserHandlers } from './handlers/browser';
 import { registerConfigHandlers } from './handlers/config';
 import { registerDraftHandlers } from './handlers/drafts';
+import { registerGlobalLogHandlers } from './handlers/globalLogs';
 import { registerLogHandlers } from './handlers/logs';
+import { registerLicenseHandlers } from './handlers/license';
+import { registerNotificationHandlers } from './handlers/notifications';
 import { registerOrderHandlers } from './handlers/orders';
+import { registerOrderAssociationHandlers } from './handlers/orderAssociations';
+import { registerProductSourceHandlers } from './handlers/productSources';
 import { registerQuotaHandlers } from './handlers/quota';
+import { registerRealAddressHandlers } from './handlers/realAddresses';
 import { registerSchedulerHandlers } from './handlers/scheduler';
+import { registerScheduledJobHandlers } from './handlers/scheduledJobs';
 import { registerTaskHandlers } from './handlers/task';
+import { registerTaobaoAutomationHandlers } from './handlers/taobaoAutomation';
 import { registerViolationHandlers } from './handlers/violation';
 import { registerBlacklistRulesHandlers } from './handlers/blacklistRules';
 import { registerSkipCodeRulesHandlers } from './handlers/skipCodeRules';
@@ -21,6 +29,8 @@ interface PaginationState {
 interface OrderPaginationState {
   nextKey: string;
   hasMore: boolean;
+  windowEndTime: number;
+  minStartTime: number;
 }
 
 interface ScanSessionState {
@@ -42,10 +52,18 @@ export function registerHandlers(): void {
   registerBrowserHandlers();
   registerConfigHandlers();
   registerDraftHandlers(context);
+  registerGlobalLogHandlers();
   registerLogHandlers();
+  registerLicenseHandlers();
+  registerNotificationHandlers();
   registerOrderHandlers(context);
+  registerOrderAssociationHandlers();
+  registerProductSourceHandlers();
   registerQuotaHandlers();
+  registerRealAddressHandlers();
   registerSchedulerHandlers();
+  registerScheduledJobHandlers();
+  registerTaobaoAutomationHandlers();
   registerTaskHandlers(context);
   registerViolationHandlers(context);
   registerBlacklistRulesHandlers();
