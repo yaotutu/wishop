@@ -278,13 +278,21 @@ async (address) => {
     return { divisions, detail, name, phone, warnings };
   };
   const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  const waitForElement = async (selector, label) => {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const element = Array.from(document.querySelectorAll(selector)).find(isVisible);
+      if (element) return element;
+      await sleep(120);
+    }
+    result.warnings.push('未找到' + label);
+    return null;
+  };
   const result = { filledFields: [], warnings: [] };
   const normalized = normalizeCheckoutAddress(address);
   result.warnings.push(...normalized.warnings);
-  const setValue = (selector, value, label) => {
-    const el = Array.from(document.querySelectorAll(selector)).find(isVisible);
+  const setValue = async (selector, value, label) => {
+    const el = await waitForElement(selector, label + '输入框');
     if (!el) {
-      result.warnings.push('未找到' + label + '输入框');
       return;
     }
     const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -305,6 +313,7 @@ async (address) => {
     }
     return null;
   };
+  await waitForElement('input#fullName[name="fullName"], input[name="fullName"], input#mobile[name="mobile"], input[name="mobile"], .cndzk-entrance-associate-area-textarea, textarea, .cndzk-entrance-division-header-click', '地址表单控件');
   const trigger = Array.from(document.querySelectorAll('.cndzk-entrance-division-header-click')).find(isVisible);
   if (!trigger) {
     result.warnings.push('未找到省市区街道选择器');
@@ -323,9 +332,9 @@ async (address) => {
       await sleep(220);
     }
   }
-  setValue('.cndzk-entrance-associate-area-textarea, textarea', normalized.detail, '详细地址');
-  setValue('input#fullName[name="fullName"], input[name="fullName"]', normalized.name, '收货人');
-  setValue('input#mobile[name="mobile"], input[name="mobile"]', normalized.phone, '手机号');
+  await setValue('.cndzk-entrance-associate-area-textarea, textarea', normalized.detail, '详细地址');
+  await setValue('input#fullName[name="fullName"], input[name="fullName"]', normalized.name, '收货人');
+  await setValue('input#mobile[name="mobile"], input[name="mobile"]', normalized.phone, '手机号');
   return result;
 }
 `;
@@ -395,9 +404,15 @@ export async function fillCurrentTaobaoCheckoutAddress(address: OrderAddressInfo
     return { filledFields: [], warnings: [openResult.reason || '未找到新建地址表单'] };
   }
 
-  let addressFrame: { url: string; executeJavaScript: (code: string) => Promise<unknown> } | undefined;
+  type FillFrame = { url: string; frames?: FillFrame[]; executeJavaScript: (code: string) => Promise<unknown> };
+  const collectFrames = (frame: FillFrame): FillFrame[] => [
+    frame,
+    ...(frame.frames || []).flatMap(child => collectFrames(child)),
+  ];
+
+  let addressFrame: FillFrame | undefined;
   for (let attempt = 0; attempt < 30; attempt++) {
-    const frames = [win.webContents.mainFrame, ...win.webContents.mainFrame.frames] as Array<{ url: string; executeJavaScript: (code: string) => Promise<unknown> }>;
+    const frames = collectFrames(win.webContents.mainFrame as unknown as FillFrame);
     addressFrame = frames.find(frame => frame.url.includes('/member/fresh/deliver_address_frame.htm'));
     if (addressFrame) break;
     await sleep(150);
