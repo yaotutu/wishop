@@ -22,6 +22,7 @@ export interface ScheduledJob<TPayload = unknown> {
   module: ScheduledJobModule;
   jobType: ScheduledJobType;
   scope: ScheduledJobScope;
+  singletonKey?: string;
   accountId?: string;
   excludedAccountIds?: string[];
   cronExpression: string;

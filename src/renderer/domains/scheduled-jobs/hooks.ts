@@ -9,7 +9,7 @@ export function useScheduledJobs() {
   const query = useQuery({
     queryKey: scheduledJobsQueryKey,
     queryFn: () => scheduledJobsClient.list(),
-    initialData: [] as ScheduledJob[],
+    placeholderData: [] as ScheduledJob[],
   });
 
   const addMutation = useMutation({
@@ -17,6 +17,11 @@ export function useScheduledJobs() {
     onSuccess: job => {
       queryClient.setQueryData<ScheduledJob[]>(scheduledJobsQueryKey, previous => [job, ...(previous || [])]);
     },
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: (job: ScheduledJobInput) => scheduledJobsClient.upsert(job),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: scheduledJobsQueryKey }),
   });
 
   const updateMutation = useMutation({
@@ -40,6 +45,7 @@ export function useScheduledJobs() {
     loading: query.isFetching,
     fetchJobs: () => query.refetch(),
     addJob: (job: ScheduledJobInput) => addMutation.mutateAsync(job),
+    upsertJob: (job: ScheduledJobInput) => upsertMutation.mutateAsync(job),
     updateJob: (jobId: string, patch: Partial<ScheduledJob>) => updateMutation.mutateAsync({ jobId, patch }),
     removeJob: (jobId: string) => removeMutation.mutateAsync(jobId),
   };

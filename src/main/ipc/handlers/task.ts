@@ -1,5 +1,5 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { createScopedAddLog, getConfig, getTaskConfig, setTaskConfig, getBlacklistRules, getSkipKeywords, getStatusRules } from '../../store';
+import { createScopedAddLog, getConfig, getTaskConfig, setTaskConfig, getEffectiveBlacklistRules, getEffectiveSkipKeywords, getEffectiveStatusRules } from '../../store';
 import type { TaskConfig, TaskCycleResult } from '../../../shared/types';
 import { getErrorMessage } from '../../../shared/errors';
 import { getClient } from '../../wxshop/client-registry';
@@ -42,9 +42,9 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
     return withLogForwarding(event, accountId, `log:added:${accountId}`, async () => {
       try {
         const api = getClient(accountId, getConfig(accountId));
-        const blacklistRules = getBlacklistRules();
-        const skipKeywords = getSkipKeywords();
-        const statusRules = getStatusRules();
+        const blacklistRules = getEffectiveBlacklistRules(accountId);
+        const skipKeywords = getEffectiveSkipKeywords(accountId);
+        const statusRules = getEffectiveStatusRules(accountId);
         return await jobRunner.run(taskJobId(accountId), ({ signal }) => (
           runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules, skipKeywords, statusRules)
         ));

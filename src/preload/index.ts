@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
-import type { Config, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, ViolationScanStepResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult, ShippingAssistantSession } from '../shared/types';
+import type { Config, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, ViolationScanStepResult, BlacklistRule, StatusRule, ListingRulesConfig, ListingSettings, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult, ShippingAssistantSession } from '../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../shared/settings';
@@ -160,6 +160,8 @@ const wishopAPI = {
       ipcRenderer.invoke('scheduledJobs:list'),
     add: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
       ipcRenderer.invoke('scheduledJobs:add', job),
+    upsert: (job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): Promise<ScheduledJob> =>
+      ipcRenderer.invoke('scheduledJobs:upsert', job),
     update: (jobId: string, patch: Partial<ScheduledJob>): Promise<void> =>
       ipcRenderer.invoke('scheduledJobs:update', jobId, patch),
     remove: (jobId: string): Promise<void> =>
@@ -180,6 +182,20 @@ const wishopAPI = {
       ipcRenderer.invoke('taskConfig:get', accountId),
     set: (accountId: string, config: TaskConfig): Promise<void> =>
       ipcRenderer.invoke('taskConfig:set', accountId, config),
+  },
+  listingSettings: {
+    get: (accountId: string): Promise<ListingSettings> =>
+      ipcRenderer.invoke('listingSettings:get', accountId),
+    setGlobalTaskConfig: (config: TaskConfig): Promise<void> =>
+      ipcRenderer.invoke('listingSettings:setGlobalTaskConfig', config),
+    setAccountTaskConfigEnabled: (accountId: string, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke('listingSettings:setAccountTaskConfigEnabled', accountId, enabled),
+    setGlobalScheduledEnabled: (accountId: string, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke('listingSettings:setGlobalScheduledEnabled', accountId, enabled),
+    setAccountRulesEnabled: (accountId: string, enabled: boolean): Promise<void> =>
+      ipcRenderer.invoke('listingSettings:setAccountRulesEnabled', accountId, enabled),
+    setAccountRules: (accountId: string, rules: ListingRulesConfig): Promise<void> =>
+      ipcRenderer.invoke('listingSettings:setAccountRules', accountId, rules),
   },
   task: {
     run: (accountId: string, config: TaskConfig): Promise<TaskCycleResult> =>

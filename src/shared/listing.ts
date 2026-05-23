@@ -16,6 +16,8 @@ export interface TaskConfig {
   autoDeleteFailed: boolean;
 }
 
+export type ListingConfigSource = 'global' | 'account';
+
 export interface DraftProduct {
   productId: string;
   title: string;
@@ -60,4 +62,27 @@ export interface StatusRule {
   editStatus: number;
   label: string;
   action: StatusAction;
+}
+
+export interface ListingRulesConfig {
+  blacklistRules: BlacklistRule[];
+  skipKeywords: string[];
+  statusRules: StatusRule[];
+}
+
+export interface EffectiveListingRules extends ListingRulesConfig {
+  source: ListingConfigSource;
+}
+
+export interface ListingSettings {
+  globalTaskConfig: TaskConfig;
+  accountTaskConfig: TaskConfig;
+  effectiveTaskConfig: TaskConfig;
+  taskConfigSource: ListingConfigSource;
+  useAccountTaskConfig: boolean;
+  globalScheduledEnabled: boolean;
+  globalRules: ListingRulesConfig;
+  accountRules: ListingRulesConfig;
+  effectiveRules: EffectiveListingRules;
+  useAccountRules: boolean;
 }

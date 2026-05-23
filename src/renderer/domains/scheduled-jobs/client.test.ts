@@ -7,11 +7,12 @@ describe('scheduledJobsClient', () => {
     const job = { id: 'job-1' } as ScheduledJob;
     const list = vi.fn().mockResolvedValue([job]);
     const add = vi.fn().mockResolvedValue(job);
+    const upsert = vi.fn().mockResolvedValue(job);
     const update = vi.fn().mockResolvedValue(undefined);
     const remove = vi.fn().mockResolvedValue(undefined);
 
     vi.stubGlobal('window', {
-      wishop: { scheduledJobs: { list, add, update, remove } },
+      wishop: { scheduledJobs: { list, add, upsert, update, remove } },
     });
 
     const input = {
@@ -29,11 +30,13 @@ describe('scheduledJobsClient', () => {
 
     await expect(scheduledJobsClient.list()).resolves.toEqual([job]);
     await expect(scheduledJobsClient.add(input)).resolves.toBe(job);
+    await expect(scheduledJobsClient.upsert(input)).resolves.toBe(job);
     await scheduledJobsClient.update('job-1', { enabled: false });
     await scheduledJobsClient.remove('job-1');
 
     expect(list).toHaveBeenCalledTimes(1);
     expect(add).toHaveBeenCalledWith(input);
+    expect(upsert).toHaveBeenCalledWith(input);
     expect(update).toHaveBeenCalledWith('job-1', { enabled: false });
     expect(remove).toHaveBeenCalledWith('job-1');
   });

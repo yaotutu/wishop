@@ -6,6 +6,7 @@ import type {
   LicenseState,
   ScheduledJob,
   StatusRule,
+  TaskConfig,
 } from '../../shared/types';
 import type { GlobalLogEntry } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
@@ -30,6 +31,7 @@ export interface StoreSchema {
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
+  globalTaskConfig?: TaskConfig;
   licenseState?: LicenseState;
   scheduledJobs?: ScheduledJob[];
   globalLogs?: GlobalLogEntry[];

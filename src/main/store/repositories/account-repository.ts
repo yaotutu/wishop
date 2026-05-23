@@ -32,6 +32,11 @@ export function createAccountRepository(deps: AccountRepositoryDeps) {
         name,
         config,
         taskConfig: { ...DEFAULT_TASK_CONFIG },
+        listingSettings: {
+          useAccountTaskConfig: false,
+          useAccountRules: false,
+          globalScheduledEnabled: true,
+        },
         violationWords: [],
         productSources: [],
         orderAssociations: [],

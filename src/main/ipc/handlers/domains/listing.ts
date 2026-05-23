@@ -1,6 +1,7 @@
 import { registerBlacklistRulesHandlers } from '../blacklistRules';
 import { registerDraftHandlers } from '../drafts';
 import { registerLogHandlers } from '../logs';
+import { registerListingSettingsHandlers } from '../listingSettings';
 import { registerQuotaHandlers } from '../quota';
 import { registerScheduledJobHandlers } from '../scheduledJobs';
 import { registerSkipCodeRulesHandlers } from '../skipCodeRules';
@@ -12,6 +13,7 @@ type TaskContext = Parameters<typeof registerTaskHandlers>[0];
 
 export function registerListingDomainHandlers(context: DraftContext & TaskContext): void {
   registerDraftHandlers(context);
+  registerListingSettingsHandlers();
   registerTaskHandlers(context);
   registerQuotaHandlers();
   registerLogHandlers();

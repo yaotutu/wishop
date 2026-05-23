@@ -1,4 +1,4 @@
-import type { BlacklistRule, LogEntry, QuotaResult, StatusRule, TaskConfig, TaskCycleResult } from '../../../shared/listing';
+import type { BlacklistRule, ListingRulesConfig, ListingSettings, LogEntry, QuotaResult, StatusRule, TaskConfig, TaskCycleResult } from '../../../shared/listing';
 
 export const listingClient = {
   taskConfig: {
@@ -16,6 +16,26 @@ export const listingClient = {
     },
     onLog(accountId: string, callback: (log: LogEntry) => void): () => void {
       return window.wishop.task.onLog(accountId, callback);
+    },
+  },
+  settings: {
+    get(accountId: string): Promise<ListingSettings> {
+      return window.wishop.listingSettings.get(accountId);
+    },
+    saveGlobalTaskConfig(config: TaskConfig): Promise<void> {
+      return window.wishop.listingSettings.setGlobalTaskConfig(config);
+    },
+    setAccountTaskConfigEnabled(accountId: string, enabled: boolean): Promise<void> {
+      return window.wishop.listingSettings.setAccountTaskConfigEnabled(accountId, enabled);
+    },
+    setGlobalScheduledEnabled(accountId: string, enabled: boolean): Promise<void> {
+      return window.wishop.listingSettings.setGlobalScheduledEnabled(accountId, enabled);
+    },
+    setAccountRulesEnabled(accountId: string, enabled: boolean): Promise<void> {
+      return window.wishop.listingSettings.setAccountRulesEnabled(accountId, enabled);
+    },
+    saveAccountRules(accountId: string, rules: ListingRulesConfig): Promise<void> {
+      return window.wishop.listingSettings.setAccountRules(accountId, rules);
     },
   },
   logs: {

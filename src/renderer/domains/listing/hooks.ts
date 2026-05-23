@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BlacklistRule, LogEntry, QuotaResult, StatusRule, TaskConfig } from '../../../shared/listing';
+import type { BlacklistRule, ListingRulesConfig, ListingSettings, LogEntry, QuotaResult, StatusRule, TaskConfig } from '../../../shared/listing';
 import { isCredentialError } from '../../../shared/errors';
 import { useCredentialError } from '../../contexts/CredentialErrorContext';
 import { listingClient } from './client';
@@ -12,6 +12,71 @@ const defaultTaskConfig: TaskConfig = {
 };
 
 const emptyQuota: QuotaResult = { quota: 0, total: 0 };
+
+const defaultRules: ListingRulesConfig = {
+  blacklistRules: [],
+  skipKeywords: [],
+  statusRules: [],
+};
+
+const defaultListingSettings: ListingSettings = {
+  globalTaskConfig: defaultTaskConfig,
+  accountTaskConfig: defaultTaskConfig,
+  effectiveTaskConfig: defaultTaskConfig,
+  taskConfigSource: 'global',
+  useAccountTaskConfig: false,
+  globalScheduledEnabled: true,
+  globalRules: defaultRules,
+  accountRules: defaultRules,
+  effectiveRules: { ...defaultRules, source: 'global' },
+  useAccountRules: false,
+};
+
+export function useListingSettings(accountId: string) {
+  const queryClient = useQueryClient();
+  const queryKey = ['listing', accountId, 'settings'];
+  const query = useQuery({
+    queryKey,
+    enabled: !!accountId,
+    queryFn: () => listingClient.settings.get(accountId),
+    initialData: defaultListingSettings,
+  });
+  const invalidate = async () => {
+    await queryClient.invalidateQueries({ queryKey });
+    await queryClient.invalidateQueries({ queryKey: ['listing', accountId, 'taskConfig'] });
+  };
+  const saveGlobalTaskConfigMutation = useMutation({
+    mutationFn: (config: TaskConfig) => listingClient.settings.saveGlobalTaskConfig(config),
+    onSuccess: invalidate,
+  });
+  const setAccountTaskConfigEnabledMutation = useMutation({
+    mutationFn: (enabled: boolean) => listingClient.settings.setAccountTaskConfigEnabled(accountId, enabled),
+    onSuccess: invalidate,
+  });
+  const setGlobalScheduledEnabledMutation = useMutation({
+    mutationFn: (enabled: boolean) => listingClient.settings.setGlobalScheduledEnabled(accountId, enabled),
+    onSuccess: invalidate,
+  });
+  const setAccountRulesEnabledMutation = useMutation({
+    mutationFn: (enabled: boolean) => listingClient.settings.setAccountRulesEnabled(accountId, enabled),
+    onSuccess: invalidate,
+  });
+  const saveAccountRulesMutation = useMutation({
+    mutationFn: (rules: ListingRulesConfig) => listingClient.settings.saveAccountRules(accountId, rules),
+    onSuccess: invalidate,
+  });
+
+  return {
+    settings: query.data || defaultListingSettings,
+    loading: query.isLoading,
+    fetchSettings: () => query.refetch(),
+    saveGlobalTaskConfig: (config: TaskConfig) => saveGlobalTaskConfigMutation.mutateAsync(config),
+    setAccountTaskConfigEnabled: (enabled: boolean) => setAccountTaskConfigEnabledMutation.mutateAsync(enabled),
+    setGlobalScheduledEnabled: (enabled: boolean) => setGlobalScheduledEnabledMutation.mutateAsync(enabled),
+    setAccountRulesEnabled: (enabled: boolean) => setAccountRulesEnabledMutation.mutateAsync(enabled),
+    saveAccountRules: (rules: ListingRulesConfig) => saveAccountRulesMutation.mutateAsync(rules),
+  };
+}
 
 export function useTaskConfig(accountId: string) {
   const queryClient = useQueryClient();

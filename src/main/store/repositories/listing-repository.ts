@@ -1,4 +1,4 @@
-import type { BlacklistRule, FullAccount, LogEntry, StatusRule, TaskConfig } from '../../../shared/types';
+import type { BlacklistRule, FullAccount, ListingRulesConfig, ListingSettings, LogEntry, StatusRule, TaskConfig } from '../../../shared/types';
 
 const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -53,6 +53,38 @@ function mergeByEditStatus(stored: StatusRule[] | undefined): StatusRule[] {
 
 export function createListingRepository(deps: ListingRepositoryDeps) {
   const getAccount = (accountId: string): FullAccount | undefined => deps.getAccounts().find(account => account.id === accountId);
+  const defaultTaskConfig = (): TaskConfig => ({ ...DEFAULT_TASK_CONFIG });
+  const getGlobalTaskConfig = (): TaskConfig => deps.getGlobal<TaskConfig>('globalTaskConfig') || defaultTaskConfig();
+  const getGlobalRules = (): ListingRulesConfig => ({
+    blacklistRules: mergeByCode(deps.getGlobal<BlacklistRule[]>('blacklistRules')),
+    skipKeywords: deps.getGlobal<string[]>('skipKeywords') || [],
+    statusRules: mergeByEditStatus(deps.getGlobal<StatusRule[]>('statusRules')),
+  });
+  const getAccountTaskConfig = (accountId: string): TaskConfig => getAccount(accountId)?.taskConfig || getGlobalTaskConfig();
+  const getAccountRules = (accountId: string): ListingRulesConfig => {
+    const account = getAccount(accountId);
+    return account?.listingRules || getGlobalRules();
+  };
+  const updateAccountListingSettings = (
+    accountId: string,
+    patch: NonNullable<FullAccount['listingSettings']>,
+    extra?: Partial<Pick<FullAccount, 'taskConfig' | 'listingRules'>>,
+  ): void => {
+    const accounts = deps.getAccounts();
+    deps.setAccounts(accounts.map(account => (
+      account.id === accountId
+        ? {
+            ...account,
+            ...extra,
+            listingSettings: {
+              globalScheduledEnabled: true,
+              ...(account.listingSettings || {}),
+              ...patch,
+            },
+          }
+        : account
+    )));
+  };
 
   return {
     getDefaultBlacklistCodes(): number[] {
@@ -63,13 +95,76 @@ export function createListingRepository(deps: ListingRepositoryDeps) {
       return DEFAULT_STATUS_RULES;
     },
 
+    getGlobalTaskConfig(): TaskConfig {
+      return getGlobalTaskConfig();
+    },
+
+    setGlobalTaskConfig(taskConfig: TaskConfig): void {
+      deps.setGlobal('globalTaskConfig', taskConfig);
+    },
+
     getTaskConfig(accountId: string): TaskConfig {
-      return getAccount(accountId)?.taskConfig || DEFAULT_TASK_CONFIG;
+      return getAccountTaskConfig(accountId);
     },
 
     setTaskConfig(accountId: string, taskConfig: TaskConfig): void {
       const accounts = deps.getAccounts();
-      deps.setAccounts(accounts.map(account => account.id === accountId ? { ...account, taskConfig } : account));
+      deps.setAccounts(accounts.map(account => (
+        account.id === accountId
+          ? {
+              ...account,
+              taskConfig,
+              listingSettings: {
+                globalScheduledEnabled: true,
+                ...(account.listingSettings || {}),
+                useAccountTaskConfig: true,
+              },
+            }
+          : account
+      )));
+    },
+
+    setAccountTaskConfigEnabled(accountId: string, enabled: boolean): void {
+      updateAccountListingSettings(accountId, { useAccountTaskConfig: enabled });
+    },
+
+    getEffectiveTaskConfig(accountId: string): TaskConfig {
+      const account = getAccount(accountId);
+      return account?.listingSettings?.useAccountTaskConfig
+        ? getAccountTaskConfig(accountId)
+        : getGlobalTaskConfig();
+    },
+
+    getListingSettings(accountId: string): ListingSettings {
+      const account = getAccount(accountId);
+      const useAccountTaskConfig = !!account?.listingSettings?.useAccountTaskConfig;
+      const useAccountRules = !!account?.listingSettings?.useAccountRules;
+      const globalScheduledEnabled = account?.listingSettings?.globalScheduledEnabled !== false;
+      const globalRules = getGlobalRules();
+      const accountRules = getAccountRules(accountId);
+      const effectiveRules = useAccountRules
+        ? { ...accountRules, source: 'account' as const }
+        : { ...globalRules, source: 'global' as const };
+      return {
+        globalTaskConfig: getGlobalTaskConfig(),
+        accountTaskConfig: getAccountTaskConfig(accountId),
+        effectiveTaskConfig: useAccountTaskConfig ? getAccountTaskConfig(accountId) : getGlobalTaskConfig(),
+        taskConfigSource: useAccountTaskConfig ? 'account' : 'global',
+        useAccountTaskConfig,
+        globalScheduledEnabled,
+        globalRules,
+        accountRules,
+        effectiveRules,
+        useAccountRules,
+      };
+    },
+
+    setAccountGlobalScheduledEnabled(accountId: string, enabled: boolean): void {
+      updateAccountListingSettings(accountId, { globalScheduledEnabled: enabled });
+    },
+
+    isAccountGlobalScheduledEnabled(accountId: string): boolean {
+      return getAccount(accountId)?.listingSettings?.globalScheduledEnabled !== false;
     },
 
     getLogs(accountId: string): LogEntry[] {
@@ -117,7 +212,7 @@ export function createListingRepository(deps: ListingRepositoryDeps) {
     },
 
     getBlacklistRules(): BlacklistRule[] {
-      return mergeByCode(deps.getGlobal<BlacklistRule[]>('blacklistRules'));
+      return getGlobalRules().blacklistRules;
     },
 
     setBlacklistRules(rules: BlacklistRule[]): void {
@@ -126,7 +221,7 @@ export function createListingRepository(deps: ListingRepositoryDeps) {
     },
 
     getSkipKeywords(): string[] {
-      return deps.getGlobal<string[]>('skipKeywords') || [];
+      return getGlobalRules().skipKeywords;
     },
 
     setSkipKeywords(keywords: string[]): void {
@@ -134,12 +229,48 @@ export function createListingRepository(deps: ListingRepositoryDeps) {
     },
 
     getStatusRules(): StatusRule[] {
-      return mergeByEditStatus(deps.getGlobal<StatusRule[]>('statusRules'));
+      return getGlobalRules().statusRules;
     },
 
     setStatusRules(rules: StatusRule[]): void {
       deps.setGlobal('statusRules', rules);
     },
+
+    getAccountRules(accountId: string): ListingRulesConfig {
+      return getAccountRules(accountId);
+    },
+
+    setAccountRules(accountId: string, rules: ListingRulesConfig): void {
+      updateAccountListingSettings(accountId, { useAccountRules: true }, { listingRules: rules });
+    },
+
+    setAccountRulesEnabled(accountId: string, enabled: boolean): void {
+      const account = getAccount(accountId);
+      updateAccountListingSettings(
+        accountId,
+        { useAccountRules: enabled },
+        enabled && !account?.listingRules ? { listingRules: getGlobalRules() } : undefined,
+      );
+    },
+
+    getEffectiveRules(accountId: string) {
+      const account = getAccount(accountId);
+      if (account?.listingSettings?.useAccountRules) {
+        return { ...getAccountRules(accountId), source: 'account' as const };
+      }
+      return { ...getGlobalRules(), source: 'global' as const };
+    },
+
+    getEffectiveBlacklistRules(accountId: string): BlacklistRule[] {
+      return this.getEffectiveRules(accountId).blacklistRules;
+    },
+
+    getEffectiveSkipKeywords(accountId: string): string[] {
+      return this.getEffectiveRules(accountId).skipKeywords;
+    },
+
+    getEffectiveStatusRules(accountId: string): StatusRule[] {
+      return this.getEffectiveRules(accountId).statusRules;
+    },
   };
 }
-

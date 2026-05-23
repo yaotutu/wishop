@@ -1,30 +1,39 @@
 import { ipcMain } from 'electron';
-import { addScheduledJob, getScheduledJobs, removeScheduledJob, updateScheduledJob } from '../../store';
+import { getScheduledJobs, normalizeScheduledJobSingletons } from '../../store';
 import type { ScheduledJob } from '../../../shared/types';
-import { startScheduledJob, stopScheduledJob } from '../../scheduler/scheduled-job-runner';
+import {
+  reconcileDefaultScheduledJobs,
+  removeScheduledJobAndStop,
+  updateScheduledJobAndReschedule,
+  upsertScheduledJob,
+} from '../../scheduler/scheduled-job-runner';
 
 export function registerScheduledJobHandlers(): void {
   ipcMain.handle('scheduledJobs:list', (): ScheduledJob[] => {
+    reconcileDefaultScheduledJobs({ start: false });
+    normalizeScheduledJobSingletons();
     return getScheduledJobs();
   });
 
   ipcMain.handle(
     'scheduledJobs:add',
     (_, job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): ScheduledJob => {
-      const next = addScheduledJob(job);
-      startScheduledJob(next);
-      return next;
+      return upsertScheduledJob(job);
+    },
+  );
+
+  ipcMain.handle(
+    'scheduledJobs:upsert',
+    (_, job: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): ScheduledJob => {
+      return upsertScheduledJob(job);
     },
   );
 
   ipcMain.handle('scheduledJobs:update', (_, jobId: string, patch: Partial<ScheduledJob>): void => {
-    updateScheduledJob(jobId, patch);
-    const next = getScheduledJobs().find(job => job.id === jobId);
-    if (next) startScheduledJob(next);
+    updateScheduledJobAndReschedule(jobId, patch);
   });
 
   ipcMain.handle('scheduledJobs:remove', (_, jobId: string): void => {
-    removeScheduledJob(jobId);
-    stopScheduledJob(jobId);
+    removeScheduledJobAndStop(jobId);
   });
 }

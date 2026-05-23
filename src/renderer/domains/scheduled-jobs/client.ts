@@ -9,6 +9,9 @@ export const scheduledJobsClient = {
   add(job: ScheduledJobInput): Promise<ScheduledJob> {
     return window.wishop.scheduledJobs.add(job);
   },
+  upsert(job: ScheduledJobInput): Promise<ScheduledJob> {
+    return window.wishop.scheduledJobs.upsert(job);
+  },
   update(jobId: string, patch: Partial<ScheduledJob>): Promise<void> {
     return window.wishop.scheduledJobs.update(jobId, patch);
   },

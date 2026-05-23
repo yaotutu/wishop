@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, message } from 'antd';
+import { Alert, Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, message } from 'antd';
 import type { TableProps } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../../shared/types';
@@ -83,7 +83,6 @@ function valuesFromJob(job?: ScheduledJob): ScheduledJobFormValues {
       autoDeleteFailed: true,
     };
   }
-  const payload = (job.payload || {}) as Partial<{ taskConfig: { listUnreviewed: boolean; listUnreviewedQuantity: number; autoDeleteFailed: boolean } }>;
   return {
     name: job.name,
     enabled: job.enabled,
@@ -93,9 +92,9 @@ function valuesFromJob(job?: ScheduledJob): ScheduledJobFormValues {
     cronExpression: job.cronExpression,
     staggerMinutes: job.staggerMinutes || 0,
     dailyLimit: job.dailyLimit || 0,
-    listUnreviewed: payload.taskConfig?.listUnreviewed ?? true,
-    listUnreviewedQuantity: payload.taskConfig?.listUnreviewedQuantity ?? 2,
-    autoDeleteFailed: payload.taskConfig?.autoDeleteFailed ?? true,
+    listUnreviewed: true,
+    listUnreviewedQuantity: 2,
+    autoDeleteFailed: true,
   };
 }
 
@@ -162,7 +161,7 @@ function effectiveStats(job: ScheduledJob): ScheduledJobRunStats {
 }
 
 const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
-  const { jobs, loading, fetchJobs, addJob, updateJob, removeJob } = useScheduledJobs();
+  const { jobs, loading, fetchJobs, addJob, upsertJob, updateJob, removeJob } = useScheduledJobs();
   const [form] = Form.useForm<ScheduledJobFormValues>();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<ScheduledJob | null>(null);
@@ -192,15 +191,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       return;
     }
 
-    const payload = values.jobType === 'listing.submitDrafts'
-      ? {
-          taskConfig: {
-            listUnreviewed: !!values.listUnreviewed,
-            listUnreviewedQuantity: values.listUnreviewedQuantity || 1,
-            autoDeleteFailed: !!values.autoDeleteFailed,
-          },
-        }
-      : {};
+    const payload = {};
     const input = {
       name: values.name?.trim() || defaultJobName(values.jobType),
       enabled: values.enabled,
@@ -220,6 +211,9 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
       if (editingJob) {
         await updateJob(editingJob.id, input);
         message.success('调度任务已更新');
+      } else if (input.scope === 'global') {
+        await upsertJob(input);
+        message.success('全局调度任务已保存');
       } else {
         await addJob(input);
         message.success('调度任务已创建');
@@ -477,17 +471,21 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, next) => prev.jobType !== next.jobType}>
             {({ getFieldValue }) => getFieldValue('jobType') === 'listing.submitDrafts' && (
-              <>
-                <Form.Item name="listUnreviewed" label="提交未审核商品" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-                <Form.Item name="listUnreviewedQuantity" label="每轮提交数量">
-                  <InputNumber min={1} max={50} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item name="autoDeleteFailed" label="自动删除提交失败商品" valuePropName="checked">
-                  <Switch />
-                </Form.Item>
-              </>
+              <Alert
+                type="info"
+                showIcon
+                title="商品提审定时任务只负责执行计划，提交数量、失败处理和规则请在商品提审页的全局/账号配置中维护。"
+              />
+            )}
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, next) => prev.scope !== next.scope}>
+            {({ getFieldValue }) => getFieldValue('scope') === 'global' && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: 8 }}
+                title="同一任务类型的全账号调度只有一个，保存会更新现有全局任务。"
+              />
             )}
           </Form.Item>
         </Form>

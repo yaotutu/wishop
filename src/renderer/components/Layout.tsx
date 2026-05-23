@@ -69,45 +69,88 @@ const PageFallback: React.FC = () => (
 );
 
 /** 账户侧边栏 */
-const AccountSider: React.FC<{
+export const AccountSider: React.FC<{
   accounts: Account[];
   activeAccountId: string;
+  activeModule: ModuleType;
+  listingScope: 'account' | 'global';
+  setListingScope: (scope: 'account' | 'global') => void;
   switchAccount: (id: string) => void;
-}> = ({ accounts, activeAccountId, switchAccount }) => (
-  <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
-        账号列表
-      </div>
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {accounts.map((account, index) => (
-          <div
-            key={account.id}
-            onClick={() => switchAccount(account.id)}
-            style={{
-              padding: '8px 16px',
-              cursor: 'pointer',
-              background: account.id === activeAccountId ? '#e6f4ff' : 'transparent',
-              borderLeft: account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
-              fontSize: 13,
-              userSelect: 'none',
-              transition: 'background 0.2s',
-            }}
-          >
-            {index + 1}. {account.name}
+}> = ({ accounts, activeAccountId, activeModule, listingScope, setListingScope, switchAccount }) => {
+  const globalListingSelected = activeModule === 'commonFunctions' && listingScope === 'global';
+  const isListingModule = activeModule === 'commonFunctions';
+  return (
+    <Sider width={180} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {isListingModule ? (
+          <div data-testid="listing-global-scope-section" style={{ flexShrink: 0, padding: '12px 10px 12px', background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
+            <div style={{ padding: '0 6px 6px', fontWeight: 600, fontSize: 12, color: '#8c8c8c' }}>
+              全局范围
+            </div>
+            <div
+              data-testid="listing-global-scope"
+              onClick={() => setListingScope('global')}
+              style={{
+                padding: '9px 10px',
+                cursor: 'pointer',
+                background: globalListingSelected ? '#e6f4ff' : '#fff',
+                border: globalListingSelected ? '1px solid #91caff' : '1px solid #f0f0f0',
+                borderLeft: globalListingSelected ? '3px solid #1677ff' : '3px solid #d9d9d9',
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 600,
+                userSelect: 'none',
+                transition: 'background 0.2s, border-color 0.2s',
+              }}
+            >
+              <div>全部账号</div>
+              <div style={{ marginTop: 2, color: '#999', fontSize: 11, fontWeight: 400 }}>统一配置与全账号任务</div>
+            </div>
           </div>
-        ))}
+        ) : (
+          <div style={{ padding: '12px 16px 8px', fontWeight: 500, fontSize: 13, color: '#999' }}>
+            账号列表
+          </div>
+        )}
+        <div data-testid="account-list-section" style={{ flex: 1, overflow: 'auto' }}>
+          {isListingModule && (
+            <div style={{ padding: '12px 16px 6px', fontWeight: 600, fontSize: 12, color: '#8c8c8c' }}>
+              店铺账号
+            </div>
+          )}
+          {accounts.map((account, index) => (
+            <div
+              key={account.id}
+              onClick={() => {
+                if (isListingModule) setListingScope('account');
+                switchAccount(account.id);
+              }}
+              style={{
+                padding: '8px 16px',
+                cursor: 'pointer',
+                background: !globalListingSelected && account.id === activeAccountId ? '#e6f4ff' : 'transparent',
+                borderLeft: !globalListingSelected && account.id === activeAccountId ? '3px solid #1677ff' : '3px solid transparent',
+                fontSize: 13,
+                userSelect: 'none',
+                transition: 'background 0.2s',
+              }}
+            >
+              {index + 1}. {account.name}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  </Sider>
-);
+    </Sider>
+  );
+};
 
 /** 账户作用域的模块内容：模块首次打开后常驻，切 tab 只切 display。 */
 const AccountModuleContent: React.FC<{
   accounts: Account[];
   activeAccountId: string;
+  listingScope: 'account' | 'global';
   module: ModuleType;
-}> = ({ accounts, activeAccountId, module }) => {
+}> = ({ accounts, activeAccountId, listingScope, module }) => {
   if (accounts.length === 0) {
     return (
       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -119,7 +162,7 @@ const AccountModuleContent: React.FC<{
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {module === 'orders' && <OrdersPage accountId={activeAccount.id} />}
-      {module === 'commonFunctions' && <ListingPage accountId={activeAccount.id} />}
+      {module === 'commonFunctions' && <ListingPage accountId={activeAccount.id} scope={listingScope} />}
       {module === 'violation' && <ViolationPage accountId={activeAccount.id} />}
     </div>
   );
@@ -132,6 +175,7 @@ const Layout: React.FC = () => {
   const setSettingsTab = useAppStore(state => state.setSettingsTab);
   const [mountedModules, setMountedModules] = useState<ModuleType[]>(['orders']);
   const [version, setVersion] = useState('');
+  const [listingScope, setListingScope] = useState<'account' | 'global'>('account');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const { openBrowser, openCleanBrowser, openShippingAssistant } = useBrowser();
   const moduleSwitchTimerRef = useRef<number | null>(null);
@@ -211,7 +255,14 @@ const Layout: React.FC = () => {
           <AntLayout>
             {/* 账户侧边栏 — 仅账户模块显示 */}
             {isAccountModule && (
-              <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
+              <AccountSider
+                accounts={accounts}
+                activeAccountId={activeAccountId}
+                activeModule={activeModule}
+                listingScope={listingScope}
+                setListingScope={setListingScope}
+                switchAccount={switchAccount}
+              />
             )}
             <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
               {!activeModuleMounted && (
@@ -220,21 +271,21 @@ const Layout: React.FC = () => {
               {mountedModules.includes('orders') && (
                 <Suspense fallback={activeModule === 'orders' ? <PageFallback /> : null}>
                   <div style={{ flex: 1, minHeight: 0, display: activeModule === 'orders' ? 'flex' : 'none', flexDirection: 'column' }}>
-                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="orders" />
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} listingScope={listingScope} module="orders" />
                   </div>
                 </Suspense>
               )}
               {mountedModules.includes('commonFunctions') && (
                 <Suspense fallback={activeModule === 'commonFunctions' ? <PageFallback /> : null}>
                   <div style={{ flex: 1, minHeight: 0, display: activeModule === 'commonFunctions' ? 'flex' : 'none', flexDirection: 'column' }}>
-                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="commonFunctions" />
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} listingScope={listingScope} module="commonFunctions" />
                   </div>
                 </Suspense>
               )}
               {mountedModules.includes('violation') && (
                 <Suspense fallback={activeModule === 'violation' ? <PageFallback /> : null}>
                   <div style={{ flex: 1, minHeight: 0, display: activeModule === 'violation' ? 'flex' : 'none', flexDirection: 'column' }}>
-                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} module="violation" />
+                    <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} listingScope={listingScope} module="violation" />
                   </div>
                 </Suspense>
               )}

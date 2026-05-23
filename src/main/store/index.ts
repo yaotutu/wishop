@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import type { Config, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
+import type { Config, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats, ListingRulesConfig, ListingSettings } from '../../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../../shared/settings';
@@ -18,7 +18,7 @@ import store, {
 } from './container';
 export type { StoreSchema } from './container';
 
-export type { Config, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
+export type { Config, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ListingRulesConfig, ListingSettings };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
@@ -73,8 +73,19 @@ export function getScheduledJobs(): ScheduledJob[] {
   return scheduledJobRepository.getScheduledJobs();
 }
 
+export function normalizeScheduledJobSingletons(): ScheduledJob[] {
+  return scheduledJobRepository.normalizeScheduledJobSingletons();
+}
+
 export function addScheduledJob(input: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): ScheduledJob {
   return scheduledJobRepository.addScheduledJob(input);
+}
+
+export function upsertScheduledJobSingleton(
+  singletonKey: string,
+  input: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>,
+): ScheduledJob {
+  return scheduledJobRepository.upsertScheduledJobSingleton(singletonKey, input);
 }
 
 export function updateScheduledJob(jobId: string, patch: Partial<ScheduledJob>): void {
@@ -97,7 +108,19 @@ export function updateScheduledJobAccountStats(jobId: string, accountId: string,
   scheduledJobRepository.updateScheduledJobAccountStats(jobId, accountId, patch);
 }
 
-// --- Per-account taskConfig ---
+// --- Listing task config and inheritance ---
+
+export function getListingSettings(accountId: string): ListingSettings {
+  return listingRepository.getListingSettings(accountId);
+}
+
+export function getGlobalTaskConfig(): TaskConfig {
+  return listingRepository.getGlobalTaskConfig();
+}
+
+export function setGlobalTaskConfig(taskConfig: TaskConfig): void {
+  listingRepository.setGlobalTaskConfig(taskConfig);
+}
 
 export function getTaskConfig(accountId: string): TaskConfig {
   return listingRepository.getTaskConfig(accountId);
@@ -105,6 +128,22 @@ export function getTaskConfig(accountId: string): TaskConfig {
 
 export function setTaskConfig(accountId: string, taskConfig: TaskConfig): void {
   listingRepository.setTaskConfig(accountId, taskConfig);
+}
+
+export function setAccountTaskConfigEnabled(accountId: string, enabled: boolean): void {
+  listingRepository.setAccountTaskConfigEnabled(accountId, enabled);
+}
+
+export function getEffectiveTaskConfig(accountId: string): TaskConfig {
+  return listingRepository.getEffectiveTaskConfig(accountId);
+}
+
+export function setAccountGlobalScheduledEnabled(accountId: string, enabled: boolean): void {
+  listingRepository.setAccountGlobalScheduledEnabled(accountId, enabled);
+}
+
+export function isAccountGlobalScheduledEnabled(accountId: string): boolean {
+  return listingRepository.isAccountGlobalScheduledEnabled(accountId);
 }
 
 // --- Per-account logs ---
@@ -216,6 +255,30 @@ export function setStatusRules(rules: StatusRule[]): void {
 
 export function getDefaultStatusRules(): StatusRule[] {
   return listingRepository.getDefaultStatusRules();
+}
+
+export function getAccountRules(accountId: string): ListingRulesConfig {
+  return listingRepository.getAccountRules(accountId);
+}
+
+export function setAccountRules(accountId: string, rules: ListingRulesConfig): void {
+  listingRepository.setAccountRules(accountId, rules);
+}
+
+export function setAccountRulesEnabled(accountId: string, enabled: boolean): void {
+  listingRepository.setAccountRulesEnabled(accountId, enabled);
+}
+
+export function getEffectiveBlacklistRules(accountId: string): BlacklistRule[] {
+  return listingRepository.getEffectiveBlacklistRules(accountId);
+}
+
+export function getEffectiveSkipKeywords(accountId: string): string[] {
+  return listingRepository.getEffectiveSkipKeywords(accountId);
+}
+
+export function getEffectiveStatusRules(accountId: string): StatusRule[] {
+  return listingRepository.getEffectiveStatusRules(accountId);
 }
 
 // --- License state ---

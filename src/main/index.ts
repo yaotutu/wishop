@@ -2,7 +2,8 @@ import dotenv from 'dotenv';
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
-import { startAllScheduledJobs, stopAllScheduledJobs } from './scheduler/scheduled-job-runner';
+import { reconcileDefaultScheduledJobs, startAllScheduledJobs, stopAllScheduledJobs } from './scheduler/scheduled-job-runner';
+import { registerCoreScheduledJobs } from './scheduler/scheduled-job-definitions';
 import { cleanOldLogs } from './store';
 import { initUpdater } from './updater';
 import { flushBrowserSessionWithTimeout, setBrowserQuitting } from './browser/browser-window';
@@ -81,6 +82,8 @@ app.whenReady().then(() => {
   };
 
   cleanOldLogs();
+  registerCoreScheduledJobs();
+  reconcileDefaultScheduledJobs({ start: false });
   registerHandlers();
   createWindow();
   startAllScheduledJobs(() => mainWindow);

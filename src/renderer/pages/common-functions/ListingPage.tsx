@@ -1,12 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Input, message, Popconfirm, Select, Tooltip } from 'antd';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Input, message, Popconfirm, Select, Tooltip, Switch, Form } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, DeleteOutlined, ReloadOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { useBlacklistRules, useLogs, useQuota, useSkipKeywords, useStatusRules, useTaskConfig } from '../../domains/listing/hooks';
-import type { TaskConfig, TaskCycleResult, LogEntry, BlacklistRule } from '../../../shared/types';
+import { useBlacklistRules, useListingSettings, useLogs, useQuota, useSkipKeywords, useStatusRules, useTaskConfig } from '../../domains/listing/hooks';
+import { scheduledJobsClient } from '../../domains/scheduled-jobs/client';
+import { cronPresets } from '../../utils/cron';
+import { getErrorMessage } from '../../../shared/errors';
+import type { TaskConfig, TaskCycleResult, LogEntry, BlacklistRule, ListingRulesConfig, ScheduledJob } from '../../../shared/types';
 
 interface ListingProps {
   accountId: string;
+  scope?: 'account' | 'global';
 }
+
+type GlobalScheduleFormValues = {
+  enabled: boolean;
+  cronExpression: string;
+  staggerMinutes: number;
+};
 
 const defaultTaskConfig: TaskConfig = {
   listUnreviewed: true,
@@ -14,16 +24,31 @@ const defaultTaskConfig: TaskConfig = {
   autoDeleteFailed: true,
 };
 
-const Listing: React.FC<ListingProps> = ({ accountId }) => {
-  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask, stopTask, onTaskLog } = useTaskConfig(accountId);
+const Listing: React.FC<ListingProps> = ({ accountId, scope = 'account' }) => {
+  const { saveTaskConfig, runTask, stopTask, onTaskLog } = useTaskConfig(accountId);
+  const {
+    settings,
+    fetchSettings,
+    saveGlobalTaskConfig,
+    setAccountTaskConfigEnabled,
+    setAccountRulesEnabled,
+    saveAccountRules,
+  } = useListingSettings(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
-  const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
-  const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
-  const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
+  const { fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
+  const { fetchKeywords, saveKeywords } = useSkipKeywords();
+  const { fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [localListedCount, setLocalListedCount] = useState(0);
+  const [globalCronExpression, setGlobalCronExpression] = useState('0 9 * * *');
+  const [globalScheduledEnabled, setGlobalScheduledEnabledState] = useState(true);
+  const [globalStaggerMinutes, setGlobalStaggerMinutes] = useState(10);
+  const [globalScheduledJob, setGlobalScheduledJob] = useState<ScheduledJob | null>(null);
+  const [globalScheduleModalOpen, setGlobalScheduleModalOpen] = useState(false);
+  const [savingGlobalScheduledJob, setSavingGlobalScheduledJob] = useState(false);
+  const [globalScheduleForm] = Form.useForm<GlobalScheduleFormValues>();
 
   // 黑名单管理（内部 state，不再单独弹窗）
   const [newRuleCode, setNewRuleCode] = useState('');
@@ -38,18 +63,43 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const [rulesLocked, setRulesLocked] = useState(true);
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const isGlobalScope = scope === 'global';
+  const activeTaskConfig = isGlobalScope
+    ? settings.globalTaskConfig
+    : settings.effectiveTaskConfig;
+  const activeRules = isGlobalScope
+    ? settings.globalRules
+    : settings.effectiveRules;
+  const activeBlacklistRules = activeRules.blacklistRules;
+  const activeSkipKeywords = activeRules.skipKeywords;
+  const activeStatusRules = activeRules.statusRules;
+  const canEditTaskConfig = isGlobalScope || settings.useAccountTaskConfig;
+  const canEditRules = isGlobalScope || settings.useAccountRules;
+
+  const fetchGlobalScheduledJob = useCallback(async () => {
+    if (!isGlobalScope) return;
+    const jobs = await scheduledJobsClient.list();
+    const job = jobs.find(item => item.scope === 'global' && item.jobType === 'listing.submitDrafts') || null;
+    setGlobalScheduledJob(job);
+    if (job) {
+      setGlobalCronExpression(job.cronExpression);
+      setGlobalScheduledEnabledState(job.enabled);
+      setGlobalStaggerMinutes(job.staggerMinutes || 0);
+    }
+  }, [isGlobalScope]);
 
   useEffect(() => {
-    fetchTaskConfig();
+    fetchSettings();
     fetchLogs();
     fetchQuota();
     fetchBlacklistRules();
     fetchKeywords();
     fetchStatusRules();
+    void fetchGlobalScheduledJob();
     return () => {
       unsubscribeRef.current?.();
     };
-  }, [accountId]);
+  }, [accountId, scope, fetchGlobalScheduledJob]);
 
   const handleRun = async () => {
     if (quotaExhausted) {
@@ -69,11 +119,13 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     setRunning(true);
     setResult(null);
     setLocalListedCount(0);
-    // 启动时自动将提交数量设为当前剩余配额
-    if (quota.quota > 0 && taskConfig.listUnreviewedQuantity > quota.quota) {
-      await saveTaskConfig({ ...taskConfig, listUnreviewedQuantity: quota.quota });
-    }
-    const config = { ...taskConfig, listUnreviewedQuantity: Math.min(taskConfig.listUnreviewedQuantity, quota.quota || taskConfig.listUnreviewedQuantity) };
+    const config = {
+      ...settings.effectiveTaskConfig,
+      listUnreviewedQuantity: Math.min(
+        settings.effectiveTaskConfig.listUnreviewedQuantity,
+        quota.quota || settings.effectiveTaskConfig.listUnreviewedQuantity,
+      ),
+    };
     unsubscribeRef.current = onTaskLog((log: LogEntry) => {
       fetchLogs();
       if (log.status === 'success' && log.action === 'list') {
@@ -90,16 +142,92 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       setRunning(false);
       setLocalListedCount(0);
       fetchLogs();
+      fetchSettings();
     }
   };
 
-  const updateConfig = (patch: Partial<TaskConfig>) => {
-    saveTaskConfig({ ...taskConfig, ...patch });
+  const updateConfig = async (patch: Partial<TaskConfig>) => {
+    if (!canEditTaskConfig) {
+      message.info('当前账号使用全局任务配置，请先单独设置此账号');
+      return;
+    }
+    const next = { ...activeTaskConfig, ...patch };
+    if (isGlobalScope) {
+      await saveGlobalTaskConfig(next);
+    } else {
+      await saveTaskConfig(next);
+      await fetchSettings();
+    }
+  };
+
+  const saveRules = async (next: ListingRulesConfig) => {
+    if (!canEditRules) {
+      message.info('当前账号使用全局规则，请先单独设置规则');
+      return;
+    }
+    if (isGlobalScope) {
+      await Promise.all([
+        saveBlacklistRules(next.blacklistRules),
+        saveKeywords(next.skipKeywords),
+        saveStatusRules(next.statusRules),
+      ]);
+      await fetchSettings();
+    } else {
+      await saveAccountRules(next);
+    }
+  };
+
+  const handleAccountTaskConfigEnabled = async (enabled: boolean) => {
+    await setAccountTaskConfigEnabled(enabled);
+    message.success(enabled ? '当前账号已启用单独任务配置' : '当前账号已恢复使用全局任务配置');
+  };
+
+  const handleAccountRulesEnabled = async (enabled: boolean) => {
+    await setAccountRulesEnabled(enabled);
+    message.success(enabled ? '当前账号已启用单独规则' : '当前账号已恢复使用全局规则');
+  };
+
+  const openGlobalScheduleModal = () => {
+    globalScheduleForm.setFieldsValue({
+      enabled: globalScheduledEnabled,
+      cronExpression: globalCronExpression,
+      staggerMinutes: globalStaggerMinutes,
+    });
+    setGlobalScheduleModalOpen(true);
+  };
+
+  const handleSaveGlobalScheduledJob = async () => {
+    const values = await globalScheduleForm.validateFields();
+    setSavingGlobalScheduledJob(true);
+    try {
+      const job = await scheduledJobsClient.upsert({
+        name: '商品提审 - 全账号',
+        enabled: values.enabled,
+        module: 'listing',
+        jobType: 'listing.submitDrafts',
+        scope: 'global',
+        excludedAccountIds: [],
+        cronExpression: values.cronExpression,
+        staggerMinutes: values.staggerMinutes || 0,
+        dailyLimit: 0,
+        payload: {},
+      });
+      setGlobalScheduledJob(job);
+      setGlobalScheduledEnabledState(job.enabled);
+      setGlobalCronExpression(job.cronExpression);
+      setGlobalStaggerMinutes(job.staggerMinutes || 0);
+      setGlobalScheduleModalOpen(false);
+      message.success('全账号商品提审调度已保存');
+    } catch (err: unknown) {
+      message.error(`保存全账号调度失败: ${getErrorMessage(err)}`);
+    } finally {
+      setSavingGlobalScheduledJob(false);
+    }
   };
 
   // 从日志加入黑名单
   const handleAddToBlacklist = async (code: number, errorMsg?: string) => {
-    const codes = new Set(blacklistRules.map(r => r.code));
+    const codes = new Set(activeBlacklistRules.map(r => r.code));
     const newRules: BlacklistRule[] = [];
     if (!codes.has(code)) {
       newRules.push({ code, description: errorMsg?.slice(0, 50) || undefined });
@@ -119,7 +247,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.info('已在黑名单中');
       return;
     }
-    await saveBlacklistRules([...blacklistRules, ...newRules]);
+    await saveRules({ ...activeRules, blacklistRules: [...activeBlacklistRules, ...newRules] });
     message.success(`已将 ${newRules.map(r => r.code).join(', ')} 加入黑名单`);
   };
 
@@ -129,7 +257,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.warning('默认规则不可删除');
       return;
     }
-    await saveBlacklistRules(blacklistRules.filter(r => r.code !== code));
+    await saveRules({ ...activeRules, blacklistRules: activeBlacklistRules.filter(r => r.code !== code) });
     message.success('已删除');
   };
 
@@ -140,11 +268,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.error('请输入有效的错误码');
       return;
     }
-    if (blacklistRules.some(r => r.code === code)) {
+    if (activeBlacklistRules.some(r => r.code === code)) {
       message.error('该错误码已存在');
       return;
     }
-    await saveBlacklistRules([...blacklistRules, { code, description: newRuleDesc.trim() || undefined }]);
+    await saveRules({ ...activeRules, blacklistRules: [...activeBlacklistRules, { code, description: newRuleDesc.trim() || undefined }] });
     setNewRuleCode('');
     setNewRuleDesc('');
     message.success('已添加');
@@ -152,7 +280,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
   // 删除跳过关键词
   const handleDeleteKeyword = async (kw: string) => {
-    await saveKeywords(skipKeywords.filter(k => k !== kw));
+    await saveRules({ ...activeRules, skipKeywords: activeSkipKeywords.filter(k => k !== kw) });
     message.success('已删除');
   };
 
@@ -163,22 +291,22 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.error('请输入关键词');
       return;
     }
-    if (skipKeywords.includes(kw)) {
+    if (activeSkipKeywords.includes(kw)) {
       message.error('该关键词已存在');
       return;
     }
-    await saveKeywords([...skipKeywords, kw]);
+    await saveRules({ ...activeRules, skipKeywords: [...activeSkipKeywords, kw] });
     setNewKeyword('');
     message.success('已添加');
   };
 
   // 从日志提取关键词加入跳过列表
   const handleAddKeywordFromLog = async (keyword: string) => {
-    if (skipKeywords.includes(keyword)) {
+    if (activeSkipKeywords.includes(keyword)) {
       message.info('已在跳过列表中');
       return;
     }
-    await saveKeywords([...skipKeywords, keyword]);
+    await saveRules({ ...activeRules, skipKeywords: [...activeSkipKeywords, keyword] });
     message.success(`已将「${keyword}」加入跳过列表`);
   };
 
@@ -198,10 +326,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
   // 更新单条规则的操作类型
   const handleUpdateStatusRule = async (editStatus: number, newAction: 'submit' | 'delete' | 'skip') => {
-    const updated = statusRules.map(r =>
+    const updated = activeStatusRules.map(r =>
       r.editStatus === editStatus ? { ...r, action: newAction } : r
     );
-    await saveStatusRules(updated);
+    await saveRules({ ...activeRules, statusRules: updated });
     message.success('已更新');
   };
 
@@ -211,7 +339,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.error('请输入有效的状态码');
       return;
     }
-    if (statusRules.some(r => r.editStatus === newRuleStatus)) {
+    if (activeStatusRules.some(r => r.editStatus === newRuleStatus)) {
       message.error('该状态码已存在');
       return;
     }
@@ -219,7 +347,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       message.error('请输入标签');
       return;
     }
-    await saveStatusRules([...statusRules, { editStatus: newRuleStatus, label: newRuleLabel.trim(), action: newRuleAction }]);
+    await saveRules({ ...activeRules, statusRules: [...activeStatusRules, { editStatus: newRuleStatus, label: newRuleLabel.trim(), action: newRuleAction }] });
     setNewRuleStatus(undefined);
     setNewRuleLabel('');
     setNewRuleAction('skip');
@@ -228,45 +356,90 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
   // 恢复默认规则
   const handleResetStatusRules = async () => {
-    await resetStatusRules();
+    if (isGlobalScope) {
+      await resetStatusRules();
+      await fetchSettings();
+    } else {
+      await saveRules({ ...activeRules, statusRules: settings.globalRules.statusRules });
+    }
     message.success('已恢复默认规则');
   };
 
   const displayQuota = running ? quota.quota - localListedCount : quota.quota;
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
+  const globalCronLabel = cronPresets.find(item => item.value === globalCronExpression)?.label || globalCronExpression;
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      {isGlobalScope ? (
+        <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <Space size={8} wrap>
+              <span style={{ fontWeight: 600 }}>全局定时任务</span>
+              {globalScheduledJob ? (
+                <>
+                  <Tag color={globalScheduledEnabled ? 'green' : 'default'}>{globalScheduledEnabled ? '已启用' : '已停用'}</Tag>
+                  <span style={{ color: '#666', fontSize: 12 }}>{globalCronLabel}</span>
+                  <span style={{ color: '#999', fontSize: 12 }}>错峰 {globalStaggerMinutes} 分钟/账号</span>
+                </>
+              ) : (
+                <span style={{ color: '#999', fontSize: 12 }}>尚未创建</span>
+              )}
+            </Space>
+            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={openGlobalScheduleModal}>
+              {globalScheduledJob ? '编辑全局定时任务' : '创建全局定时任务'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {/* 任务配置 + 执行 */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
+        {!isGlobalScope && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <Space size={8} wrap>
+              <span style={{ fontWeight: 500 }}>任务配置</span>
+              {settings.useAccountTaskConfig && <Tag color="blue">单独设置中</Tag>}
+            </Space>
+            {settings.useAccountTaskConfig ? (
+              <Button size="small" onClick={() => handleAccountTaskConfigEnabled(false)}>恢复使用全局</Button>
+            ) : (
+              <Button size="small" onClick={() => handleAccountTaskConfigEnabled(true)}>单独设置此账号</Button>
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <Space size={24} wrap>
             <Space size={8}>
               <Checkbox
-                checked={taskConfig.listUnreviewed}
+                checked={activeTaskConfig.listUnreviewed}
                 onChange={e => updateConfig({ listUnreviewed: e.target.checked })}
+                disabled={!canEditTaskConfig}
               >
                 提交未审核
               </Checkbox>
               <InputNumber
                 controls={false}
-                size="small" min={1} max={quota.quota || undefined} value={taskConfig.listUnreviewedQuantity}
+                size="small" min={1} max={!isGlobalScope ? quota.quota || undefined : undefined} value={activeTaskConfig.listUnreviewedQuantity}
                 onChange={v => updateConfig({ listUnreviewedQuantity: v || 2 })}
-                disabled={!taskConfig.listUnreviewed}
+                disabled={!canEditTaskConfig || !activeTaskConfig.listUnreviewed}
                 style={{ width: 60 }}
               />
-              <Button
-                size="small"
-                disabled={!taskConfig.listUnreviewed || !quota.quota}
-                onClick={() => updateConfig({ listUnreviewedQuantity: quota.quota })}
-              >
-                最大
-              </Button>
+              {!isGlobalScope && (
+                <Button
+                  size="small"
+                  disabled={!canEditTaskConfig || !activeTaskConfig.listUnreviewed || !quota.quota}
+                  onClick={() => updateConfig({ listUnreviewedQuantity: quota.quota })}
+                >
+                  最大
+                </Button>
+              )}
               <span style={{ color: '#666' }}>条</span>
             </Space>
             <Checkbox
-              checked={taskConfig.autoDeleteFailed !== false}
+              checked={activeTaskConfig.autoDeleteFailed !== false}
               onChange={e => updateConfig({ autoDeleteFailed: e.target.checked })}
+              disabled={!canEditTaskConfig}
             >
               失败自动删除
               <Tooltip title="上架失败的商品自动删除。开启后，可配合「保留关键词」排除不需要删除的情况">
@@ -274,44 +447,46 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               </Tooltip>
             </Checkbox>
           </Space>
-          <Space wrap>
-            {quota.total > 0 && (
-              <Tag color={quotaExhausted ? 'red' : 'green'}>
-                配额 {displayQuota}/{quota.total}
-              </Tag>
-            )}
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={handleRun}
-              loading={running}
-              disabled={!taskConfig.listUnreviewed}
-              style={running ? { display: 'none' } : undefined}
-            >
-              开始执行
-            </Button>
-            <Button
-              danger
-              icon={<CloseCircleOutlined />}
-              onClick={stopTask}
-              style={!running ? { display: 'none' } : undefined}
-            >
-              停止
-            </Button>
-          </Space>
+          {!isGlobalScope && (
+            <Space wrap>
+              {quota.total > 0 && (
+                <Tag color={quotaExhausted ? 'red' : 'green'}>
+                  配额 {displayQuota}/{quota.total}
+                </Tag>
+              )}
+              <Button
+                type="primary"
+                icon={<PlayCircleOutlined />}
+                onClick={handleRun}
+                loading={running}
+                disabled={!settings.effectiveTaskConfig.listUnreviewed}
+                style={running ? { display: 'none' } : undefined}
+              >
+                开始执行
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={stopTask}
+                style={!running ? { display: 'none' } : undefined}
+              >
+                停止
+              </Button>
+            </Space>
+          )}
         </div>
-        {quotaExhausted && (
+        {!isGlobalScope && quotaExhausted && (
           <div style={{ marginTop: 8, color: '#ff4d4f', fontSize: 12 }}>
             今日提审配额已用完，请明天再试
           </div>
         )}
-        {running && (
+        {!isGlobalScope && running && (
           <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>执行中，请勿重复操作...</div>
         )}
       </div>
 
       {/* 执行结果 */}
-      {result && (
+      {!isGlobalScope && result && (
         <Alert
           type={result.stopped ? 'warning' : 'success'}
           showIcon={false}
@@ -333,27 +508,39 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       {/* 运行规则 — 默认锁定 */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, opacity: rulesLocked ? 0.75 : 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontWeight: 500 }}>运行规则</span>
-          <Button
-            size="small"
-            type="text"
-            onClick={() => rulesLocked ? handleUnlockRules() : setRulesLocked(true)}
-          >
-            {rulesLocked ? '🔒 已锁定' : '🔓 已解锁'}
-          </Button>
+          <Space size={8} wrap>
+            <span style={{ fontWeight: 500 }}>运行规则</span>
+            {!isGlobalScope && settings.useAccountRules && <Tag color="blue">单独设置中</Tag>}
+          </Space>
+          <Space size={4} wrap>
+            {!isGlobalScope && (
+              settings.useAccountRules ? (
+                <Button size="small" onClick={() => handleAccountRulesEnabled(false)}>恢复使用全局规则</Button>
+              ) : (
+                <Button size="small" onClick={() => handleAccountRulesEnabled(true)}>单独设置规则</Button>
+              )
+            )}
+            <Button
+              size="small"
+              type="text"
+              onClick={() => rulesLocked ? handleUnlockRules() : setRulesLocked(true)}
+            >
+              {rulesLocked ? '已锁定' : '已解锁'}
+            </Button>
+          </Space>
         </div>
         {/* 扫描商品时：按状态码决定处理方式 */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 6, fontSize: 13 }}>扫描商品时</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            {statusRules.map(rule => (
+            {activeStatusRules.map(rule => (
               <Tag key={rule.editStatus} style={{ fontSize: 12, padding: '2px 8px' }}>
                 {rule.editStatus}({rule.label}) →
                 <Select
                   value={rule.action}
                   size="small"
                   variant="borderless"
-                  disabled={rulesLocked}
+                  disabled={rulesLocked || !canEditRules}
                   style={{ width: 90, marginLeft: 4, verticalAlign: 'middle' }}
                   onChange={(v: 'submit' | 'delete' | 'skip') => handleUpdateStatusRule(rule.editStatus, v)}
                   options={[
@@ -364,13 +551,13 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                 />
               </Tag>
             ))}
-            {!rulesLocked && (
+            {!rulesLocked && canEditRules && (
               <Popconfirm title="恢复默认规则？" onConfirm={handleResetStatusRules}>
                 <Button size="small" type="link">恢复默认</Button>
               </Popconfirm>
             )}
           </div>
-          {!rulesLocked && (
+          {!rulesLocked && canEditRules && (
             <Space wrap style={{ marginTop: 8 }}>
               <InputNumber
                 controls={false}
@@ -415,12 +602,12 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             <div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>遇到这些错误码 → 停止任务</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                {blacklistRules.map(r => {
+                {activeBlacklistRules.map(r => {
                   const isDefault = blacklistDefaultCodes.has(r.code);
                   return (
                     <Tooltip key={r.code} title={isDefault ? '系统默认规则，不可删除' : undefined}>
                       <Tag
-                        closable={!rulesLocked && !isDefault}
+                        closable={!rulesLocked && canEditRules && !isDefault}
                         onClose={() => handleDeleteRule(r.code)}
                         color={isDefault ? '#cf1322' : 'red'}
                         style={{ fontSize: 11, ...(isDefault ? { borderStyle: 'solid', opacity: 0.75 } : {}) }}
@@ -430,7 +617,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                     </Tooltip>
                   );
                 })}
-                {!rulesLocked && (
+                {!rulesLocked && canEditRules && (
                   <>
                     <Input
                       placeholder="错误码"
@@ -457,10 +644,10 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             <div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>错误信息包含这些词 → 不删商品</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                {skipKeywords.map(kw => (
+                {activeSkipKeywords.map(kw => (
                   <Tag
                     key={kw}
-                    closable={!rulesLocked}
+                    closable={!rulesLocked && canEditRules}
                     onClose={() => handleDeleteKeyword(kw)}
                     color="orange"
                     style={{ fontSize: 11 }}
@@ -468,7 +655,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                     {kw}
                   </Tag>
                 ))}
-                {!rulesLocked && (
+                {!rulesLocked && canEditRules && (
                   <>
                     <Input
                       placeholder="关键词"
@@ -488,6 +675,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       </div>
 
       {/* 执行记录 */}
+      {!isGlobalScope && (
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0, gap: 8 }}>
           <span style={{ fontWeight: 500 }}>执行记录</span>
@@ -509,7 +697,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               const isSkipAction = log.action === 'skip';
               const actionLabel = log.action === 'delete' ? '删除' : log.action === 'check' ? '检查' : log.action === 'skip' ? '待处理' : '上架';
               const actionColor = log.action === 'delete' ? '#fa8c16' : log.action === 'check' ? '#52c41a' : isSkipAction ? '#fa8c16' : '#1677ff';
-              const inBlacklist = log.errorCode != null && blacklistRules.some(r =>
+              const inBlacklist = log.errorCode != null && activeBlacklistRules.some(r =>
                 r.code === log.errorCode || (log.errorMsg && log.errorMsg.includes(`错误码:${r.code}`))
               );
               return (
@@ -579,6 +767,45 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         )}
         </div>
       </div>
+      )}
+
+      <Modal
+        title="全局商品提审定时任务"
+        open={globalScheduleModalOpen}
+        okText={globalScheduledJob ? '保存全局定时任务' : '创建全局定时任务'}
+        cancelText="取消"
+        confirmLoading={savingGlobalScheduledJob}
+        onOk={handleSaveGlobalScheduledJob}
+        onCancel={() => setGlobalScheduleModalOpen(false)}
+        destroyOnHidden
+      >
+        <Form<GlobalScheduleFormValues>
+          form={globalScheduleForm}
+          layout="vertical"
+          initialValues={{ enabled: true, cronExpression: '0 9 * * *', staggerMinutes: 10 }}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', rowGap: 8, columnGap: 12, marginBottom: 16, fontSize: 13 }}>
+            <span style={{ color: '#666' }}>任务类型</span>
+            <span style={{ fontWeight: 500 }}>商品提审</span>
+            <span style={{ color: '#666' }}>作用范围</span>
+            <span style={{ fontWeight: 500 }}>全部账号</span>
+          </div>
+          <Form.Item name="enabled" label="启用任务" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="cronExpression" label="执行时间" rules={[{ required: true, message: '请选择执行时间' }]}>
+            <Select options={cronPresets} />
+          </Form.Item>
+          <Form.Item name="staggerMinutes" label="每账号错峰间隔（分钟）">
+            <InputNumber min={0} max={240} style={{ width: '100%' }} />
+          </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            title="保存后会创建或更新唯一的全局商品提审定时任务。"
+          />
+        </Form>
+      </Modal>
 
     </div>
   );
