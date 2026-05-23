@@ -1,0 +1,281 @@
+export interface ProductSourceItem {
+  id: string;
+  url: string;
+  quantity: number;
+  remark: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductSourceBinding {
+  productId: string;
+  sources: ProductSourceItem[];
+}
+
+export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
+export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+
+export interface LinkedPlatformOrder {
+  id: string;
+  platform: LinkedOrderPlatform;
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+  lastShipmentCheckQueuedAt?: number;
+  lastShipmentCheckStartedAt?: number;
+  lastShipmentCheckFinishedAt?: number;
+  lastShipmentCheckStatus?: PurchaseShipmentCheckStatus;
+  lastShipmentCheckError?: string;
+  nextShipmentCheckAfter?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderAssociation {
+  orderId: string;
+  internalRemark: string;
+  linkedOrders: LinkedPlatformOrder[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
+
+export interface TaobaoSecurityChallengeSnapshot {
+  detected: boolean;
+  kind: TaobaoSecurityChallengeKind;
+  reason: string;
+  title: string;
+  url: string;
+  matchedSignals: string[];
+}
+
+export interface TaobaoPurchaseOrderSnapshot {
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+}
+
+export interface PurchaseLookupAutomationInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+}
+
+export interface PurchaseLookupAutomationResult {
+  snapshot: TaobaoPurchaseOrderSnapshot;
+  association: OrderAssociation;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+}
+
+export interface TaobaoRefundAutomationInput {
+  accountId: string;
+  orderId: string;
+  platformOrderId: string;
+  reason?: string;
+  autoSubmit?: boolean;
+}
+
+export interface TaobaoRefundPrepareSnapshot {
+  platformOrderId: string;
+  selectedReason: string;
+  refundAmountText: string;
+  submitReady: boolean;
+  autoSubmitted?: boolean;
+  url: string;
+}
+
+export interface TaobaoRefundAutomationResult {
+  snapshot: TaobaoRefundPrepareSnapshot;
+  challenge?: TaobaoSecurityChallengeSnapshot;
+}
+
+export enum OrderStatus {
+  PendingPayment = 10,
+  GiftPendingAccept = 12,
+  GroupBuying = 13,
+  PendingShipment = 20,
+  PartialShipment = 21,
+  PendingReceipt = 30,
+  Completed = 100,
+  CancelledByAfterSale = 200,
+  CancelledByUser = 250,
+}
+
+export type OrderTimeScope = 'all' | '7d' | '30d' | '90d';
+
+export interface OrderSkuAttr {
+  attr_key: string;
+  attr_value: string;
+}
+
+export interface OrderProductInfo {
+  product_id: string;
+  sku_id: string;
+  thumb_img: string;
+  sku_cnt: number;
+  sale_price: number;
+  title: string;
+  sku_code: string;
+  market_price: number;
+  sku_attrs: OrderSkuAttr[];
+  real_price: number;
+  estimate_price: number;
+  on_aftersale_sku_cnt: number;
+  finish_aftersale_sku_cnt: number;
+  delivery_deadline?: number;
+}
+
+export interface OrderPriceInfo {
+  product_price: number;
+  order_price: number;
+  freight: number;
+  discounted_price: number;
+  original_order_price: number;
+  merchant_receieve_price: number;
+}
+
+export interface OrderSettleInfo {
+  commission_fee?: number;
+  predict_commission_fee?: number;
+}
+
+export interface OrderAddressInfo {
+  user_name: string;
+  postal_code: string;
+  province_name: string;
+  city_name: string;
+  county_name: string;
+  detail_info: string;
+  tel_number: string;
+  purchaser_tel_number?: string;
+  virtual_order_tel_number?: string;
+  national_code?: string;
+  house_number: string;
+  virtual_number_info?: OrderVirtualNumberInfo;
+}
+
+export interface OrderVirtualNumberInfo {
+  virtual_number: string;
+  extension: string;
+  expiration: number;
+  number_state: number;
+}
+
+export interface OrderRealAddressCache {
+  orderId: string;
+  address: OrderAddressInfo;
+  fetchedAt: number;
+  updatedAt: number;
+}
+
+export interface CheckoutAddressFillResult {
+  filledFields: string[];
+  warnings: string[];
+}
+
+export interface ShippingAssistantSession {
+  accountId: string;
+  orderId: string;
+  product: OrderProductInfo;
+  source: ProductSourceItem;
+  address?: OrderAddressInfo;
+  customerNotes?: string;
+  merchantNotes?: string;
+  createTime?: number;
+  payTime?: number;
+  orderPrice?: number;
+}
+
+export interface ShipOrderFromPurchaseInput {
+  accountId: string;
+  orderId: string;
+  logisticsCompany: string;
+  trackingNumber: string;
+  deliveryId?: string;
+}
+
+export interface ShipOrderFromPurchaseResult {
+  order: Order;
+  deliveryId: string;
+  deliveryName: string;
+  waybillId: string;
+}
+
+export interface DeliveryCompanyOption {
+  deliveryId: string;
+  deliveryName: string;
+}
+
+export interface OrderDeliveryProductInfo {
+  waybill_id: string;
+  delivery_id: string;
+  delivery_name: string;
+  delivery_time: number;
+}
+
+export interface OrderDeliveryInfo {
+  address_info: OrderAddressInfo;
+  delivery_product_info: OrderDeliveryProductInfo[];
+  ship_done_time: number;
+  deliver_method: number;
+}
+
+export interface OrderExtInfo {
+  customer_notes: string;
+  merchant_notes: string;
+  confirm_receipt_time: number;
+}
+
+export interface OrderPayInfo {
+  pay_time: number;
+  transaction_id: string;
+  payment_method: number;
+}
+
+export interface OrderDetail {
+  product_infos: OrderProductInfo[];
+  price_info: OrderPriceInfo;
+  settle_info?: OrderSettleInfo;
+  pay_info: OrderPayInfo;
+  delivery_info: OrderDeliveryInfo;
+  ext_info: OrderExtInfo;
+}
+
+export interface Order {
+  order_id: string;
+  status: OrderStatus;
+  create_time: number;
+  update_time: number;
+  order_detail: OrderDetail;
+}
+
+export interface OrderListParams {
+  page_size?: number;
+  next_key?: string;
+  status?: OrderStatus;
+  create_time_range?: { start_time: number; end_time: number };
+  update_time_range?: { start_time: number; end_time: number };
+  order_id?: string;
+}
+
+export interface OrderListResult {
+  order_id_list: string[];
+  next_key: string;
+  has_more: boolean;
+}
+
+export interface OrderSearchParams {
+  search_type: 'order_id' | 'title' | 'user_name' | 'tel_number_last4' | 'merchant_notes' | 'customer_notes';
+  keyword: string;
+  status?: OrderStatus;
+  next_key?: string;
+  page_size?: number;
+}
+

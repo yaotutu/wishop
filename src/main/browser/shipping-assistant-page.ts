@@ -1,0 +1,172 @@
+import type { ShippingAssistantSession } from '../../shared/types';
+
+function formatPrice(cents?: number): string {
+  if (cents === undefined || cents === null) return '-';
+  return `¥${(cents / 100).toFixed(2)}`;
+}
+
+function formatTime(timestamp?: number): string {
+  if (!timestamp) return '-';
+  return new Date(timestamp * 1000).toLocaleString('zh-CN');
+}
+
+function skuText(session: ShippingAssistantSession): string {
+  const attrs = session.product.sku_attrs
+    ?.map(attr => [attr.attr_key, attr.attr_value].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .join(' / ');
+  return attrs || session.product.sku_code || '无规格';
+}
+
+export function normalizeAssistantSession(session: ShippingAssistantSession): ShippingAssistantSession & {
+  orderPriceText: string;
+  createTimeText: string;
+  payTimeText: string;
+  skuText: string;
+} {
+  return {
+    ...session,
+    orderPriceText: formatPrice(session.orderPrice),
+    createTimeText: formatTime(session.createTime),
+    payTimeText: formatTime(session.payTime),
+    skuText: skuText(session),
+  };
+}
+
+export function assistantHtml(): string {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>发货助手</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; color: #1f1f1f; }
+    .shell { height: 100vh; display: flex; flex-direction: column; }
+    .header { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid #f0f0f0; font-weight: 600; }
+    .close { border: 0; background: transparent; font-size: 20px; cursor: pointer; color: #666; width: 28px; height: 28px; }
+    .content { flex: 1; overflow: auto; padding: 12px; display: grid; gap: 12px; }
+    .card { border: 1px solid #f0f0f0; border-radius: 6px; padding: 10px; display: grid; gap: 8px; }
+    .row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; font-size: 13px; line-height: 1.5; }
+    .label { color: #8c8c8c; }
+    .value { min-width: 0; word-break: break-all; white-space: pre-wrap; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { border: 1px solid #d9d9d9; background: #fff; border-radius: 4px; padding: 5px 10px; font-size: 13px; cursor: pointer; }
+    button.primary { background: #1677ff; border-color: #1677ff; color: #fff; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .muted { color: #8c8c8c; }
+    .toast { min-height: 20px; color: #1677ff; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header"><span>发货助手</span><button class="close" id="close">×</button></div>
+    <div class="content">
+      <div class="card" id="order"></div>
+      <div class="card">
+        <div class="row"><div class="label">收货信息</div><div class="value" id="address">未获取真实地址</div></div>
+        <div class="actions">
+          <button class="primary" id="fetch">获取真实地址</button>
+          <button id="refresh">刷新</button>
+          <button id="copyAddress">复制地址</button>
+          <button id="fill">自动填地址</button>
+        </div>
+      </div>
+      <div class="card" id="notes"></div>
+      <div class="actions"><button id="copyOrder">复制订单</button></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+  <script>
+    let session = null;
+    let address = null;
+    const $ = (id) => document.getElementById(id);
+    const toast = (text, isError) => {
+      $('toast').textContent = text || '';
+      $('toast').style.color = isError ? '#cf1322' : '#1677ff';
+      if (text) setTimeout(() => { if ($('toast').textContent === text) $('toast').textContent = ''; }, 3200);
+    };
+    const phoneLine = (addr) => {
+      if (!addr) return '';
+      const virtual = addr.virtual_number_info;
+      if (virtual && virtual.virtual_number) return '虚拟号码：' + virtual.virtual_number + (virtual.extension ? ' 转 ' + virtual.extension : '');
+      return '电话：' + (addr.purchaser_tel_number || addr.tel_number || addr.virtual_order_tel_number || '-');
+    };
+    const addressLine = (addr) => addr ? [addr.province_name, addr.city_name, addr.county_name, addr.detail_info, addr.house_number].filter(Boolean).join('') : '';
+    const addressCopy = (addr) => addr ? [addr.user_name + ' ' + phoneLine(addr), addressLine(addr)].filter(Boolean).join('\\n') : '';
+    const skuText = () => {
+      const attrs = (session.product.sku_attrs || []).map(a => [a.attr_key, a.attr_value].filter(Boolean).join(': ')).filter(Boolean).join(' / ');
+      return attrs || session.product.sku_code || '无规格';
+    };
+    const render = () => {
+      $('order').innerHTML = [
+        ['微信订单', session.orderId],
+        ['商品', session.product.title],
+        ['规格', skuText()],
+        ['数量', 'x' + session.product.sku_cnt],
+        ['实付', session.orderPriceText],
+        ['货源', session.source.url],
+        ['货源备注', session.source.remark || '-']
+      ].map(([label, value]) => '<div class="row"><div class="label">' + label + '</div><div class="value">' + String(value || '-') + '</div></div>').join('');
+      $('notes').innerHTML = [
+        ['买家备注', session.customerNotes || '无'],
+        ['商家备注', session.merchantNotes || '无'],
+        ['下单时间', session.createTimeText],
+        ['支付时间', session.payTimeText]
+      ].map(([label, value]) => '<div class="row"><div class="label">' + label + '</div><div class="value">' + String(value || '-') + '</div></div>').join('');
+      $('address').textContent = addressCopy(address) || '未获取真实地址';
+      $('fill').disabled = !address;
+    };
+    const copy = async (text, label) => {
+      if (!text || !text.trim()) return toast('暂无' + label, true);
+      await navigator.clipboard.writeText(text);
+      toast(label + '已复制');
+    };
+    const loadAddress = async (refresh) => {
+      try {
+        $('fetch').disabled = true;
+        $('refresh').disabled = true;
+        const cache = await window.shippingAssistant.fetchAddress(refresh);
+        address = cache.address;
+        render();
+        toast(refresh ? '真实地址已刷新' : '真实地址已获取');
+      } catch (err) {
+        toast('获取真实地址失败：' + (err && err.message ? err.message : err), true);
+      } finally {
+        $('fetch').disabled = false;
+        $('refresh').disabled = false;
+      }
+    };
+    window.shippingAssistant.getSession().then(data => {
+      session = data;
+      address = data.address || null;
+      render();
+    });
+    $('close').onclick = () => window.shippingAssistant.close();
+    $('fetch').onclick = () => loadAddress(false);
+    $('refresh').onclick = () => loadAddress(true);
+    $('copyAddress').onclick = () => copy(addressCopy(address), '地址');
+    $('copyOrder').onclick = () => copy([
+      '订单号: ' + session.orderId,
+      '商品: ' + session.product.title,
+      '规格: ' + skuText(),
+      '数量: ' + session.product.sku_cnt,
+      '实付: ' + session.orderPriceText,
+      session.customerNotes ? '买家备注: ' + session.customerNotes : '',
+      session.merchantNotes ? '商家备注: ' + session.merchantNotes : '',
+      session.source.remark ? '货源备注: ' + session.source.remark : '',
+      addressCopy(address) ? '地址: ' + addressCopy(address).replace('\\n', ' ') : ''
+    ].filter(Boolean).join('\\n'), '订单信息');
+    $('fill').onclick = async () => {
+      try {
+        const result = await window.shippingAssistant.fillCheckoutAddress();
+        toast(result.filledFields.length ? '已填写：' + result.filledFields.join('、') : (result.warnings.join('；') || '未填写任何字段'));
+      } catch (err) {
+        toast('自动填写失败：' + (err && err.message ? err.message : err), true);
+      }
+    };
+  </script>
+</body>
+</html>`;
+}

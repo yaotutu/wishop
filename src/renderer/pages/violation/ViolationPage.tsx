@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, Button, Space, Input, InputNumber, Table, Tag, Radio, Modal, Alert, message, Popconfirm, Upload, Divider } from 'antd';
 import { UploadOutlined, DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ViolationMatch, LogEntry } from '../../../shared/types';
+import { violationsClient } from '../../domains/violations/client';
 
 interface ViolationProps {
   accountId: string;
@@ -44,7 +45,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   }, [accountId]);
 
   const loadWords = async () => {
-    const data = await window.electronAPI.violation.getWords(accountId);
+    const data = await violationsClient.getWords(accountId);
     setWords(data);
   };
 
@@ -69,7 +70,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   };
 
   const handleConfirmImport = async () => {
-    await window.electronAPI.violation.setWords(accountId, previewWords);
+    await violationsClient.saveWords(accountId, previewWords);
     setWords(previewWords);
     setPreviewModalOpen(false);
     setPreviewWords([]);
@@ -77,7 +78,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   };
 
   const subscribeLogs = () => {
-    unsubscribeRef.current = window.electronAPI.violation.onLog(accountId, (log: LogEntry) => {
+    unsubscribeRef.current = violationsClient.onLog(accountId, (log: LogEntry) => {
       setLogs(prev => [...prev, log]);
     });
   };
@@ -101,7 +102,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     setActiveResultTab('logs');
     subscribeLogs();
     try {
-      const result = await window.electronAPI.violation.batchScan(accountId, scanLimit);
+      const result = await violationsClient.batchScan(accountId, scanLimit);
       setViolations(result.violations);
       setScanResult({ scanned: result.scanned, total: result.violations.length });
       setActiveResultTab('result');
@@ -120,7 +121,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
     setDeleting(true);
     subscribeLogs();
     try {
-      const result = await window.electronAPI.violation.batchDelete(accountId, toDelete);
+      const result = await violationsClient.batchDelete(accountId, toDelete);
       message.success(`已删除 ${result.deleted} 条，失败 ${result.errors} 条`);
       setSelectedKeys([]);
       setViolations(prev => prev.filter(v => !toDelete.some(d => d.productId === v.productId)));
@@ -150,7 +151,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleNextViolation = async () => {
     if (stoppedRef.current) return;
-    const result = await window.electronAPI.violation.scanStep(accountId, 'next');
+    const result = await violationsClient.scanStep(accountId, 'next');
     if (stoppedRef.current) return;
     if (result.type === 'done') {
       setCurrentViolation(null);
@@ -178,7 +179,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleOneByOneDelete = async () => {
     if (!currentViolation || stoppedRef.current) return;
-    const result = await window.electronAPI.violation.scanStep(accountId, 'delete');
+    const result = await violationsClient.scanStep(accountId, 'delete');
     if (stoppedRef.current) return;
     if (result.type === 'stopped') {
       setCurrentViolation(null);
@@ -193,7 +194,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
   const handleStop = async () => {
     stoppedRef.current = true;
-    await window.electronAPI.violation.stop(accountId);
+    await violationsClient.stop(accountId);
     setScanning(false);
     setOneByOneScanning(false);
     setCurrentViolation(null);
@@ -261,7 +262,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
           onConfirm={async () => {
             subscribeLogs();
             try {
-              const result = await window.electronAPI.violation.batchDelete(accountId, [record]);
+              const result = await violationsClient.batchDelete(accountId, [record]);
               if (result.deleted > 0) {
                 message.success('已删除');
                 setViolations(prev => prev.filter(v => v.productId !== record.productId));
@@ -305,7 +306,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
               <Popconfirm
                 title="确认清空违规词库？"
                 onConfirm={async () => {
-                  await window.electronAPI.violation.setWords(accountId, []);
+                  await violationsClient.saveWords(accountId, []);
                   setWords([]);
                   message.success('已清空');
                 }}
@@ -380,7 +381,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
             { key: 'logs', tab: <span>执行日志{logs.length > 0 ? ` (${logs.length})` : ''}</span> },
           ]}
           activeTabKey={activeResultTab}
-          onTabChange={setActiveResultTab}
+          onTabChange={key => setActiveResultTab(key as 'result' | 'logs')}
         >
           {/* 扫描结果 tab */}
           {activeResultTab === 'result' && (

@@ -3,7 +3,7 @@ import { Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Spa
 import type { TableProps } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../../shared/types';
-import { useScheduledJobs } from '../../hooks/useScheduledJobs';
+import { useScheduledJobs } from '../../domains/scheduled-jobs/hooks';
 import { cronPresets, formatCron } from '../../utils/cron';
 
 interface ScheduledJobsPageProps {

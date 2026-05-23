@@ -21,6 +21,7 @@ import { batchScan } from '../modules/violation-detect';
 import { getClient } from '../wxshop/client-registry';
 import { createLogger } from '../utils/logger';
 import { runPurchaseLookupAutomation } from '../services/taobao-automation-service';
+import { jobRunner } from '../jobs/job-runner';
 
 type ScheduledJobExecutorResult = {
   listed?: number;
@@ -30,6 +31,10 @@ type ScheduledJobExecutorResult = {
 
 const scheduledJobs = new Map<string, cron.ScheduledTask>();
 let mainWindowProvider: (() => BrowserWindow | null) | null = null;
+
+function scheduledJobRunnerId(jobId: string): string {
+  return `scheduled:${jobId}`;
+}
 
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -237,13 +242,20 @@ async function executeForAccount(job: ScheduledJob, accountId: string): Promise<
   }
 }
 
-async function executeJob(jobId: string): Promise<void> {
+async function executeJob(jobId: string, signal?: AbortSignal): Promise<void> {
   const job = getScheduledJobs().find(item => item.id === jobId);
   if (!job?.enabled) return;
   for (const accountId of targetAccountIds(job)) {
+    if (signal?.aborted) return;
     await executeForAccount(job, accountId);
     if (job.scope === 'global' && (job.staggerMinutes || 0) > 0) {
-      await new Promise(resolve => setTimeout(resolve, (job.staggerMinutes || 0) * 60 * 1000));
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, (job.staggerMinutes || 0) * 60 * 1000);
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
     }
   }
 }
@@ -256,12 +268,15 @@ export function startScheduledJob(job: ScheduledJob): void {
     return;
   }
   const task = cron.schedule(job.cronExpression, () => {
-    void executeJob(job.id);
+    void jobRunner.run(scheduledJobRunnerId(job.id), ({ signal }) => executeJob(job.id, signal)).catch(error => {
+      createLogger('ScheduledJob', 'system').error(`[${job.id}] 调度执行失败`, error);
+    });
   });
   scheduledJobs.set(job.id, task);
 }
 
 export function stopScheduledJob(jobId: string): void {
+  jobRunner.stop(scheduledJobRunnerId(jobId));
   const task = scheduledJobs.get(jobId);
   if (!task) return;
   task.stop();

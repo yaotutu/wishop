@@ -9,16 +9,17 @@ import {
   ReloadOutlined,
   SafetyCertificateOutlined,
   SettingOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
-import type { LicenseState } from '../../../shared/types';
 import type { AppSettings } from '../../../shared/settings';
-import { DEFAULT_APP_SETTINGS } from '../../../shared/settings';
+import type { SyncModuleKey, SyncModuleSetting } from '../../../shared/sync';
+import { useAutomationSettings, useCloudSyncSettings, useLicenseSettings } from '../../domains/settings/hooks';
 
 const { Title, Paragraph, Text } = Typography;
 
-type SettingsTab = 'about' | 'product' | 'license' | 'automation' | 'contact';
+type SettingsTab = 'about' | 'product' | 'license' | 'automation' | 'sync' | 'contact';
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
 interface SettingsPageProps {
@@ -30,6 +31,7 @@ const MENU_ITEMS = [
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
   { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
   { key: 'automation', label: '自动化设置', icon: <SettingOutlined /> },
+  { key: 'sync', label: '云同步/云任务', icon: <CloudServerOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
 
@@ -114,7 +116,7 @@ const AboutPanel: React.FC = () => {
       </Descriptions>
       <Space style={{ marginTop: 16 }}>
         {(updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error') && (
-          <Button type="primary" onClick={handleCheck} disabled={updateStatus === 'checking'}>
+          <Button type="primary" onClick={handleCheck}>
             检查更新
           </Button>
         )}
@@ -155,42 +157,29 @@ const ProductPanel: React.FC = () => {
 };
 
 const LicensePanel: React.FC = () => {
-  const [license, setLicense] = useState<LicenseState | null>(null);
+  const { license, loading, activateLicense, clearLicense } = useLicenseSettings();
   const [licenseKey, setLicenseKey] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const loadLicense = async () => {
-    const state = await window.electronAPI.license.get();
-    setLicense(state);
-    setLicenseKey(state.licenseKey || '');
-  };
 
   useEffect(() => {
-    void loadLicense();
-  }, []);
+    setLicenseKey(license?.licenseKey || '');
+  }, [license?.licenseKey]);
 
   const activate = async () => {
-    setLoading(true);
     try {
-      const state = await window.electronAPI.license.activate({ licenseKey });
-      setLicense(state);
+      await activateLicense(licenseKey);
       message.success('授权信息已保存');
     } catch (error: any) {
       message.error(error?.message || '保存授权失败');
-    } finally {
-      setLoading(false);
     }
   };
 
   const clear = async () => {
-    setLoading(true);
     try {
-      const state = await window.electronAPI.license.clear();
-      setLicense(state);
+      await clearLicense();
       setLicenseKey('');
       message.success('授权信息已清除');
-    } finally {
-      setLoading(false);
+    } catch (error: any) {
+      message.error(error?.message || '清除授权失败');
     }
   };
 
@@ -200,7 +189,7 @@ const LicensePanel: React.FC = () => {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="授权拦截暂未启用"
+        title="授权拦截暂未启用"
         description="当前版本只保存授权结构和本地状态，不会限制订单、提审、违规检测或发货功能。"
       />
       <Descriptions column={1} style={{ maxWidth: 620 }}>
@@ -232,30 +221,14 @@ const LicensePanel: React.FC = () => {
 };
 
 const AutomationSettingsPanel: React.FC = () => {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [loading, setLoading] = useState(false);
-
-  const loadSettings = async () => {
-    const next = await window.electronAPI.settings.get();
-    setSettings(next);
-  };
-
-  useEffect(() => {
-    void loadSettings();
-  }, []);
+  const { settings, loading, updateShipmentCheck } = useAutomationSettings();
 
   const patchShipmentCheck = async (patch: Partial<AppSettings['shipmentCheck']>) => {
-    setLoading(true);
     try {
-      const next = await window.electronAPI.settings.update({
-        shipmentCheck: patch,
-      });
-      setSettings(next);
+      await updateShipmentCheck(patch);
       message.success('自动化设置已保存');
     } catch (error: any) {
       message.error(error?.message || '保存自动化设置失败');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -268,7 +241,7 @@ const AutomationSettingsPanel: React.FC = () => {
         type="info"
         showIcon
         style={{ marginBottom: 16 }}
-        message="淘宝自动化保持显式触发"
+        title="淘宝自动化保持显式触发"
         description="这里配置采购发货状态检测的节奏、冷却和单轮数量。淘宝窗口仍保持干净窗口，不做 UA、请求头或指纹伪装。"
       />
       <Space orientation="vertical" size={14} style={{ width: '100%', maxWidth: 720 }}>
@@ -317,6 +290,164 @@ const AutomationSettingsPanel: React.FC = () => {
         <div style={itemStyle}>
           <span>失败冷却（分钟）</span>
           <InputNumber min={10} max={1440} value={shipment.failureCooldownMinutes} onChange={(value) => void patchShipmentCheck({ failureCooldownMinutes: value || 60 })} />
+        </div>
+      </Space>
+    </Card>
+  );
+};
+
+const SYNC_MODULE_LABELS: Record<SyncModuleKey, { title: string; description: string }> = {
+  accounts: { title: '店铺配置', description: '同步店铺元数据；凭据由凭据授权单独控制。' },
+  orders: { title: '订单管理', description: '同步货源、订单关联和内部备注；订单详情和真实地址不进入云同步。' },
+  listing: { title: '商品提审', description: '同步提审配置、规则和调度配置；商品详情和额度可重新获取。' },
+  violations: { title: '违规词检测', description: '同步违规词和处理规则；扫描结果默认只保留本地。' },
+  scheduling: { title: '调度任务', description: '同步用户创建的调度配置；运行中状态不同步。' },
+  settings: { title: '应用设置', description: '同步用户偏好和自动化配置。' },
+  taobao: { title: '淘宝自动化', description: '同步用户授权和任务配置；页面快照、物流缓存不同步。' },
+};
+
+function moduleModeLabel(setting?: SyncModuleSetting): string {
+  if (!setting?.syncEnabled && !setting?.cloudExecutionEnabled) return '仅本机';
+  if (setting.cloudExecutionEnabled) return '云同步 + 云端执行';
+  return '云同步';
+}
+
+const CloudSyncPanel: React.FC = () => {
+  const {
+    syncSettings,
+    cloudCapabilities,
+    accounts,
+    credentials,
+    syncLoading,
+    updateModuleSetting,
+    saveCloudCredential,
+    revokeCloudCredential,
+    savingCredential,
+    revokingCredential,
+  } = useCloudSyncSettings();
+
+  const updateModule = async (module: SyncModuleKey, patch: Partial<SyncModuleSetting>) => {
+    try {
+      await updateModuleSetting(module, patch);
+      message.success('云同步设置已保存');
+    } catch (error: any) {
+      message.error(error?.message || '保存云同步设置失败');
+    }
+  };
+
+  const saveCredential = async () => {
+    try {
+      await saveCloudCredential();
+      message.success('已记录云端执行授权');
+    } catch (error: any) {
+      message.error(error?.message || '凭据授权失败');
+    }
+  };
+
+  const revokeCredential = async (credentialId: string) => {
+    try {
+      await revokeCloudCredential(credentialId);
+      message.success('已撤销云端执行授权');
+    } catch (error: any) {
+      message.error(error?.message || '撤销授权失败');
+    }
+  };
+
+  const settings = syncSettings;
+  const modules = Object.keys(SYNC_MODULE_LABELS) as SyncModuleKey[];
+
+  return (
+    <Card title="云同步与云端执行">
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <Alert
+          type="warning"
+          showIcon
+          title="云端接口尚未连接"
+          description={cloudCapabilities?.message || '当前版本已经预留同步和云端任务架构，但真实云服务 transport 仍是 no-op。'}
+        />
+        <div style={{ display: 'grid', gap: 12 }}>
+          {modules.map((module) => {
+            const label = SYNC_MODULE_LABELS[module];
+            const setting = settings?.modules[module];
+            return (
+              <div
+                key={module}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(180px, 1fr) 140px 140px 150px',
+                  gap: 12,
+                  alignItems: 'center',
+                  padding: '12px 0',
+                  borderBottom: '1px solid #f0f0f0',
+                }}
+              >
+                <div>
+                  <Text strong>{label.title}</Text>
+                  <div style={{ color: '#666', fontSize: 13, marginTop: 4 }}>{label.description}</div>
+                </div>
+                <Switch
+                  checked={!!setting?.syncEnabled}
+                  loading={syncLoading}
+                  checkedChildren="同步"
+                  unCheckedChildren="本机"
+                  onChange={(syncEnabled) => void updateModule(module, { syncEnabled })}
+                />
+                <Switch
+                  checked={!!setting?.cloudExecutionEnabled}
+                  loading={syncLoading}
+                  checkedChildren="云执行"
+                  unCheckedChildren="本机执行"
+                  onChange={(cloudExecutionEnabled) => void updateModule(module, { cloudExecutionEnabled })}
+                />
+                <Tag color={setting?.cloudExecutionEnabled ? 'blue' : setting?.syncEnabled ? 'green' : 'default'}>
+                  {moduleModeLabel(setting)}
+                </Tag>
+              </div>
+            );
+          })}
+        </div>
+        <div>
+          <Title level={5}>云端执行凭据授权</Title>
+          <Paragraph style={{ color: '#555', maxWidth: 760 }}>
+            云端任务需要用户授权上传账号凭据。这里先记录授权元数据；真实上传会在云服务接入后由凭据服务统一处理，业务模块不能绕过凭据服务直接上传。
+          </Paragraph>
+          <Space style={{ marginBottom: 12 }}>
+            <Button
+              type="primary"
+              loading={savingCredential}
+              disabled={!accounts.length}
+              onClick={() => void saveCredential()}
+            >
+              授权首个店铺 API 凭据用于云端任务
+            </Button>
+            <Tag color={cloudCapabilities?.connected ? 'green' : 'default'}>
+              {cloudCapabilities?.connected ? '云服务已连接' : '云服务未连接'}
+            </Tag>
+          </Space>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {credentials.length === 0 && <Text type="secondary">暂无凭据授权记录</Text>}
+            {credentials.map((credential) => (
+              <div
+                key={credential.credentialId}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px', gap: 12, alignItems: 'center' }}
+              >
+                <Text>
+                  {credential.platform} / {credential.accountId} / {credential.scope.join(', ')}
+                </Text>
+                <Tag color={credential.authorizedForCloud ? 'blue' : 'default'}>
+                  {credential.authorizedForCloud ? '已授权' : '未授权'}
+                </Tag>
+                <Button
+                  size="small"
+                  danger={credential.authorizedForCloud}
+                  loading={revokingCredential}
+                  onClick={() => void revokeCredential(credential.credentialId)}
+                >
+                  撤销
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       </Space>
     </Card>
@@ -378,6 +509,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about' }) => 
         {activeTab === 'product' && <ProductPanel />}
         {activeTab === 'license' && <LicensePanel />}
         {activeTab === 'automation' && <AutomationSettingsPanel />}
+        {activeTab === 'sync' && <CloudSyncPanel />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>
     </div>

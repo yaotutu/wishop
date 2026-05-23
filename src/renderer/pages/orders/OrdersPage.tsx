@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Empty, Modal, Select, Table, message } from 'antd';
 import { BrowserContext } from '../../components/Layout';
-import { useOrderAssociations, useOrders, useProductSources, useRealAddressCaches } from '../../hooks/useIpc';
+import { ordersClient } from '../../domains/orders/client';
+import { useOrderAssociations, useOrders, useProductSources, useRealAddressCaches } from '../../domains/orders/hooks';
 import type { DeliveryCompanyOption, Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, OrderSearchParams, ProductSourceItem, OrderStatus, OrderTimeScope, ShippingAssistantSession } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressForCopy } from '../../../shared/address-format';
@@ -228,7 +229,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       async onOk() {
         setCheckingPurchaseOrderIds(previous => new Set(previous).add(associationOrder.order_id));
         try {
-          const result = await window.electronAPI.taobaoAutomation.lookupPurchase({
+          const result = await ordersClient.taobao.lookupPurchase({
             accountId,
             orderId: associationOrder.order_id,
             platformOrderId,
@@ -259,7 +260,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
     setCheckingPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
     try {
-      const result = await window.electronAPI.taobaoAutomation.lookupPurchase({
+      const result = await ordersClient.taobao.lookupPurchase({
         accountId,
         orderId: order.order_id,
         platformOrderId,
@@ -299,7 +300,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   ) => {
     setShippingFromPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
     try {
-      const result = await window.electronAPI.orders.shipFromPurchase({
+      const result = await ordersClient.delivery.shipFromPurchase({
         accountId,
         orderId: order.order_id,
         logisticsCompany,
@@ -326,7 +327,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     let selectedDeliveryId = '';
     let companies: DeliveryCompanyOption[] = [];
     try {
-      companies = await window.electronAPI.orders.listDeliveryCompanies(accountId);
+      companies = await ordersClient.delivery.listCompanies(accountId);
     } catch (err: any) {
       message.error(`获取微信小店快递公司列表失败: ${err.message}`);
       return;
@@ -432,7 +433,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       onOk: async () => {
         setPreparingTaobaoRefundOrderIds(prev => new Set(prev).add(order.order_id));
         try {
-          const result = await window.electronAPI.taobaoAutomation.prepareRefund({
+          const result = await ordersClient.taobao.prepareRefund({
             accountId,
             orderId: order.order_id,
             platformOrderId,

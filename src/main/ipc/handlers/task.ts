@@ -6,6 +6,9 @@ import { runTaskCycle } from '../../modules/task-cycle';
 import { withLogForwarding } from '../utils/log-forwarding';
 import { SessionManager } from '../utils/session-manager';
 import { createLogger } from '../../utils/logger';
+import { jobRunner } from '../../jobs/job-runner';
+
+const taskJobId = (accountId: string): string => `listing:${accountId}`;
 
 export function registerTaskHandlers(context: { taskSessions: SessionManager<void> }): void {
   ipcMain.handle('taskConfig:get', (_, accountId: string): TaskConfig => {
@@ -35,22 +38,33 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
     }
 
     return withLogForwarding(event, accountId, `log:added:${accountId}`, async () => {
-      const signal = context.taskSessions.start(accountId, undefined);
       try {
         const api = getClient(accountId);
         const blacklistRules = getBlacklistRules();
         const skipKeywords = getSkipKeywords();
         const statusRules = getStatusRules();
-        return await runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules, skipKeywords, statusRules);
-      } finally {
-        context.taskSessions.complete(accountId);
+        return await jobRunner.run(taskJobId(accountId), ({ signal }) => (
+          runTaskCycle(api, scopedAddLog, taskConfig, runId, signal, accountId, blacklistRules, skipKeywords, statusRules)
+        ));
+      } catch (error) {
+        logger.error('商品提审任务执行失败:', error);
+        throw error;
       }
     });
   });
 
   ipcMain.handle('task:stop', (_, accountId: string): void => {
     const logger = createLogger('TaskStop', accountId);
+    jobRunner.stop(taskJobId(accountId));
     context.taskSessions.stop(accountId);
     logger.info(`已发送停止信号: ${accountId}`);
+  });
+
+  ipcMain.handle('task:status', (_, accountId: string) => {
+    return jobRunner.getStatus(taskJobId(accountId)) || {
+      id: taskJobId(accountId),
+      state: 'idle',
+      logs: [],
+    };
   });
 }

@@ -14,5 +14,5 @@
     "declaration": false
   },
   "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/browser/**/*"],
-  "exclude": ["node_modules", "src/renderer"]
+  "exclude": ["node_modules", "src/renderer", "**/*.test.ts", "**/*.test.tsx"]
 }

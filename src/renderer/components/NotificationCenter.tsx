@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, FloatButton, List, Space, Switch, Tag, Typography } from 'antd';
 import { BellOutlined, CheckOutlined, ClearOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
-import { useNotifications } from '../hooks/useIpc';
+import { useNotifications } from '../domains/notifications/hooks';
 import type { GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 

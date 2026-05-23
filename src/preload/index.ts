@@ -3,6 +3,9 @@ import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, Quota
 import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../shared/settings';
+import type { CredentialMeta, CredentialPlatform, CredentialScope } from '../shared/credentials';
+import type { SyncModuleKey, SyncModuleSetting, SyncSettings } from '../shared/sync';
+import type { CloudTaskCapabilities } from '../shared/cloud-tasks';
 
 export type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState };
 
@@ -125,6 +128,32 @@ const electronAPI = {
     update: (patch: AppSettingsPatch): Promise<AppSettings> =>
       ipcRenderer.invoke('settings:update', patch),
   },
+  credentials: {
+    getMeta: (accountId?: string): Promise<CredentialMeta[]> =>
+      ipcRenderer.invoke('credentials:getMeta', accountId),
+    saveLocal: (input: { accountId: string; platform: CredentialPlatform; scope: CredentialScope[] }): Promise<CredentialMeta> =>
+      ipcRenderer.invoke('credentials:saveLocal', input),
+    authorizeCloud: (credentialId: string): Promise<CredentialMeta> =>
+      ipcRenderer.invoke('credentials:authorizeCloud', credentialId),
+    revokeCloud: (credentialId: string): Promise<CredentialMeta> =>
+      ipcRenderer.invoke('credentials:revokeCloud', credentialId),
+    getCloudStatus: (credentialId: string): Promise<{ connected: boolean; uploaded: boolean; message: string }> =>
+      ipcRenderer.invoke('credentials:getCloudStatus', credentialId),
+  },
+  sync: {
+    getSettings: (): Promise<SyncSettings> =>
+      ipcRenderer.invoke('sync:getSettings'),
+    updateModuleSetting: (module: SyncModuleKey, patch: Partial<SyncModuleSetting>): Promise<SyncSettings> =>
+      ipcRenderer.invoke('sync:updateModuleSetting', module, patch),
+    getStatus: (): Promise<{ connected: boolean; message: string; settings: SyncSettings }> =>
+      ipcRenderer.invoke('sync:getStatus'),
+  },
+  cloudTasks: {
+    getCapabilities: (): Promise<CloudTaskCapabilities> =>
+      ipcRenderer.invoke('cloudTasks:getCapabilities'),
+    getStatus: (): Promise<{ connected: boolean; message: string }> =>
+      ipcRenderer.invoke('cloudTasks:getStatus'),
+  },
   scheduler: {
     list: (accountId: string): Promise<ScheduledTask[]> =>
       ipcRenderer.invoke('scheduler:list', accountId),
@@ -166,6 +195,8 @@ const electronAPI = {
       ipcRenderer.invoke('task:run', accountId, config),
     stop: (accountId: string): Promise<void> =>
       ipcRenderer.invoke('task:stop', accountId),
+    status: (accountId: string): Promise<{ id: string; state: string; logs: string[] }> =>
+      ipcRenderer.invoke('task:status', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => {
       const handler = (_: any, log: LogEntry) => callback(log);
       ipcRenderer.on(`log:added:${accountId}`, handler);
@@ -217,6 +248,7 @@ const electronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+contextBridge.exposeInMainWorld('wishop', electronAPI);
 
 contextBridge.exposeInMainWorld('appVersion', {
   get: (): Promise<string> => ipcRenderer.invoke('app:version'),
@@ -245,6 +277,7 @@ contextBridge.exposeInMainWorld('updater', {
 declare global {
   interface Window {
     electronAPI: typeof electronAPI;
+    wishop: typeof electronAPI;
     appVersion: {
       get: () => Promise<string>;
     };

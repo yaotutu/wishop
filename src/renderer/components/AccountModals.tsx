@@ -9,7 +9,7 @@ interface AccountModalsProps {
   switchAccount: (id: string) => Promise<void>;
 }
 
-const AccountModals: React.FC<AccountModalsProps> = ({ addAccount, updateAccount, removeAccount, switchAccount }) => {
+function AccountModals({ addAccount, updateAccount, removeAccount, switchAccount }: AccountModalsProps) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -115,6 +115,6 @@ const AccountModals: React.FC<AccountModalsProps> = ({ addAccount, updateAccount
       </>
     ),
   };
-};
+}
 
 export default AccountModals;

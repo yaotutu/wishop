@@ -1,18 +1,31 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, LinkedPlatformOrder, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
-import { DEFAULT_NOTIFICATION_PREFERENCE } from '../../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../../shared/settings';
-import { DEFAULT_APP_SETTINGS, normalizeAppSettings } from '../../shared/settings';
+import { DEFAULT_APP_SETTINGS } from '../../shared/settings';
+import type { CredentialMeta } from '../../shared/credentials';
+import type { SyncModuleKey, SyncModuleSetting, SyncSettings } from '../../shared/sync';
+import { DEFAULT_SYNC_SETTINGS } from '../../shared/sync';
+import { createAccountRepository } from './repositories/account-repository';
+import { createOrderRepository } from './repositories/order-repository';
+import { createListingRepository } from './repositories/listing-repository';
+import { createViolationRepository } from './repositories/violation-repository';
+import { createScheduledJobRepository } from './repositories/scheduled-job-repository';
+import { createLicenseRepository } from './repositories/license-repository';
+import { createGlobalEventRepository } from './repositories/global-event-repository';
+import { createAppSettingsRepository } from './repositories/app-settings-repository';
+import { createSyncCredentialRepository } from './repositories/sync-credential-repository';
+import { migrateStoreIfNeeded } from './migrations';
 
 export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
+let logCounter = 0;
 
 export function createScopedAddLog(accountId: string): AddLogFn {
   return (log: Omit<LogEntry, 'id' | 'timestamp'>) => addLog(accountId, log);
@@ -34,6 +47,8 @@ export interface StoreSchema {
   notifications?: NotificationEntry[];
   notificationPreference?: NotificationPreference;
   appSettings?: AppSettings;
+  syncSettings?: SyncSettings;
+  credentialMetas?: CredentialMeta[];
 }
 
 const store = new Store<StoreSchema>({
@@ -41,154 +56,101 @@ const store = new Store<StoreSchema>({
     accounts: [],
     activeAccountId: '',
     appSettings: DEFAULT_APP_SETTINGS,
+    syncSettings: DEFAULT_SYNC_SETTINGS,
+    credentialMetas: [],
   },
 });
 
-// --- Migration ---
+const accountRepository = createAccountRepository({
+  getAccounts: () => store.get('accounts'),
+  setAccounts: accounts => store.set('accounts', accounts),
+  getActiveAccountId: () => store.get('activeAccountId'),
+  setActiveAccountId: accountId => store.set('activeAccountId', accountId),
+  createId: () => uuidv4(),
+  now: () => Date.now(),
+  env: process.env,
+});
 
-function migrateIfNeeded(): void {
-  const rawAccounts: any[] = store.get('accounts') as any[];
+const orderRepository = createOrderRepository({
+  getAccounts: () => store.get('accounts'),
+  setAccounts: accounts => store.set('accounts', accounts),
+  now: () => Date.now(),
+  createId: () => uuidv4(),
+});
 
-  // Migrate old single-account data to multi-account
-  if (rawAccounts && rawAccounts.length > 0) {
-    let changed = false;
-    for (const account of rawAccounts) {
-      // Migrate scheduler (single object) → schedulers (array)
-      if ('scheduler' in account && !('schedulers' in account)) {
-        const oldScheduler = (account as any).scheduler;
-        if (oldScheduler) {
-          account.schedulers = [{
-            id: uuidv4(),
-            name: '默认任务',
-            enabled: oldScheduler.enabled,
-            cronExpression: oldScheduler.cronExpression,
-            dailyLimit: oldScheduler.dailyLimit,
-            taskConfig: account.taskConfig || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
-            lastRunDate: oldScheduler.lastRunDate,
-            todayListedCount: oldScheduler.todayListedCount,
-          }];
-        } else {
-          account.schedulers = [];
-        }
-        delete (account as any).scheduler;
-        changed = true;
-      }
-      // Ensure schedulers field exists
-      if (!('schedulers' in account)) {
-        account.schedulers = [];
-        changed = true;
-      }
-      // Ensure violationWords field exists
-      if (!('violationWords' in account)) {
-        account.violationWords = [];
-        changed = true;
-      }
-      if (!('productSources' in account)) {
-        account.productSources = [];
-        changed = true;
-      }
-      if (!('orderAssociations' in account)) {
-        account.orderAssociations = [];
-        changed = true;
-      }
-      if (!('realAddressCaches' in account)) {
-        account.realAddressCaches = [];
-        changed = true;
-      }
-    }
-    if (changed) store.set('accounts', rawAccounts as FullAccount[]);
-    return;
-  }
+const listingRepository = createListingRepository({
+  getAccounts: () => store.get('accounts'),
+  setAccounts: accounts => store.set('accounts', accounts),
+  getGlobal: <T,>(key: string) => store.get(key as keyof StoreSchema) as T | undefined,
+  setGlobal: (key, value) => store.set(key as keyof StoreSchema, value as never),
+  now: () => Date.now(),
+  createId: () => `${Date.now()}-${++logCounter}`,
+});
 
-  const oldConfig = store.get('config');
-  if (!oldConfig || (!oldConfig.appId && !oldConfig.appSecret)) return;
+const violationRepository = createViolationRepository({
+  getAccounts: () => store.get('accounts'),
+  setAccounts: accounts => store.set('accounts', accounts),
+});
 
-  const oldScheduler = store.get('scheduler');
-  const oldTaskConfig = store.get('taskConfig') || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true };
+const scheduledJobRepository = createScheduledJobRepository({
+  getJobs: () => store.get('scheduledJobs') || [],
+  setJobs: jobs => store.set('scheduledJobs', jobs),
+  createId: () => uuidv4(),
+  now: () => Date.now(),
+});
 
-  const account: FullAccount = {
-    id: uuidv4(),
-    name: '默认店铺',
-    config: oldConfig,
-    schedulers: oldScheduler ? [{
-      id: uuidv4(),
-      name: '默认任务',
-      enabled: oldScheduler.enabled,
-      cronExpression: oldScheduler.cronExpression,
-      dailyLimit: oldScheduler.dailyLimit,
-      taskConfig: oldTaskConfig,
-      lastRunDate: oldScheduler.lastRunDate,
-      todayListedCount: oldScheduler.todayListedCount,
-    }] : [],
-    taskConfig: oldTaskConfig,
-    violationWords: [],
-    productSources: [],
-    orderAssociations: [],
-    realAddressCaches: [],
-    logs: store.get('logs') || [],
-    createdAt: Date.now(),
-  };
+const licenseRepository = createLicenseRepository({
+  getLicenseState: () => store.get('licenseState'),
+  setLicenseState: state => store.set('licenseState', state),
+  createId: () => uuidv4(),
+});
 
-  store.set('accounts', [account]);
-  store.set('activeAccountId', account.id);
-  store.delete('config');
-  store.delete('scheduler');
-  store.delete('taskConfig');
-  store.delete('logs');
-  const logger = createLogger('Store', 'system');
-  logger.info('已迁移单账号数据到多账号格式');
-}
+const globalEventRepository = createGlobalEventRepository({
+  getGlobalLogs: () => store.get('globalLogs') || [],
+  setGlobalLogs: logs => store.set('globalLogs', logs),
+  getNotifications: () => store.get('notifications') || [],
+  setNotifications: notifications => store.set('notifications', notifications),
+  getNotificationPreference: () => store.get('notificationPreference'),
+  setNotificationPreference: preference => store.set('notificationPreference', preference),
+  createId: () => uuidv4(),
+  now: () => Date.now(),
+});
 
-migrateIfNeeded();
+const appSettingsRepository = createAppSettingsRepository({
+  getSettings: () => store.get('appSettings'),
+  setSettings: settings => store.set('appSettings', settings),
+});
+
+const syncCredentialRepository = createSyncCredentialRepository({
+  getSyncSettings: () => store.get('syncSettings'),
+  setSyncSettings: settings => store.set('syncSettings', settings),
+  getCredentialMetas: () => store.get('credentialMetas') || [],
+  setCredentialMetas: metas => store.set('credentialMetas', metas),
+  now: () => Date.now(),
+});
+
+migrateStoreIfNeeded(store, { info: message => createLogger('Store', 'system').info(message) });
 
 // --- Account management ---
 
 export function getAccounts(): FullAccount[] {
-  return store.get('accounts');
+  return accountRepository.getAccounts();
 }
 
 export function getAccount(accountId: string): FullAccount | undefined {
-  return store.get('accounts').find(a => a.id === accountId);
+  return accountRepository.getAccount(accountId);
 }
 
 export function addAccount(name: string, config: Config): FullAccount {
-  const accounts = store.get('accounts');
-  const account: FullAccount = {
-    id: uuidv4(),
-    name,
-    config,
-    schedulers: [],
-    taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
-    violationWords: [],
-    productSources: [],
-    orderAssociations: [],
-    realAddressCaches: [],
-    logs: [],
-    createdAt: Date.now(),
-  };
-  accounts.push(account);
-  store.set('accounts', accounts);
-  if (!store.get('activeAccountId')) {
-    store.set('activeAccountId', account.id);
-  }
-  return account;
+  return accountRepository.addAccount(name, config);
 }
 
 export function removeAccount(accountId: string): void {
-  const accounts = store.get('accounts').filter(a => a.id !== accountId);
-  store.set('accounts', accounts);
-  if (store.get('activeAccountId') === accountId) {
-    store.set('activeAccountId', accounts.length > 0 ? accounts[0].id : '');
-  }
+  accountRepository.removeAccount(accountId);
 }
 
 export function updateAccount(accountId: string, patch: Partial<Pick<FullAccount, 'name' | 'config'>>): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  if (patch.name !== undefined) accounts[idx].name = patch.name;
-  if (patch.config !== undefined) accounts[idx].config = patch.config;
-  store.set('accounts', accounts);
+  accountRepository.updateAccount(accountId, patch);
 }
 
 export function getActiveAccountId(): string {
@@ -202,264 +164,118 @@ export function setActiveAccountId(accountId: string): void {
 // --- Per-account config ---
 
 export function getConfig(accountId: string): Config {
-  const account = getAccount(accountId);
-  if (!account) return { appId: '', appSecret: '' };
-  return {
-    appId: account.config.appId || process.env.WECHAT_APP_ID || '',
-    appSecret: account.config.appSecret || process.env.WECHAT_APP_SECRET || '',
-  };
+  return accountRepository.getConfig(accountId);
 }
 
 export function setConfig(accountId: string, config: Config): void {
-  updateAccount(accountId, { config });
+  accountRepository.setConfig(accountId, config);
 }
 
 // --- Per-account schedulers ---
 
 export function getSchedulers(accountId: string): ScheduledTask[] {
-  const account = getAccount(accountId);
-  return account?.schedulers || [];
+  return accountRepository.getSchedulers(accountId);
 }
 
 export function addScheduler(accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): ScheduledTask {
-  const newTask: ScheduledTask = {
-    ...task,
-    id: uuidv4(),
-    lastRunDate: '',
-    todayListedCount: 0,
-  };
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return newTask;
-  accounts[idx].schedulers.push(newTask);
-  store.set('accounts', accounts);
-  return newTask;
+  return accountRepository.addScheduler(accountId, task);
 }
 
 export function updateScheduler(accountId: string, taskId: string, patch: Partial<ScheduledTask>): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  const taskIdx = accounts[idx].schedulers.findIndex(t => t.id === taskId);
-  if (taskIdx === -1) return;
-  accounts[idx].schedulers[taskIdx] = { ...accounts[idx].schedulers[taskIdx], ...patch };
-  store.set('accounts', accounts);
+  accountRepository.updateScheduler(accountId, taskId, patch);
 }
 
 export function removeScheduler(accountId: string, taskId: string): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  accounts[idx].schedulers = accounts[idx].schedulers.filter(t => t.id !== taskId);
-  store.set('accounts', accounts);
+  accountRepository.removeScheduler(accountId, taskId);
 }
 
 // --- Global scheduled jobs ---
 
-const EMPTY_SCHEDULED_JOB_STATS: ScheduledJobRunStats = {
-  lastRunDate: '',
-  todayRunCount: 0,
-};
-
 export function getScheduledJobs(): ScheduledJob[] {
-  return store.get('scheduledJobs') || [];
+  return scheduledJobRepository.getScheduledJobs();
 }
 
 export function addScheduledJob(input: Omit<ScheduledJob, 'id' | 'stats' | 'createdAt' | 'updatedAt'>): ScheduledJob {
-  const timestamp = Date.now();
-  const job: ScheduledJob = {
-    ...input,
-    id: uuidv4(),
-    stats: { ...EMPTY_SCHEDULED_JOB_STATS },
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-  store.set('scheduledJobs', [...getScheduledJobs(), job]);
-  return job;
+  return scheduledJobRepository.addScheduledJob(input);
 }
 
 export function updateScheduledJob(jobId: string, patch: Partial<ScheduledJob>): void {
-  store.set('scheduledJobs', getScheduledJobs().map(job => (
-    job.id === jobId ? { ...job, ...patch, updatedAt: Date.now() } : job
-  )));
+  scheduledJobRepository.updateScheduledJob(jobId, patch);
 }
 
 export function removeScheduledJob(jobId: string): void {
-  store.set('scheduledJobs', getScheduledJobs().filter(job => job.id !== jobId));
+  scheduledJobRepository.removeScheduledJob(jobId);
 }
 
 export function removeScheduledJobsForAccount(accountId: string): void {
-  store.set('scheduledJobs', getScheduledJobs()
-    .filter(job => job.scope !== 'account' || job.accountId !== accountId)
-    .map(job => {
-      if (job.scope !== 'global' || !job.accountStats?.[accountId]) return job;
-      const { [accountId]: _removed, ...accountStats } = job.accountStats;
-      return { ...job, accountStats, updatedAt: Date.now() };
-    }));
+  scheduledJobRepository.removeScheduledJobsForAccount(accountId);
 }
 
 export function updateScheduledJobStats(jobId: string, patch: Partial<ScheduledJobRunStats>): void {
-  store.set('scheduledJobs', getScheduledJobs().map(job => (
-    job.id === jobId
-      ? { ...job, stats: { ...job.stats, ...patch }, updatedAt: Date.now() }
-      : job
-  )));
+  scheduledJobRepository.updateScheduledJobStats(jobId, patch);
 }
 
 export function updateScheduledJobAccountStats(jobId: string, accountId: string, patch: Partial<ScheduledJobRunStats>): void {
-  store.set('scheduledJobs', getScheduledJobs().map(job => {
-    if (job.id !== jobId) return job;
-    const prev = job.accountStats?.[accountId] || EMPTY_SCHEDULED_JOB_STATS;
-    return {
-      ...job,
-      accountStats: {
-        ...(job.accountStats || {}),
-        [accountId]: { ...prev, ...patch },
-      },
-      updatedAt: Date.now(),
-    };
-  }));
+  scheduledJobRepository.updateScheduledJobAccountStats(jobId, accountId, patch);
 }
 
 // --- Per-account taskConfig ---
 
 export function getTaskConfig(accountId: string): TaskConfig {
-  const account = getAccount(accountId);
-  return account?.taskConfig || { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true };
+  return listingRepository.getTaskConfig(accountId);
 }
 
 export function setTaskConfig(accountId: string, taskConfig: TaskConfig): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  accounts[idx].taskConfig = taskConfig;
-  store.set('accounts', accounts);
+  listingRepository.setTaskConfig(accountId, taskConfig);
 }
 
 // --- Per-account logs ---
 
-let logCounter = 0;
-
 export function getLogs(accountId: string): LogEntry[] {
-  const account = getAccount(accountId);
-  if (!account) return [];
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return account.logs.filter(log => log.timestamp > sevenDaysAgo);
+  return listingRepository.getLogs(accountId);
 }
 
 export function addLog(accountId: string, log: Omit<LogEntry, 'id' | 'timestamp'>): void {
-  logCounter++;
-  const entry: LogEntry = {
-    ...log,
-    id: `${Date.now()}-${logCounter}`,
-    timestamp: Date.now(),
-  };
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  // Clean old logs inline
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  accounts[idx].logs = accounts[idx].logs.filter(l => l.timestamp > sevenDaysAgo);
-  accounts[idx].logs.push(entry);
-  store.set('accounts', accounts);
-  logEmitter.emit(`log-added:${accountId}`, entry);
+  const entry = listingRepository.addLog(accountId, log);
+  if (entry) logEmitter.emit(`log-added:${accountId}`, entry);
 }
 
 export function clearLogs(accountId: string): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  accounts[idx].logs = [];
-  store.set('accounts', accounts);
+  listingRepository.clearLogs(accountId);
 }
 
 export function cleanOldLogs(): void {
-  const accounts = store.get('accounts');
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  let changed = false;
-  for (const account of accounts) {
-    const filtered = account.logs.filter(log => log.timestamp > sevenDaysAgo);
-    if (filtered.length !== account.logs.length) {
-      account.logs = filtered;
-      changed = true;
-    }
-  }
-  if (changed) store.set('accounts', accounts);
+  listingRepository.cleanOldLogs();
 }
 
 // --- Per-account violation words ---
 
 export function getViolationWords(accountId: string): string[] {
-  const account = getAccount(accountId);
-  return account?.violationWords || [];
+  return violationRepository.getViolationWords(accountId);
 }
 
 export function setViolationWords(accountId: string, words: string[]): void {
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return;
-  accounts[idx].violationWords = words;
-  store.set('accounts', accounts);
+  violationRepository.setViolationWords(accountId, words);
 }
 
 // --- Per-account product sources ---
 
 export function getProductSources(accountId: string): ProductSourceBinding[] {
-  return getAccount(accountId)?.productSources || [];
+  return orderRepository.getProductSources(accountId);
 }
 
 export function setProductSources(accountId: string, productId: string, sources: ProductSourceItem[]): ProductSourceBinding {
-  const now = Date.now();
-  const normalizedSources: ProductSourceItem[] = sources
-    .map(source => ({
-      id: source.id || uuidv4(),
-      url: source.url.trim(),
-      quantity: Number.isFinite(source.quantity) && source.quantity > 0 ? source.quantity : 1,
-      remark: source.remark.trim(),
-      createdAt: source.createdAt || now,
-      updatedAt: now,
-    }))
-    .filter(source => source.url);
-  const binding: ProductSourceBinding = { productId, sources: normalizedSources };
-
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return binding;
-  const existing = accounts[idx].productSources || [];
-  accounts[idx].productSources = normalizedSources.length > 0
-    ? [...existing.filter(item => item.productId !== productId), binding]
-    : existing.filter(item => item.productId !== productId);
-  store.set('accounts', accounts);
-  return binding;
+  return orderRepository.setProductSources(accountId, productId, sources);
 }
 
 export function removeProductSource(accountId: string, productId: string, sourceId: string): ProductSourceBinding {
-  const sources = getProductSources(accountId)
-    .find(item => item.productId === productId)
-    ?.sources
-    .filter(source => source.id !== sourceId) || [];
-  return setProductSources(accountId, productId, sources);
+  return orderRepository.removeProductSource(accountId, productId, sourceId);
 }
 
 // --- Per-account order associations ---
 
-function normalizeLinkedOrder(order: Partial<LinkedPlatformOrder>, now: number): LinkedPlatformOrder {
-  return {
-    id: order.id || uuidv4(),
-    platform: order.platform || 'taobao',
-    platformOrderId: order.platformOrderId?.trim() || '',
-    platformOrderStatus: order.platformOrderStatus?.trim() || '',
-    logisticsStatus: order.logisticsStatus?.trim() || '',
-    logisticsCompany: order.logisticsCompany?.trim() || '',
-    trackingNumber: order.trackingNumber?.trim() || '',
-    remark: order.remark?.trim() || '',
-    createdAt: order.createdAt || now,
-    updatedAt: now,
-  };
-}
-
 export function getOrderAssociations(accountId: string): OrderAssociation[] {
-  return getAccount(accountId)?.orderAssociations || [];
+  return orderRepository.getOrderAssociations(accountId);
 }
 
 export function setOrderAssociation(
@@ -467,287 +283,153 @@ export function setOrderAssociation(
   orderId: string,
   input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
 ): OrderAssociation {
-  const now = Date.now();
-  const existing = getOrderAssociations(accountId).find(item => item.orderId === orderId);
-  const linkedOrders = input.linkedOrders
-    .map(order => normalizeLinkedOrder(order, now))
-    .filter(order => order.platformOrderId || order.platformOrderStatus || order.logisticsStatus || order.logisticsCompany || order.trackingNumber || order.remark);
-  const association: OrderAssociation = {
-    orderId,
-    internalRemark: input.internalRemark.trim(),
-    linkedOrders,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-  };
-
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return association;
-  const associations = accounts[idx].orderAssociations || [];
-  const hasContent = association.internalRemark || association.linkedOrders.length > 0;
-  accounts[idx].orderAssociations = hasContent
-    ? [...associations.filter(item => item.orderId !== orderId), association]
-    : associations.filter(item => item.orderId !== orderId);
-  store.set('accounts', accounts);
-  return association;
+  return orderRepository.setOrderAssociation(accountId, orderId, input);
 }
 
 // --- Per-account real address cache ---
 
 export function getRealAddressCaches(accountId: string): OrderRealAddressCache[] {
-  return getAccount(accountId)?.realAddressCaches || [];
+  return orderRepository.getRealAddressCaches(accountId);
 }
 
 export function getRealAddressCache(accountId: string, orderId: string): OrderRealAddressCache | null {
-  return getRealAddressCaches(accountId).find(item => item.orderId === orderId) || null;
+  return orderRepository.getRealAddressCache(accountId, orderId);
 }
 
 export function setRealAddressCache(accountId: string, orderId: string, address: OrderAddressInfo): OrderRealAddressCache {
-  const now = Date.now();
-  const cache: OrderRealAddressCache = {
-    orderId,
-    address,
-    fetchedAt: now,
-    updatedAt: now,
-  };
-  const accounts = store.get('accounts');
-  const idx = accounts.findIndex(a => a.id === accountId);
-  if (idx === -1) return cache;
-  const caches = accounts[idx].realAddressCaches || [];
-  accounts[idx].realAddressCaches = [...caches.filter(item => item.orderId !== orderId), cache];
-  store.set('accounts', accounts);
-  return cache;
+  return orderRepository.setRealAddressCache(accountId, orderId, address);
 }
 
 // --- Global blacklist rules ---
 
-const DEFAULT_BLACKLIST: BlacklistRule[] = [
-  { code: 1002002, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
-  { code: 10020066, description: '本店铺近1小时内提审次数超过限制，请1小时后再试' },
-  { code: 10020111, description: '本店铺近1天内提审次数超过限制，请1天后再试' },
-  { code: 6600148, description: '今日提审次数已用尽，请明日再试' },
-  { code: 10020208, description: '本店铺的上架功能被封禁，请登录微信小店后台管理页查看详情' },
-  { code: 10020246, description: '0元保证金试运营商品数超出限制，上架中与审核中商品总数不得超过100个' },
-  { code: 10020247, description: '由于未在限定时间内完成升级，该店铺已被限制商品新增能力' },
-];
-
 export function getDefaultBlacklistCodes(): number[] {
-  return DEFAULT_BLACKLIST.map(r => r.code);
+  return listingRepository.getDefaultBlacklistCodes();
 }
 
 export function getBlacklistRules(): BlacklistRule[] {
-  const stored = store.get('blacklistRules');
-  if (!stored) return DEFAULT_BLACKLIST;
-  const codeSet = new Set(stored.map(r => r.code));
-  return [...stored, ...DEFAULT_BLACKLIST.filter(r => !codeSet.has(r.code))];
+  return listingRepository.getBlacklistRules();
 }
 
 export function setBlacklistRules(rules: BlacklistRule[]): void {
-  const defaultCodes = new Set(DEFAULT_BLACKLIST.map(r => r.code));
-  store.set('blacklistRules', rules.filter(r => !defaultCodes.has(r.code)));
+  listingRepository.setBlacklistRules(rules);
 }
 
 // --- Skip keywords (keywords in error message that should skip deletion) ---
 
 export function getSkipKeywords(): string[] {
-  return store.get('skipKeywords') || [];
+  return listingRepository.getSkipKeywords();
 }
 
 export function setSkipKeywords(keywords: string[]): void {
-  store.set('skipKeywords', keywords);
+  listingRepository.setSkipKeywords(keywords);
 }
 
 // --- Global status rules (editStatus → action mapping) ---
 // 控制任务执行时，不同 editStatus 状态码对应的处理方式
 // 默认规则匹配原始硬编码逻辑，用户可通过 UI 自定义
 
-const DEFAULT_STATUS_RULES: StatusRule[] = [
-  { editStatus: 72, label: '未审核',   action: 'submit' },
-  { editStatus: 1,  label: '编辑中',   action: 'submit' },
-  { editStatus: 3,  label: '审核失败', action: 'delete' },
-  { editStatus: 2,  label: '审核中',   action: 'skip' },
-  { editStatus: 4,  label: '成功',     action: 'skip' },
-  { editStatus: 7,  label: '上传中',   action: 'skip' },
-  { editStatus: 8,  label: '上传失败', action: 'skip' },
-];
-
 export function getStatusRules(): StatusRule[] {
-  const stored = store.get('statusRules');
-  if (!stored) return DEFAULT_STATUS_RULES;
-  const statusSet = new Set(stored.map(r => r.editStatus));
-  return [...stored, ...DEFAULT_STATUS_RULES.filter(r => !statusSet.has(r.editStatus))];
+  return listingRepository.getStatusRules();
 }
 
 export function setStatusRules(rules: StatusRule[]): void {
-  store.set('statusRules', rules);
+  listingRepository.setStatusRules(rules);
 }
 
 export function getDefaultStatusRules(): StatusRule[] {
-  return DEFAULT_STATUS_RULES;
+  return listingRepository.getDefaultStatusRules();
 }
 
 // --- License state ---
 
-function createDefaultLicenseState(): LicenseState {
-  const stored = store.get('licenseState');
-  return {
-    enforcementEnabled: false,
-    status: 'inactive',
-    plan: 'none',
-    deviceId: stored?.deviceId || uuidv4(),
-  };
-}
-
 export function getLicenseState(): LicenseState {
-  const stored = store.get('licenseState');
-  return {
-    ...createDefaultLicenseState(),
-    ...stored,
-    enforcementEnabled: stored?.enforcementEnabled === true,
-  };
+  return licenseRepository.getLicenseState();
 }
 
 export function setLicenseState(patch: Partial<LicenseState>): LicenseState {
-  const next = { ...getLicenseState(), ...patch };
-  store.set('licenseState', next);
-  return next;
+  return licenseRepository.setLicenseState(patch);
 }
 
 // --- Global logs ---
 
 export function getGlobalLogs(): GlobalLogEntry[] {
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return (store.get('globalLogs') || []).filter(log => log.timestamp > sevenDaysAgo);
+  return globalEventRepository.getGlobalLogs();
 }
 
 export function addGlobalLog(input: GlobalLogInput): GlobalLogEntry {
-  const entry: GlobalLogEntry = {
-    ...input,
-    id: uuidv4(),
-    timestamp: Date.now(),
-  };
-  store.set('globalLogs', [entry, ...getGlobalLogs()].slice(0, 1000));
-  maybeCreateNotification(entry);
-  return entry;
+  return globalEventRepository.addGlobalLog(input);
 }
 
 export function clearGlobalLogs(): void {
-  store.set('globalLogs', []);
+  globalEventRepository.clearGlobalLogs();
 }
 
 // --- Notifications ---
 
 export function getNotificationPreference(): NotificationPreference {
-  return {
-    ...DEFAULT_NOTIFICATION_PREFERENCE,
-    ...(store.get('notificationPreference') || {}),
-    levelEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.levelEnabled,
-      ...(store.get('notificationPreference')?.levelEnabled || {}),
-    },
-    moduleEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.moduleEnabled,
-      ...(store.get('notificationPreference')?.moduleEnabled || {}),
-    },
-    eventTypeEnabled: {
-      ...DEFAULT_NOTIFICATION_PREFERENCE.eventTypeEnabled,
-      ...(store.get('notificationPreference')?.eventTypeEnabled || {}),
-    },
-  };
+  return globalEventRepository.getNotificationPreference();
 }
 
 export function updateNotificationPreference(patch: Partial<NotificationPreference>): NotificationPreference {
-  const current = getNotificationPreference();
-  const next: NotificationPreference = {
-    ...current,
-    ...patch,
-    levelEnabled: { ...current.levelEnabled, ...(patch.levelEnabled || {}) },
-    moduleEnabled: { ...current.moduleEnabled, ...(patch.moduleEnabled || {}) },
-    eventTypeEnabled: { ...current.eventTypeEnabled, ...(patch.eventTypeEnabled || {}) },
-  };
-  store.set('notificationPreference', next);
-  return next;
+  return globalEventRepository.updateNotificationPreference(patch);
 }
 
 export function getNotifications(): NotificationEntry[] {
-  return store.get('notifications') || [];
-}
-
-function shouldNotify(log: GlobalLogEntry): boolean {
-  const preference = getNotificationPreference();
-  return preference.inAppEnabled
-    && preference.levelEnabled[log.level] !== false
-    && preference.moduleEnabled[log.module] !== false
-    && preference.eventTypeEnabled[log.eventType] !== false;
-}
-
-function maybeCreateNotification(log: GlobalLogEntry): void {
-  if (!shouldNotify(log)) return;
-  const notification: NotificationEntry = {
-    id: uuidv4(),
-    sourceLogId: log.id,
-    timestamp: log.timestamp,
-    channel: 'inApp',
-    deliveryStatus: 'delivered',
-    level: log.level,
-    module: log.module,
-    eventType: log.eventType,
-    title: log.title,
-    detail: log.detail,
-    errorMessage: log.error?.message,
-    accountId: log.accountId,
-    accountName: log.accountName,
-    taskKind: log.taskKind,
-    runId: log.runId,
-    metadata: log.metadata,
-  };
-  store.set('notifications', [notification, ...getNotifications()].slice(0, 500));
+  return globalEventRepository.getNotifications();
 }
 
 export function markNotificationRead(notificationId: string): NotificationEntry[] {
-  const timestamp = Date.now();
-  const next = getNotifications().map(notification => (
-    notification.id === notificationId
-      ? { ...notification, readAt: notification.readAt || timestamp, deliveryStatus: 'read' as const }
-      : notification
-  ));
-  store.set('notifications', next);
-  return next;
+  return globalEventRepository.markNotificationRead(notificationId);
 }
 
 export function markAllNotificationsRead(): NotificationEntry[] {
-  const timestamp = Date.now();
-  const next = getNotifications().map(notification => ({
-    ...notification,
-    readAt: notification.readAt || timestamp,
-    deliveryStatus: 'read' as const,
-  }));
-  store.set('notifications', next);
-  return next;
+  return globalEventRepository.markAllNotificationsRead();
 }
 
 export function clearNotifications(): void {
-  store.set('notifications', []);
+  globalEventRepository.clearNotifications();
 }
 
 // --- App settings ---
 
 export function getAppSettings(): AppSettings {
-  return normalizeAppSettings(store.get('appSettings') || DEFAULT_APP_SETTINGS);
+  return appSettingsRepository.getAppSettings();
 }
 
 export function updateAppSettings(patch: AppSettingsPatch): AppSettings {
-  const current = getAppSettings();
-  const next = normalizeAppSettings({
-    ...current,
-    ...patch,
-    shipmentCheck: {
-      ...current.shipmentCheck,
-      ...patch.shipmentCheck,
-    },
-  });
-  store.set('appSettings', next);
-  return next;
+  return appSettingsRepository.updateAppSettings(patch);
+}
+
+// --- Sync settings ---
+
+export function getSyncSettings(): SyncSettings {
+  return syncCredentialRepository.getSyncSettings();
+}
+
+export function updateSyncModuleSetting(module: SyncModuleKey, patch: Partial<SyncModuleSetting>): SyncSettings {
+  return syncCredentialRepository.updateSyncModuleSetting(module, patch);
+}
+
+// --- Credential metadata ---
+
+export function getCredentialMetas(accountId?: string): CredentialMeta[] {
+  return syncCredentialRepository.getCredentialMetas(accountId);
+}
+
+export function saveLocalCredentialMeta(input: {
+  accountId: string;
+  platform: CredentialMeta['platform'];
+  scope: CredentialMeta['scope'];
+}): CredentialMeta {
+  return syncCredentialRepository.saveLocalCredentialMeta(input);
+}
+
+export function authorizeCredentialMetaForCloud(credentialId: string): CredentialMeta {
+  return syncCredentialRepository.authorizeCredentialMetaForCloud(credentialId);
+}
+
+export function revokeCredentialMetaCloudAuthorization(credentialId: string): CredentialMeta {
+  return syncCredentialRepository.revokeCredentialMetaCloudAuthorization(credentialId);
 }
 
 export default store;

@@ -118,6 +118,8 @@ app.on('will-quit', async (e) => {
   e.preventDefault();
   try {
     await flushBrowserSession();
-  } catch {}
+  } catch (error) {
+    log.scope('Browser').warn('刷新淘宝浏览器会话失败', error);
+  }
   app.exit(0);
 });

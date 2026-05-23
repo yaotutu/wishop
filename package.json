@@ -10,11 +10,13 @@
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
+    "test": "vitest run",
     "start": "electron .",
     "push": "npm version patch -m 'chore: v%s' && git push --follow-tags"
   },
   "dependencies": {
     "@ant-design/icons": "^6.2.2",
+    "@tanstack/react-query": "^5.100.13",
     "antd": "^6.3.7",
     "axios": "^1.16.0",
     "dotenv": "^17.4.2",
@@ -24,10 +26,15 @@
     "node-cron": "^4.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "uuid": "^14.0.0"
+    "react-hook-form": "^7.76.0",
+    "uuid": "^14.0.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@ant-design/cli": "^6.4.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^25.7.0",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19.2.14",
@@ -36,7 +43,9 @@
     "concurrently": "^9.2.1",
     "electron": "^42.0.1",
     "electron-builder": "^26.8.1",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.7"
   }
 }

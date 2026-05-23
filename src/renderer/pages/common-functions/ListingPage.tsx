@@ -1,10 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
 import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { useTaskConfig, useLogs, useQuota, useSchedulers } from '../../hooks/useIpc';
-import { useBlacklistRules } from '../../hooks/useBlacklistRules';
-import { useSkipKeywords } from '../../hooks/useSkipKeywords';
-import { useStatusRules } from '../../hooks/useStatusRules';
+import { useBlacklistRules, useLogs, useQuota, useSchedulers, useSkipKeywords, useStatusRules, useTaskConfig } from '../../domains/listing/hooks';
 import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary, StatusRule } from '../../../shared/types';
 import { cronToTimeInput, dailyCronPresets, formatCron, timeInputToDailyCron } from '../../utils/cron';
 
@@ -19,7 +16,7 @@ const defaultTaskConfig: TaskConfig = {
 };
 
 const Listing: React.FC<ListingProps> = ({ accountId }) => {
-  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask } = useTaskConfig(accountId);
+  const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask, stopTask, onTaskLog } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
   const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
@@ -90,7 +87,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
       await saveTaskConfig({ ...taskConfig, listUnreviewedQuantity: quota.quota });
     }
     const config = { ...taskConfig, listUnreviewedQuantity: Math.min(taskConfig.listUnreviewedQuantity, quota.quota || taskConfig.listUnreviewedQuantity) };
-    unsubscribeRef.current = window.electronAPI.task.onLog(accountId, (log: LogEntry) => {
+    unsubscribeRef.current = onTaskLog((log: LogEntry) => {
       fetchLogs();
       if (log.status === 'success' && log.action === 'list') {
         setLocalListedCount(prev => prev + 1);
@@ -363,7 +360,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
             <Button
               danger
               icon={<CloseCircleOutlined />}
-              onClick={() => window.electronAPI.task.stop(accountId)}
+              onClick={stopTask}
               style={!running ? { display: 'none' } : undefined}
             >
               停止
@@ -746,7 +743,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           </div>
           <div>
             <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>任务配置</div>
-            <Space direction="vertical">
+            <Space vertical styles={{ item: { display: 'block' } }}>
               <Checkbox
                 checked={formData.taskConfig.listUnreviewed}
                 onChange={e => setFormData(prev => ({

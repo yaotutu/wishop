@@ -1,0 +1,80 @@
+import { describe, expect, it } from 'vitest';
+import { createAccountRepository } from './account-repository';
+import type { FullAccount } from '../../../shared/types';
+
+function makeAccount(id = 'account-1'): FullAccount {
+  return {
+    id,
+    name: '店铺',
+    config: { appId: 'app', appSecret: 'secret' },
+    schedulers: [],
+    taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
+    logs: [],
+    violationWords: [],
+    productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
+    createdAt: 1,
+  };
+}
+
+describe('account repository', () => {
+  it('adds an account and selects it when there is no active account', () => {
+    let accounts: FullAccount[] = [];
+    let activeAccountId = '';
+    const repo = createAccountRepository({
+      getAccounts: () => accounts,
+      setAccounts: next => { accounts = next; },
+      getActiveAccountId: () => activeAccountId,
+      setActiveAccountId: next => { activeAccountId = next; },
+      createId: () => 'account-1',
+      now: () => 100,
+    });
+
+    const account = repo.addAccount('新店铺', { appId: 'app', appSecret: 'secret' });
+
+    expect(account.id).toBe('account-1');
+    expect(accounts).toHaveLength(1);
+    expect(activeAccountId).toBe('account-1');
+  });
+
+  it('falls back to environment config values when account config is blank', () => {
+    let accounts = [makeAccount()];
+    accounts[0].config = { appId: '', appSecret: '' };
+    const repo = createAccountRepository({
+      getAccounts: () => accounts,
+      setAccounts: next => { accounts = next; },
+      getActiveAccountId: () => 'account-1',
+      setActiveAccountId: () => undefined,
+      createId: () => 'id',
+      now: () => 1,
+      env: { WECHAT_APP_ID: 'env-app', WECHAT_APP_SECRET: 'env-secret' },
+    });
+
+    expect(repo.getConfig('account-1')).toEqual({ appId: 'env-app', appSecret: 'env-secret' });
+  });
+
+  it('updates per-account schedulers without mutating other accounts', () => {
+    let accounts = [makeAccount('account-1'), makeAccount('account-2')];
+    const repo = createAccountRepository({
+      getAccounts: () => accounts,
+      setAccounts: next => { accounts = next; },
+      getActiveAccountId: () => 'account-1',
+      setActiveAccountId: () => undefined,
+      createId: () => 'scheduler-1',
+      now: () => 1,
+    });
+
+    repo.addScheduler('account-1', {
+      name: '定时提审',
+      enabled: true,
+      cronExpression: '0 9 * * *',
+      dailyLimit: 2,
+      taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
+    });
+    repo.updateScheduler('account-1', 'scheduler-1', { enabled: false });
+
+    expect(accounts[0].schedulers[0]).toMatchObject({ id: 'scheduler-1', enabled: false });
+    expect(accounts[1].schedulers).toEqual([]);
+  });
+});

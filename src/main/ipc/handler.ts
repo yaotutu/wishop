@@ -1,6 +1,8 @@
 import { registerAccountHandlers } from './handlers/accounts';
 import { registerBrowserHandlers } from './handlers/browser';
+import { registerCloudTaskHandlers } from './handlers/cloudTasks';
 import { registerConfigHandlers } from './handlers/config';
+import { registerCredentialHandlers } from './handlers/credentials';
 import { registerDraftHandlers } from './handlers/drafts';
 import { registerGlobalLogHandlers } from './handlers/globalLogs';
 import { registerLogHandlers } from './handlers/logs';
@@ -14,6 +16,7 @@ import { registerRealAddressHandlers } from './handlers/realAddresses';
 import { registerSchedulerHandlers } from './handlers/scheduler';
 import { registerScheduledJobHandlers } from './handlers/scheduledJobs';
 import { registerSettingsHandlers } from './handlers/settings';
+import { registerSyncHandlers } from './handlers/sync';
 import { registerTaskHandlers } from './handlers/task';
 import { registerTaobaoAutomationHandlers } from './handlers/taobaoAutomation';
 import { registerViolationHandlers } from './handlers/violation';
@@ -51,7 +54,9 @@ export function registerHandlers(): void {
 
   registerAccountHandlers(context);
   registerBrowserHandlers();
+  registerCloudTaskHandlers();
   registerConfigHandlers();
+  registerCredentialHandlers();
   registerDraftHandlers(context);
   registerGlobalLogHandlers();
   registerLogHandlers();
@@ -65,6 +70,7 @@ export function registerHandlers(): void {
   registerSchedulerHandlers();
   registerScheduledJobHandlers();
   registerSettingsHandlers();
+  registerSyncHandlers();
   registerTaobaoAutomationHandlers();
   registerTaskHandlers(context);
   registerViolationHandlers(context);

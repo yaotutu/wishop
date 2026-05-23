@@ -1,11 +1,12 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
-import { useAccounts } from '../hooks/useAccounts';
+import { useAccounts } from '../domains/accounts/hooks';
 import type { Account, ShippingAssistantSession } from '../../shared/types';
-import { useBrowser } from '../hooks/useBrowser';
+import { useBrowser } from '../domains/browser/hooks';
 import GlobalLogDrawer from './GlobalLogDrawer';
 import NotificationCenter from './NotificationCenter';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
+import { useAppStore, type AppModule } from '../state/app-store';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -23,7 +24,7 @@ const ListingPage = lazy(loadListingPage);
 const ViolationPage = lazy(loadViolationPage);
 const ScheduledJobsPage = lazy(loadScheduledJobsPage);
 
-type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
+type ModuleType = AppModule;
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
 
@@ -125,10 +126,12 @@ const AccountModuleContent: React.FC<{
 };
 
 const Layout: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<ModuleType>('orders');
+  const activeModule = useAppStore(state => state.activeModule);
+  const setActiveModule = useAppStore(state => state.setActiveModule);
+  const settingsTab = useAppStore(state => state.settingsTab);
+  const setSettingsTab = useAppStore(state => state.setSettingsTab);
   const [mountedModules, setMountedModules] = useState<ModuleType[]>(['orders']);
   const [version, setVersion] = useState('');
-  const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
   const { openBrowser, openCleanBrowser, openShippingAssistant } = useBrowser();
   const moduleSwitchTimerRef = useRef<number | null>(null);
@@ -172,7 +175,7 @@ const Layout: React.FC = () => {
   const handleVersionClick = useCallback(() => {
     setSettingsTab('about');
     switchModule('settings');
-  }, [switchModule]);
+  }, [setSettingsTab, switchModule]);
 
   const navigateToStoreManagement = useCallback(() => {
     switchModule('storeManagement');

@@ -1,456 +1,66 @@
 // Shared types across main process, preload, and renderer
+export type { Account, Config, FullAccount } from './accounts';
+export type { LicenseActivationInput, LicenseState, LicensedFeature } from './license';
+export type {
+  ScheduledJob,
+  ScheduledJobModule,
+  ScheduledJobRunStats,
+  ScheduledJobScope,
+  ScheduledJobStatus,
+  ScheduledJobType,
+  ScheduledTask,
+} from './scheduling';
 
-export interface Config {
-  appId: string;
-  appSecret: string;
-}
+export type {
+  AddLogFn,
+  BlacklistRule,
+  DraftProduct,
+  ErrorCodeSummary,
+  LogEntry,
+  QuotaResult,
+  StatusAction,
+  StatusRule,
+  TaskConfig,
+  TaskCycleResult,
+} from './listing';
+export type { ViolationMatch, ViolationScanResult } from './violations';
 
-export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
-export type ScheduledJobScope = 'account' | 'global';
-export type ScheduledJobType =
-  | 'listing.submitDrafts'
-  | 'orders.checkShipmentStatus'
-  | 'violation.scanProducts';
-export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
-
-export interface ScheduledJobRunStats {
-  lastRunDate: string;
-  todayRunCount: number;
-  lastRunAt?: number;
-  lastFinishedAt?: number;
-  lastStatus?: ScheduledJobStatus;
-  lastError?: string;
-}
-
-export interface ScheduledJob<TPayload = unknown> {
-  id: string;
-  name: string;
-  enabled: boolean;
-  module: ScheduledJobModule;
-  jobType: ScheduledJobType;
-  scope: ScheduledJobScope;
-  accountId?: string;
-  excludedAccountIds?: string[];
-  cronExpression: string;
-  staggerMinutes?: number;
-  dailyLimit?: number;
-  payload: TPayload;
-  stats: ScheduledJobRunStats;
-  accountStats?: Record<string, ScheduledJobRunStats>;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ScheduledTask {
-  id: string;
-  name: string;
-  enabled: boolean;
-  cronExpression: string;
-  dailyLimit: number;
-  taskConfig: TaskConfig;
-  lastRunDate: string;
-  todayListedCount: number;
-}
-
-export interface LogEntry {
-  id: string;
-  timestamp: number;
-  runId: string;
-  productId: string;
-  productTitle: string;
-  action: 'list' | 'delete' | 'check' | 'skip';
-  status: 'success' | 'failed';
-  errorCode?: number;
-  errorMsg?: string;
-}
-
-export interface TaskConfig {
-  listUnreviewed: boolean;
-  listUnreviewedQuantity: number;
-  autoDeleteFailed: boolean;
-}
-
-export interface DraftProduct {
-  productId: string;
-  title: string;
-  headImgs: string[];
-  status: number;
-  editStatus: number;
-}
-
-export interface QuotaResult {
-  quota: number;
-  total: number;
-}
-
-export interface ErrorCodeSummary {
-  code: number;
-  count: number;
-  msg: string;
-}
-
-export interface TaskCycleResult {
-  scanned: number;
-  deleted: number;
-  listed: number;
-  errors: number;
-  skipped: number;
-  stopped: boolean;
-  reason?: string;
-  errorCodes?: ErrorCodeSummary[];
-  pendingCount?: number;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  config: Config;
-  createdAt: number;
-}
-
-export type AddLogFn = (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
-
-export interface ProductSourceItem {
-  id: string;
-  url: string;
-  quantity: number;
-  remark: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ProductSourceBinding {
-  productId: string;
-  sources: ProductSourceItem[];
-}
-
-export type LinkedOrderPlatform = 'taobao' | 'tmall' | '1688' | 'manual';
-export type PurchaseShipmentCheckStatus = 'queued' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
-
-export interface LinkedPlatformOrder {
-  id: string;
-  platform: LinkedOrderPlatform;
-  platformOrderId: string;
-  platformOrderStatus: string;
-  logisticsStatus: string;
-  logisticsCompany?: string;
-  trackingNumber?: string;
-  remark?: string;
-  lastShipmentCheckQueuedAt?: number;
-  lastShipmentCheckStartedAt?: number;
-  lastShipmentCheckFinishedAt?: number;
-  lastShipmentCheckStatus?: PurchaseShipmentCheckStatus;
-  lastShipmentCheckError?: string;
-  nextShipmentCheckAfter?: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface OrderAssociation {
-  orderId: string;
-  internalRemark: string;
-  linkedOrders: LinkedPlatformOrder[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export type TaobaoSecurityChallengeKind = 'login' | 'slider' | 'captcha' | 'access-denied' | 'unknown';
-
-export interface TaobaoSecurityChallengeSnapshot {
-  detected: boolean;
-  kind: TaobaoSecurityChallengeKind;
-  reason: string;
-  title: string;
-  url: string;
-  matchedSignals: string[];
-}
-
-export interface TaobaoPurchaseOrderSnapshot {
-  platformOrderId: string;
-  platformOrderStatus: string;
-  logisticsStatus: string;
-  logisticsCompany?: string;
-  trackingNumber?: string;
-  remark?: string;
-}
-
-export interface PurchaseLookupAutomationInput {
-  accountId: string;
-  orderId: string;
-  platformOrderId: string;
-}
-
-export interface PurchaseLookupAutomationResult {
-  snapshot: TaobaoPurchaseOrderSnapshot;
-  association: OrderAssociation;
-  challenge?: TaobaoSecurityChallengeSnapshot;
-}
-
-export interface TaobaoRefundAutomationInput {
-  accountId: string;
-  orderId: string;
-  platformOrderId: string;
-  reason?: string;
-  autoSubmit?: boolean;
-}
-
-export interface TaobaoRefundPrepareSnapshot {
-  platformOrderId: string;
-  selectedReason: string;
-  refundAmountText: string;
-  submitReady: boolean;
-  autoSubmitted?: boolean;
-  url: string;
-}
-
-export interface TaobaoRefundAutomationResult {
-  snapshot: TaobaoRefundPrepareSnapshot;
-  challenge?: TaobaoSecurityChallengeSnapshot;
-}
-
-// Order types
-
-export enum OrderStatus {
-  PendingPayment = 10,
-  GiftPendingAccept = 12,
-  GroupBuying = 13,
-  PendingShipment = 20,
-  PartialShipment = 21,
-  PendingReceipt = 30,
-  Completed = 100,
-  CancelledByAfterSale = 200,
-  CancelledByUser = 250,
-}
-
-export type OrderTimeScope = 'all' | '7d' | '30d' | '90d';
-
-export interface OrderSkuAttr {
-  attr_key: string;
-  attr_value: string;
-}
-
-export interface OrderProductInfo {
-  product_id: string;
-  sku_id: string;
-  thumb_img: string;
-  sku_cnt: number;
-  sale_price: number;
-  title: string;
-  sku_code: string;
-  market_price: number;
-  sku_attrs: OrderSkuAttr[];
-  real_price: number;
-  estimate_price: number;
-  on_aftersale_sku_cnt: number;
-  finish_aftersale_sku_cnt: number;
-  delivery_deadline?: number;
-}
-
-export interface OrderPriceInfo {
-  product_price: number;
-  order_price: number;
-  freight: number;
-  discounted_price: number;
-  original_order_price: number;
-  merchant_receieve_price: number;
-}
-
-export interface OrderSettleInfo {
-  commission_fee?: number;
-  predict_commission_fee?: number;
-}
-
-export interface OrderAddressInfo {
-  user_name: string;
-  postal_code: string;
-  province_name: string;
-  city_name: string;
-  county_name: string;
-  detail_info: string;
-  tel_number: string;
-  purchaser_tel_number?: string;
-  virtual_order_tel_number?: string;
-  national_code?: string;
-  house_number: string;
-  virtual_number_info?: OrderVirtualNumberInfo;
-}
-
-export interface OrderVirtualNumberInfo {
-  virtual_number: string;
-  extension: string;
-  expiration: number;
-  number_state: number;
-}
-
-export interface OrderRealAddressCache {
-  orderId: string;
-  address: OrderAddressInfo;
-  fetchedAt: number;
-  updatedAt: number;
-}
-
-export interface CheckoutAddressFillResult {
-  filledFields: string[];
-  warnings: string[];
-}
-
-export interface ShippingAssistantSession {
-  accountId: string;
-  orderId: string;
-  product: OrderProductInfo;
-  source: ProductSourceItem;
-  address?: OrderAddressInfo;
-  customerNotes?: string;
-  merchantNotes?: string;
-  createTime?: number;
-  payTime?: number;
-  orderPrice?: number;
-}
-
-export interface ShipOrderFromPurchaseInput {
-  accountId: string;
-  orderId: string;
-  logisticsCompany: string;
-  trackingNumber: string;
-  deliveryId?: string;
-}
-
-export interface ShipOrderFromPurchaseResult {
-  order: Order;
-  deliveryId: string;
-  deliveryName: string;
-  waybillId: string;
-}
-
-export interface DeliveryCompanyOption {
-  deliveryId: string;
-  deliveryName: string;
-}
-
-export interface OrderDeliveryProductInfo {
-  waybill_id: string;
-  delivery_id: string;
-  delivery_name: string;
-  delivery_time: number;
-}
-
-export interface OrderDeliveryInfo {
-  address_info: OrderAddressInfo;
-  delivery_product_info: OrderDeliveryProductInfo[];
-  ship_done_time: number;
-  deliver_method: number;
-}
-
-export interface OrderExtInfo {
-  customer_notes: string;
-  merchant_notes: string;
-  confirm_receipt_time: number;
-}
-
-export interface OrderPayInfo {
-  pay_time: number;
-  transaction_id: string;
-  payment_method: number;
-}
-
-export interface OrderDetail {
-  product_infos: OrderProductInfo[];
-  price_info: OrderPriceInfo;
-  settle_info?: OrderSettleInfo;
-  pay_info: OrderPayInfo;
-  delivery_info: OrderDeliveryInfo;
-  ext_info: OrderExtInfo;
-}
-
-export interface Order {
-  order_id: string;
-  status: OrderStatus;
-  create_time: number;
-  update_time: number;
-  order_detail: OrderDetail;
-}
-
-export interface OrderListParams {
-  page_size?: number;
-  next_key?: string;
-  status?: OrderStatus;
-  create_time_range?: { start_time: number; end_time: number };
-  update_time_range?: { start_time: number; end_time: number };
-  order_id?: string;
-}
-
-export interface OrderListResult {
-  order_id_list: string[];
-  next_key: string;
-  has_more: boolean;
-}
-
-export interface OrderSearchParams {
-  search_type: 'order_id' | 'title' | 'user_name' | 'tel_number_last4' | 'merchant_notes' | 'customer_notes';
-  keyword: string;
-  status?: OrderStatus;
-  next_key?: string;
-  page_size?: number;
-}
-
-export interface ViolationMatch {
-  productId: string;
-  title: string;
-  matchedWords: string[];
-}
-
-export interface ViolationScanResult {
-  scanned: number;
-  violations: ViolationMatch[];
-  errors: number;
-  stopped: boolean;
-  reason?: string;
-}
-
-// Blacklist rule — error codes that should stop the task immediately
-export interface BlacklistRule {
-  code: number;
-  description?: string;
-}
-
-// Status rule — maps editStatus codes to actions during task cycle
-export type StatusAction = 'submit' | 'delete' | 'skip';
-
-export interface StatusRule {
-  editStatus: number;  // 微信小店商品的 edit_status 值
-  label: string;       // 中文标签，如"编辑中"、"审核中"
-  action: StatusAction; // 对应操作：submit=提交审核, delete=删除, skip=跳过
-}
-
-export type LicensedFeature = 'orders' | 'listing' | 'violation' | 'shipping';
-
-export interface LicenseActivationInput {
-  licenseKey: string;
-}
-
-export interface LicenseState {
-  enforcementEnabled: boolean;
-  status: 'inactive' | 'active' | 'expired' | 'invalid' | 'grace';
-  plan: 'none' | 'paid';
-  licenseKey?: string;
-  deviceId: string;
-  activatedAt?: number;
-  expiresAt?: number;
-  checkedAt?: number;
-  lastError?: string;
-}
-
-// Full account with all data (main process only)
-export interface FullAccount {
-  id: string;
-  name: string;
-  config: Config;
-  schedulers: ScheduledTask[];
-  taskConfig: TaskConfig;
-  logs: LogEntry[];
-  violationWords: string[];
-  productSources: ProductSourceBinding[];
-  orderAssociations: OrderAssociation[];
-  realAddressCaches: OrderRealAddressCache[];
-  createdAt: number;
-}
+export type {
+  CheckoutAddressFillResult,
+  DeliveryCompanyOption,
+  LinkedOrderPlatform,
+  LinkedPlatformOrder,
+  Order,
+  OrderAddressInfo,
+  OrderAssociation,
+  OrderDeliveryInfo,
+  OrderDeliveryProductInfo,
+  OrderDetail,
+  OrderExtInfo,
+  OrderListParams,
+  OrderListResult,
+  OrderPayInfo,
+  OrderPriceInfo,
+  OrderProductInfo,
+  OrderRealAddressCache,
+  OrderSearchParams,
+  OrderSettleInfo,
+  OrderSkuAttr,
+  OrderTimeScope,
+  OrderVirtualNumberInfo,
+  ProductSourceBinding,
+  ProductSourceItem,
+  PurchaseLookupAutomationInput,
+  PurchaseLookupAutomationResult,
+  PurchaseShipmentCheckStatus,
+  ShipOrderFromPurchaseInput,
+  ShipOrderFromPurchaseResult,
+  ShippingAssistantSession,
+  TaobaoPurchaseOrderSnapshot,
+  TaobaoRefundAutomationInput,
+  TaobaoRefundAutomationResult,
+  TaobaoRefundPrepareSnapshot,
+  TaobaoSecurityChallengeKind,
+  TaobaoSecurityChallengeSnapshot,
+} from './orders';
+export { OrderStatus } from './orders';

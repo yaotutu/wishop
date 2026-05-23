@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Drawer, Empty, FloatButton, Space, Tag, Timeline, Typography } from 'antd';
 import { ClearOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useGlobalLogs } from '../hooks/useIpc';
+import { useGlobalLogs } from '../domains/system/hooks';
 import type { GlobalLogEntry, GlobalLogEventType, GlobalLogLevel, GlobalLogModule, GlobalLogTaskKind } from '../../shared/global-log';
 
 const { Text } = Typography;
