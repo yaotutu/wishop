@@ -1,6 +1,8 @@
 import { BrowserWindow, session } from 'electron';
+import path from 'path';
 
 const CLEAN_PARTITION_PREFIX = 'persist:taobao-clean-';
+const TAOBAO_BROWSER_PRELOAD = path.join(__dirname, '..', '..', 'preload', 'taobao-browser.js');
 
 const cleanBrowserWindows = new Map<string, BrowserWindow>();
 let isQuitting = false;
@@ -60,6 +62,7 @@ export function openCleanBrowserWindow(parent: BrowserWindow, profileId: string,
     title: '淘宝',
     webPreferences: {
       partition,
+      preload: TAOBAO_BROWSER_PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
