@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, Card, Table, Button, Space, Modal, Input, message, Tag, Popconfirm, Upload } from 'antd';
+import { Alert, Card, Empty, Table, Button, Space, Modal, Input, message, Tag, Popconfirm, Upload } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined, DownloadOutlined, CopyOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import type { Account, Config } from '../../../shared/types';
@@ -239,12 +239,14 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
   ];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <Card
         size="small"
         title="店铺管理"
+        style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        styles={{ body: { flex: 1, minHeight: 0 } }}
         extra={
-          <Space size={8}>
+          <Space size={8} wrap>
             <Button icon={<UploadOutlined />} onClick={() => {
               resetImportState();
               setImportModalOpen(true);
@@ -266,7 +268,8 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
           rowKey="id"
           size="small"
           pagination={false}
-          locale={{ emptyText: '暂无店铺，点击上方按钮添加' }}
+          scroll={{ x: 760 }}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无店铺，点击上方按钮添加" /> }}
         />
       </Card>
 

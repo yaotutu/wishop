@@ -1,9 +1,9 @@
-import { ipcMain } from 'electron';
 import { getClient } from '../../wxshop/client-registry';
 import type { DeliveryCompanyOption, Order, OrderListParams, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult } from '../../../shared/types';
 import { createLogger } from '../../utils/logger';
-import { setRealAddressCache } from '../../store';
+import { addGlobalLog, getConfig, setRealAddressCache } from '../../store';
 import { shipOrderFromPurchase } from '../../services/order-delivery-service';
+import { handleIpc } from '../utils/handle-ipc';
 
 interface OrderPaginationState {
   nextKey: string;
@@ -67,7 +67,7 @@ async function fetchOrderDetails(
 }
 
 export function registerOrderHandlers(context: { orderPaginationMap: Map<string, OrderPaginationState> }): void {
-  ipcMain.handle('orders:list', async (_, accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope: OrderTimeScope = 'all'): Promise<{ orders: Order[]; hasMore: boolean }> => {
+  handleIpc('orders:list', async (_, accountId: string, status?: OrderStatus, pageSize?: number, reset?: boolean, timeScope: OrderTimeScope = 'all'): Promise<{ orders: Order[]; hasMore: boolean }> => {
     const logger = createLogger('Orders', accountId);
     const paginationKey = `${accountId}:${status ?? 'all'}:${timeScope}`;
     let pag = context.orderPaginationMap.get(paginationKey);
@@ -80,7 +80,7 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
       return { orders: [], hasMore: false };
     }
 
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
     let scannedEmptyWindows = 0;
 
     while (pag.hasMore) {
@@ -115,39 +115,42 @@ export function registerOrderHandlers(context: { orderPaginationMap: Map<string,
     }
 
     return { orders: [], hasMore: false };
-  });
+  }, 'Orders');
 
-  ipcMain.handle('orders:detail', async (_, accountId: string, orderId: string): Promise<Order> => {
-    const api = getClient(accountId);
+  handleIpc('orders:detail', async (_, accountId: string, orderId: string): Promise<Order> => {
+    const api = getClient(accountId, getConfig(accountId));
     return api.getOrderDetail(orderId);
-  });
+  }, 'Orders');
 
-  ipcMain.handle('orders:search', async (_, accountId: string, searchParams: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => {
+  handleIpc('orders:search', async (_, accountId: string, searchParams: OrderSearchParams): Promise<{ orders: Order[]; hasMore: boolean }> => {
     const logger = createLogger('Orders', accountId);
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
     const listResult = await api.searchOrders(searchParams);
 
     const orders = await fetchOrderDetails(listResult.order_id_list, api.getOrderDetail, logger);
 
     return { orders, hasMore: listResult.has_more };
-  });
+  }, 'Orders');
 
-  ipcMain.handle('orders:decodeAddress', async (_, accountId: string, orderId: string): Promise<OrderAddressInfo> => {
-    const api = getClient(accountId);
+  handleIpc('orders:decodeAddress', async (_, accountId: string, orderId: string): Promise<OrderAddressInfo> => {
+    const api = getClient(accountId, getConfig(accountId));
     const address = await api.decodeOrderSensitiveInfo(orderId);
     setRealAddressCache(accountId, orderId, address);
     return address;
-  });
+  }, 'Orders');
 
-  ipcMain.handle('orders:listDeliveryCompanies', async (_, accountId: string): Promise<DeliveryCompanyOption[]> => {
-    const companies = await getClient(accountId).getDeliveryCompanyList(false);
+  handleIpc('orders:listDeliveryCompanies', async (_, accountId: string): Promise<DeliveryCompanyOption[]> => {
+    const companies = await getClient(accountId, getConfig(accountId)).getDeliveryCompanyList(false);
     return companies.map(company => ({
       deliveryId: company.delivery_id,
       deliveryName: company.delivery_name,
     }));
-  });
+  }, 'Orders');
 
-  ipcMain.handle('orders:shipFromPurchase', async (_, input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> => {
-    return shipOrderFromPurchase(input);
-  });
+  handleIpc('orders:shipFromPurchase', async (_, input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> => {
+    return shipOrderFromPurchase(input, {
+      client: getClient(input.accountId, getConfig(input.accountId)),
+      addGlobalLog,
+    });
+  }, 'Orders');
 }

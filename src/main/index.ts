@@ -1,12 +1,11 @@
 import dotenv from 'dotenv';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerHandlers } from './ipc/handler';
-import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { startAllScheduledJobs, stopAllScheduledJobs } from './scheduler/scheduled-job-runner';
 import { cleanOldLogs } from './store';
-import { initUpdater, quitAndInstall, checkForUpdates } from './updater';
-import { flushBrowserSession, setBrowserQuitting } from './browser/browser-window';
+import { initUpdater } from './updater';
+import { flushBrowserSessionWithTimeout, setBrowserQuitting } from './browser/browser-window';
 import { log } from './utils/logger';
 
 dotenv.config();
@@ -61,17 +60,6 @@ function createWindow(): void {
     initUpdater(mainWindow);
   }
 
-  ipcMain.handle('update:install', () => {
-    quitAndInstall();
-  });
-
-  ipcMain.handle('update:check', async () => {
-    await checkForUpdates();
-  });
-
-  ipcMain.handle('app:version', () => {
-    return app.getVersion();
-  });
 }
 
 app.whenReady().then(() => {
@@ -94,7 +82,6 @@ app.whenReady().then(() => {
 
   cleanOldLogs();
   registerHandlers();
-  startAllTasks();
   createWindow();
   startAllScheduledJobs(() => mainWindow);
 
@@ -106,7 +93,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  stopAllTasks();
   stopAllScheduledJobs();
 });
 
@@ -117,7 +103,10 @@ app.on('before-quit', () => {
 app.on('will-quit', async (e) => {
   e.preventDefault();
   try {
-    await flushBrowserSession();
+    const flushed = await flushBrowserSessionWithTimeout('baseline', 3000);
+    if (!flushed) {
+      log.scope('Browser').warn('刷新淘宝浏览器会话超时，继续退出');
+    }
   } catch (error) {
     log.scope('Browser').warn('刷新淘宝浏览器会话失败', error);
   }

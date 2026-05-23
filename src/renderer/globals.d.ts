@@ -1,11 +1,12 @@
+import type { WishopAPI } from '../preload';
+
 declare global {
   interface Window {
-    electronAPI: any;
-    wishop: any;
-    appVersion?: {
+    wishop: WishopAPI;
+    appVersion: {
       get: () => Promise<string>;
     };
-    updater?: {
+    updater: {
       check: () => Promise<void>;
       onAvailable: (callback: (info: { version: string }) => void) => void;
       onProgress: (callback: (info: { percent: number }) => void) => void;

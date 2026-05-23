@@ -12,3 +12,7 @@ export interface ViolationScanResult {
   reason?: string;
 }
 
+export type ViolationScanStepResult =
+  | ({ type: 'violation'; scanned: number } & ViolationMatch)
+  | { type: 'done'; scanned?: number; reason?: string }
+  | { type: 'stopped'; reason?: string };

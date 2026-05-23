@@ -1,5 +1,6 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
-import { AddLogFn } from '../store';
+import type { AddLogFn } from '../../shared/types';
+import { getErrorMessage } from '../../shared/errors';
 import { createLogger } from '../utils/logger';
 
 const DELETE_INTERVAL_MS = 1000;
@@ -41,8 +42,8 @@ export async function deleteOne(
 
     addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorCode: res.errcode, errorMsg: res.errmsg });
     return 'failed';
-  } catch (error: any) {
-    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: error.message });
+  } catch (error: unknown) {
+    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: getErrorMessage(error) });
     logger.error(`异常: ${product.title}`, error);
     return 'failed';
   }

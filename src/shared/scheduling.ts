@@ -1,5 +1,3 @@
-import type { TaskConfig } from './listing';
-
 export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
 export type ScheduledJobScope = 'account' | 'global';
 export type ScheduledJobType =
@@ -35,15 +33,3 @@ export interface ScheduledJob<TPayload = unknown> {
   createdAt: number;
   updatedAt: number;
 }
-
-export interface ScheduledTask {
-  id: string;
-  name: string;
-  enabled: boolean;
-  cronExpression: string;
-  dailyLimit: number;
-  taskConfig: TaskConfig;
-  lastRunDate: string;
-  todayListedCount: number;
-}
-

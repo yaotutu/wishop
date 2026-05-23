@@ -1,28 +1,10 @@
-import { registerAccountHandlers } from './handlers/accounts';
-import { registerBrowserHandlers } from './handlers/browser';
-import { registerCloudTaskHandlers } from './handlers/cloudTasks';
-import { registerConfigHandlers } from './handlers/config';
-import { registerCredentialHandlers } from './handlers/credentials';
-import { registerDraftHandlers } from './handlers/drafts';
-import { registerGlobalLogHandlers } from './handlers/globalLogs';
-import { registerLogHandlers } from './handlers/logs';
-import { registerLicenseHandlers } from './handlers/license';
-import { registerNotificationHandlers } from './handlers/notifications';
-import { registerOrderHandlers } from './handlers/orders';
-import { registerOrderAssociationHandlers } from './handlers/orderAssociations';
-import { registerProductSourceHandlers } from './handlers/productSources';
-import { registerQuotaHandlers } from './handlers/quota';
-import { registerRealAddressHandlers } from './handlers/realAddresses';
-import { registerSchedulerHandlers } from './handlers/scheduler';
-import { registerScheduledJobHandlers } from './handlers/scheduledJobs';
-import { registerSettingsHandlers } from './handlers/settings';
-import { registerSyncHandlers } from './handlers/sync';
-import { registerTaskHandlers } from './handlers/task';
-import { registerTaobaoAutomationHandlers } from './handlers/taobaoAutomation';
-import { registerViolationHandlers } from './handlers/violation';
-import { registerBlacklistRulesHandlers } from './handlers/blacklistRules';
-import { registerSkipCodeRulesHandlers } from './handlers/skipCodeRules';
-import { registerStatusRulesHandlers } from './handlers/statusRules';
+import { registerBrowserTaobaoDomainHandlers } from './handlers/domains/browser-taobao';
+import { registerListingDomainHandlers } from './handlers/domains/listing';
+import { registerOrdersDomainHandlers } from './handlers/domains/orders';
+import { registerSettingsSystemDomainHandlers } from './handlers/domains/settings-system';
+import { registerSyncCloudDomainHandlers } from './handlers/domains/sync-cloud';
+import { registerViolationsDomainHandlers } from './handlers/domains/violations';
+import type { ViolationScanSessionState } from './handlers/violation';
 import { SessionManager } from './utils/session-manager';
 
 interface PaginationState {
@@ -37,44 +19,18 @@ interface OrderPaginationState {
   minStartTime: number;
 }
 
-interface ScanSessionState {
-  generator: AsyncGenerator<any> | null;
-  current: any | null;
-  done: boolean;
-  logForwarder: { start: () => void; stop: () => void };
-}
-
 const draftPaginationMap = new Map<string, PaginationState>();
 const orderPaginationMap = new Map<string, OrderPaginationState>();
 const taskSessions = new SessionManager<void>();
-const scanSessions = new SessionManager<ScanSessionState>();
+const scanSessions = new SessionManager<ViolationScanSessionState>();
 
 export function registerHandlers(): void {
   const context = { draftPaginationMap, orderPaginationMap, taskSessions, scanSessions };
 
-  registerAccountHandlers(context);
-  registerBrowserHandlers();
-  registerCloudTaskHandlers();
-  registerConfigHandlers();
-  registerCredentialHandlers();
-  registerDraftHandlers(context);
-  registerGlobalLogHandlers();
-  registerLogHandlers();
-  registerLicenseHandlers();
-  registerNotificationHandlers();
-  registerOrderHandlers(context);
-  registerOrderAssociationHandlers();
-  registerProductSourceHandlers();
-  registerQuotaHandlers();
-  registerRealAddressHandlers();
-  registerSchedulerHandlers();
-  registerScheduledJobHandlers();
-  registerSettingsHandlers();
-  registerSyncHandlers();
-  registerTaobaoAutomationHandlers();
-  registerTaskHandlers(context);
-  registerViolationHandlers(context);
-  registerBlacklistRulesHandlers();
-  registerSkipCodeRulesHandlers();
-  registerStatusRulesHandlers();
+  registerSettingsSystemDomainHandlers(context);
+  registerOrdersDomainHandlers(context);
+  registerListingDomainHandlers(context);
+  registerViolationsDomainHandlers(context);
+  registerSyncCloudDomainHandlers();
+  registerBrowserTaobaoDomainHandlers();
 }

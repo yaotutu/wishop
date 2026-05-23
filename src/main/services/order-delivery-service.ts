@@ -1,9 +1,13 @@
 import type { Order, OrderProductInfo, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult } from '../../shared/types';
+import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
 import { OrderStatus } from '../../shared/types';
 import { DELIVERY_COMPANY_UNMATCHED_PREFIX } from '../../shared/errors';
-import { addGlobalLog } from '../store';
-import { getClient } from '../wxshop/client-registry';
-import type { DeliveryCompany, SendOrderDeliveryPayload } from '../wxshop/client';
+import type { DeliveryCompany, SendOrderDeliveryPayload, WxShopClient } from '../wxshop/client';
+
+export interface OrderDeliveryDeps {
+  client: WxShopClient;
+  addGlobalLog: (input: GlobalLogInput) => GlobalLogEntry;
+}
 
 function normalizeDeliveryName(value: string): string {
   return value
@@ -85,7 +89,7 @@ function buildProductInfos(products: OrderProductInfo[]): SendOrderDeliveryPaylo
   return productInfos;
 }
 
-export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): Promise<ShipOrderFromPurchaseResult> {
+export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput, deps: OrderDeliveryDeps): Promise<ShipOrderFromPurchaseResult> {
   const logisticsCompany = input.logisticsCompany.trim();
   const trackingNumber = input.trackingNumber.trim();
   const runId = `ship-${input.orderId}-${Date.now()}`;
@@ -94,7 +98,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
   if (!logisticsCompany) throw new Error('缺少快递公司，无法提交发货');
   if (!trackingNumber) throw new Error('缺少快递单号，无法提交发货');
 
-  addGlobalLog({
+  deps.addGlobalLog({
     module: 'orders',
     eventType: 'started',
     level: 'info',
@@ -108,7 +112,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
   });
 
   try {
-    const client = getClient(input.accountId);
+    const client = deps.client;
     const order = await client.getOrderDetail(input.orderId);
     assertShippableOrder(order);
 
@@ -134,7 +138,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     });
 
     const updatedOrder = await client.getOrderDetail(input.orderId);
-    addGlobalLog({
+    deps.addGlobalLog({
       module: 'orders',
       eventType: 'completed',
       level: 'success',
@@ -155,7 +159,7 @@ export async function shipOrderFromPurchase(input: ShipOrderFromPurchaseInput): 
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : '提交微信小店发货失败';
-    addGlobalLog({
+    deps.addGlobalLog({
       module: 'orders',
       eventType: 'failed',
       level: 'error',

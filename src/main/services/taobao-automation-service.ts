@@ -1,10 +1,10 @@
 import type { BrowserWindow } from 'electron';
 import { getCleanBrowserWindow } from '../browser/browser-window';
-import { getOrderAssociations, setOrderAssociation } from '../store';
 import { ADDRESS_FILL_SCRIPT, CHALLENGE_SCRIPT, OPEN_CHECKOUT_ADDRESS_EDITOR_SCRIPT, PURCHASE_LOOKUP_SCRIPT, REFUND_PREPARE_SCRIPT } from '../taobao/page-scripts';
 import { loadCleanTaobaoPage, sleep } from '../taobao/page-runtime';
 import type {
   CheckoutAddressFillResult,
+  OrderAssociation,
   OrderAddressInfo,
   PurchaseLookupAutomationInput,
   PurchaseLookupAutomationResult,
@@ -14,12 +14,22 @@ import type {
   TaobaoSecurityChallengeSnapshot,
 } from '../../shared/types';
 
+export interface TaobaoAutomationDeps {
+  getOrderAssociations: (accountId: string) => OrderAssociation[];
+  setOrderAssociation: (
+    accountId: string,
+    orderId: string,
+    input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+  ) => OrderAssociation;
+}
+
 function mergePurchaseAssociation(
+  deps: TaobaoAutomationDeps,
   accountId: string,
   orderId: string,
   snapshot: TaobaoPurchaseOrderSnapshot,
-): ReturnType<typeof setOrderAssociation> {
-  const existing = getOrderAssociations(accountId).find(item => item.orderId === orderId);
+): OrderAssociation {
+  const existing = deps.getOrderAssociations(accountId).find(item => item.orderId === orderId);
   const now = Date.now();
   const platformOrderId = snapshot.platformOrderId || '';
   const linkedOrders = existing?.linkedOrders || [];
@@ -42,7 +52,7 @@ function mergePurchaseAssociation(
     updatedAt: now,
   };
 
-  return setOrderAssociation(accountId, orderId, {
+  return deps.setOrderAssociation(accountId, orderId, {
     internalRemark: existing?.internalRemark || '',
     linkedOrders: [
       nextLinked,
@@ -51,7 +61,7 @@ function mergePurchaseAssociation(
   });
 }
 
-export async function runPurchaseLookupAutomation(parent: BrowserWindow, input: PurchaseLookupAutomationInput): Promise<PurchaseLookupAutomationResult> {
+export async function runPurchaseLookupAutomation(parent: BrowserWindow, input: PurchaseLookupAutomationInput, deps: TaobaoAutomationDeps): Promise<PurchaseLookupAutomationResult> {
   const url = new URL('https://trade.taobao.com/trade/detail/trade_order_detail.htm');
   url.searchParams.set('biz_order_id', input.platformOrderId);
   const win = await loadCleanTaobaoPage(parent, 'baseline', url.toString());
@@ -64,7 +74,7 @@ export async function runPurchaseLookupAutomation(parent: BrowserWindow, input: 
   if (!snapshot.platformOrderStatus && !snapshot.logisticsStatus && !snapshot.logisticsCompany && !snapshot.trackingNumber) {
     throw new Error('未能从淘宝订单页读取到有效订单状态');
   }
-  const association = mergePurchaseAssociation(input.accountId, input.orderId, snapshot);
+  const association = mergePurchaseAssociation(deps, input.accountId, input.orderId, snapshot);
   return { snapshot, association, challenge };
 }
 

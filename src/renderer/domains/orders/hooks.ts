@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  DeliveryCompanyOption,
   Order,
   OrderAddressInfo,
   OrderAssociation,
@@ -10,6 +11,9 @@ import type {
   OrderTimeScope,
   ProductSourceBinding,
   ProductSourceItem,
+  PurchaseLookupAutomationInput,
+  TaobaoRefundAutomationInput,
+  ShipOrderFromPurchaseInput,
 } from '../../../shared/orders';
 import { isCredentialError } from '../../../shared/errors';
 import { useCredentialError } from '../../contexts/CredentialErrorContext';
@@ -32,12 +36,13 @@ export function useOrders(accountId: string) {
   const { reportCredentialError } = useCredentialError();
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [requestLoading, setRequestLoading] = useState(false);
   const statusRef = useRef<OrderStatus | undefined>(undefined);
   const timeScopeRef = useRef<OrderTimeScope>('all');
   const fetchIdRef = useRef(0);
-  const queryKey = ['orders', accountId, 'list'];
+  const queryKey = useMemo(() => ['orders', accountId, 'list'] as const, [accountId]);
 
-  const query = useQuery({
+  const { data = [], isFetching, refetch } = useQuery({
     queryKey,
     enabled: false,
     initialData: [] as Order[],
@@ -61,12 +66,14 @@ export function useOrders(accountId: string) {
     if (!accountId) return;
     const fetchId = ++fetchIdRef.current;
     setError(null);
+    setRequestLoading(true);
     statusRef.current = status;
     timeScopeRef.current = timeScope;
 
     try {
       if (!append) {
-        await query.refetch();
+        const result = await refetch();
+        if (result.error) throw result.error;
         return;
       }
       const result = await ordersClient.list(accountId, status, 50, false, timeScope);
@@ -76,8 +83,10 @@ export function useOrders(accountId: string) {
     } catch (err: unknown) {
       if (fetchIdRef.current !== fetchId) return;
       handleError(err, '获取订单列表失败');
+    } finally {
+      if (fetchIdRef.current === fetchId) setRequestLoading(false);
     }
-  }, [accountId, handleError, query, queryClient, queryKey]);
+  }, [accountId, handleError, queryClient, queryKey, refetch]);
 
   const fetchOrderDetail = useCallback(async (orderId: string): Promise<Order | null> => {
     try {
@@ -92,6 +101,7 @@ export function useOrders(accountId: string) {
     if (!accountId) return;
     const fetchId = ++fetchIdRef.current;
     setError(null);
+    setRequestLoading(true);
     try {
       const result = await ordersClient.search(accountId, params);
       if (fetchIdRef.current !== fetchId) return;
@@ -100,6 +110,8 @@ export function useOrders(accountId: string) {
     } catch (err: unknown) {
       if (fetchIdRef.current !== fetchId) return;
       handleError(err, '搜索订单失败');
+    } finally {
+      if (fetchIdRef.current === fetchId) setRequestLoading(false);
     }
   }, [accountId, handleError, queryClient, queryKey]);
 
@@ -113,9 +125,9 @@ export function useOrders(accountId: string) {
   }, [accountId, handleError]);
 
   return {
-    orders: query.data || [],
+    orders: data,
     hasMore,
-    loading: query.isFetching,
+    loading: isFetching || requestLoading,
     error,
     clearError: () => setError(null),
     fetchOrders,
@@ -203,5 +215,38 @@ export function useRealAddressCaches(accountId: string) {
     realAddressCaches: useMemo(() => mapAddressCaches(query.data), [query.data]),
     fetchCaches: () => query.refetch(),
     fetchRealAddress: (orderId: string, refresh = false) => fetchAddressMutation.mutateAsync({ orderId, refresh }),
+  };
+}
+
+export function useOrderDelivery(accountId: string) {
+  const listCompaniesMutation = useMutation({
+    mutationFn: () => ordersClient.delivery.listCompanies(accountId),
+  });
+  const shipFromPurchaseMutation = useMutation({
+    mutationFn: (input: Omit<ShipOrderFromPurchaseInput, 'accountId'>) =>
+      ordersClient.delivery.shipFromPurchase({ ...input, accountId }),
+  });
+
+  return {
+    listDeliveryCompanies: (): Promise<DeliveryCompanyOption[]> => listCompaniesMutation.mutateAsync(),
+    shipFromPurchase: (input: Omit<ShipOrderFromPurchaseInput, 'accountId'>) => shipFromPurchaseMutation.mutateAsync(input),
+    deliveryLoading: listCompaniesMutation.isPending || shipFromPurchaseMutation.isPending,
+  };
+}
+
+export function useTaobaoOrderAutomation(accountId: string) {
+  const lookupMutation = useMutation({
+    mutationFn: (input: Omit<PurchaseLookupAutomationInput, 'accountId'>) =>
+      ordersClient.taobao.lookupPurchase({ ...input, accountId }),
+  });
+  const refundMutation = useMutation({
+    mutationFn: (input: Omit<TaobaoRefundAutomationInput, 'accountId'>) =>
+      ordersClient.taobao.prepareRefund({ ...input, accountId }),
+  });
+
+  return {
+    lookupPurchase: (input: Omit<PurchaseLookupAutomationInput, 'accountId'>) => lookupMutation.mutateAsync(input),
+    prepareRefund: (input: Omit<TaobaoRefundAutomationInput, 'accountId'>) => refundMutation.mutateAsync(input),
+    taobaoAutomationLoading: lookupMutation.isPending || refundMutation.isPending,
   };
 }

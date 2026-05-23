@@ -46,5 +46,12 @@ export function createNoopCloudRuntime(): CloudRuntime {
   };
 }
 
-export const cloudRuntime = createNoopCloudRuntime();
+export function createCloudRuntime(transports: Partial<CloudRuntime> = {}): CloudRuntime {
+  const fallback = createNoopCloudRuntime();
+  return {
+    credentials: transports.credentials || fallback.credentials,
+    tasks: transports.tasks || fallback.tasks,
+  };
+}
 
+export const cloudRuntime = createCloudRuntime();

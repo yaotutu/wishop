@@ -7,4 +7,6 @@ export function createLogger(module: string, accountId: string) {
   return log.scope(label);
 }
 
+export type AppLogger = ReturnType<typeof log.scope>;
+
 export { log };

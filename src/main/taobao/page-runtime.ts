@@ -29,9 +29,8 @@ export async function waitForTaobaoLoad(win: BrowserWindow): Promise<void> {
 
 export async function loadCleanTaobaoPage(parent: BrowserWindow, profileId: string, url: string): Promise<BrowserWindow> {
   openCleanBrowserWindow(parent, profileId, url);
-  const win = getCleanBrowserWindow();
+  const win = getCleanBrowserWindow(profileId);
   if (!win) throw new Error('淘宝窗口未打开');
   await waitForTaobaoLoad(win);
   return win;
 }
-

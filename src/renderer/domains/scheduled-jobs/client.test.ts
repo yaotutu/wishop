@@ -9,13 +9,9 @@ describe('scheduledJobsClient', () => {
     const add = vi.fn().mockResolvedValue(job);
     const update = vi.fn().mockResolvedValue(undefined);
     const remove = vi.fn().mockResolvedValue(undefined);
-    const electronAPI = {
-      scheduledJobs: { list: vi.fn(), add: vi.fn(), update: vi.fn(), remove: vi.fn() },
-    };
 
     vi.stubGlobal('window', {
       wishop: { scheduledJobs: { list, add, update, remove } },
-      electronAPI,
     });
 
     const input = {
@@ -40,6 +36,5 @@ describe('scheduledJobsClient', () => {
     expect(add).toHaveBeenCalledWith(input);
     expect(update).toHaveBeenCalledWith('job-1', { enabled: false });
     expect(remove).toHaveBeenCalledWith('job-1');
-    expect(electronAPI.scheduledJobs.list).not.toHaveBeenCalled();
   });
 });

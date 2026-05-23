@@ -1,6 +1,5 @@
 import type { LogEntry, TaskConfig } from './listing';
 import type { OrderAssociation, OrderRealAddressCache, ProductSourceBinding } from './orders';
-import type { ScheduledTask } from './scheduling';
 
 export interface Config {
   appId: string;
@@ -18,7 +17,6 @@ export interface FullAccount {
   id: string;
   name: string;
   config: Config;
-  schedulers: ScheduledTask[];
   taskConfig: TaskConfig;
   logs: LogEntry[];
   violationWords: string[];

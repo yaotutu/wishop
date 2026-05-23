@@ -46,7 +46,7 @@ Automation must stop and surface the raw error when a Taobao login, slider, capt
 
 - Main service: `src/main/services/taobao-automation-service.ts`
 - IPC handler: `src/main/ipc/handlers/taobaoAutomation.ts`
-- Preload API: `window.electronAPI.taobaoAutomation`
+- Preload API: `window.wishop.taobaoAutomation`
 - UI entry points:
   - `订单管理` purchase column: check shipment status
   - `订单管理` refund flow: prepare refund reason and optionally submit
@@ -58,7 +58,7 @@ Keep this automation explicit, sparse, and user visible. Do not run background T
 
 - Main IPC handlers live in `src/main/ipc/handlers/*`.
 - Shared types live in `src/shared/types.ts`.
-- Renderer hooks live in `src/renderer/hooks/*`.
+- Renderer client/hooks live in `src/renderer/domains/*`.
 - Browser-window management belongs in `src/main/browser/browser-window.ts`.
 - WeChat API access belongs in `src/main/wxshop/client.ts` and `src/main/wxshop/client-registry.ts`.
 - Store access belongs in `src/main/store/index.ts`; avoid importing store from account-agnostic business modules.

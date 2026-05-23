@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
-import { createScopedAddLog } from '../../store';
+import { createScopedAddLog, getConfig } from '../../store';
 import type { DraftProduct } from '../../../shared/types';
+import { getErrorMessage } from '../../../shared/errors';
 import { getClient } from '../../wxshop/client-registry';
 import { createLogger } from '../../utils/logger';
 
@@ -22,7 +23,7 @@ export function registerDraftHandlers(context: { draftPaginationMap: Map<string,
       return { products: [], hasMore: false };
     }
 
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
     const need = 10;
     const products: DraftProduct[] = [];
     let nextKey = pagination.nextKey;
@@ -55,7 +56,7 @@ export function registerDraftHandlers(context: { draftPaginationMap: Map<string,
 
   ipcMain.handle('drafts:list', async (_, accountId: string, productId: string): Promise<{ success: boolean; error?: string }> => {
     const logger = createLogger('Drafts', accountId);
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
     const scopedAddLog = createScopedAddLog(accountId);
     try {
       const result = await api.listProduct(productId);
@@ -66,10 +67,11 @@ export function registerDraftHandlers(context: { draftPaginationMap: Map<string,
         scopedAddLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorCode: result.errcode, errorMsg: result.errmsg });
         return { success: false, error: result.errmsg };
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
       logger.error(`上架商品 ${productId} 失败:`, error);
-      scopedAddLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorMsg: error.message });
-      return { success: false, error: error.message };
+      scopedAddLog({ runId: '', productId, productTitle: '', action: 'list', status: 'failed', errorMsg: message });
+      return { success: false, error: message };
     }
   });
 }

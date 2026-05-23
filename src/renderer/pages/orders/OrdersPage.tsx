@@ -1,19 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Empty, Modal, Select, Table, message } from 'antd';
 import { BrowserContext } from '../../components/Layout';
-import { ordersClient } from '../../domains/orders/client';
-import { useOrderAssociations, useOrders, useProductSources, useRealAddressCaches } from '../../domains/orders/hooks';
+import {
+  useOrderAssociations,
+  useOrderDelivery,
+  useOrders,
+  useProductSources,
+  useRealAddressCaches,
+  useTaobaoOrderAutomation,
+} from '../../domains/orders/hooks';
 import type { DeliveryCompanyOption, Order, OrderAssociation, OrderProductInfo, OrderRealAddressCache, OrderSearchParams, ProductSourceItem, OrderStatus, OrderTimeScope, ShippingAssistantSession } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
 import { formatOrderAddressForCopy } from '../../../shared/address-format';
-import { getDeliveryCompanyUnmatchedMessage, isDeliveryCompanyUnmatchedError } from '../../../shared/errors';
+import { getDeliveryCompanyUnmatchedMessage, getErrorMessage, isDeliveryCompanyUnmatchedError } from '../../../shared/errors';
 import { newProductSourceRow, ShippingSourceModal, SourceManagementModal } from './components/ProductSourceModals';
 import { OrderAssociationModal } from './components/OrderAssociationModal';
 import { OrderDetailModal } from './components/OrderDetailModal';
 import { createOrderColumns } from './components/OrderTableColumns';
 import { OrderToolbar } from './components/OrderToolbar';
-import { getEstimatedCommissionFee } from './order-display';
 import { hasLinkedPurchaseLogistics, isLinkedPurchaseRefundFinished } from './purchase-refund';
+
+type OrdersLoadingAction = 'initial' | 'filter' | 'time' | 'refresh' | 'search' | 'loadMore';
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();
@@ -44,6 +51,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const { productSources, saveProductSources } = useProductSources(accountId);
   const { realAddressCaches, fetchRealAddress } = useRealAddressCaches(accountId);
   const { orderAssociations, fetchAssociations, saveAssociation } = useOrderAssociations(accountId);
+  const { listDeliveryCompanies, shipFromPurchase } = useOrderDelivery(accountId);
+  const { lookupPurchase, prepareRefund } = useTaobaoOrderAutomation(accountId);
 
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [timeScope, setTimeScope] = useState<OrderTimeScope>('all');
@@ -67,7 +76,24 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [shippingFromPurchaseOrderIds, setShippingFromPurchaseOrderIds] = useState<Set<string>>(new Set());
   const [preparingTaobaoRefundOrderIds, setPreparingTaobaoRefundOrderIds] = useState<Set<string>>(new Set());
   const tableAreaRef = useRef<HTMLDivElement>(null);
+  const ordersRequestIdRef = useRef(0);
   const [scrollY, setScrollY] = useState(400);
+  const [ordersLoadingAction, setOrdersLoadingAction] = useState<OrdersLoadingAction | null>(null);
+
+  const runOrdersRequest = useCallback(async (
+    action: OrdersLoadingAction,
+    request: () => Promise<void> | void,
+  ) => {
+    const requestId = ++ordersRequestIdRef.current;
+    setOrdersLoadingAction(action);
+    try {
+      await request();
+    } finally {
+      if (ordersRequestIdRef.current === requestId) {
+        setOrdersLoadingAction(null);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -88,35 +114,39 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     setTimeScope('all');
     setSearchKeyword('');
     setDetailOrder(null);
-    void fetchOrders(undefined, false, 'all');
-  }, [accountId, fetchOrders]);
+    void runOrdersRequest('initial', () => fetchOrders(undefined, false, 'all'));
+  }, [accountId, fetchOrders, runOrdersRequest]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
     const status = val === 'all' ? undefined : val as OrderStatus;
     setActiveStatus(status);
     setSearchKeyword('');
-    fetchOrders(status, false, timeScope);
-  }, [fetchOrders, timeScope]);
+    void runOrdersRequest('filter', () => fetchOrders(status, false, timeScope));
+  }, [fetchOrders, runOrdersRequest, timeScope]);
 
   const handleTimeScopeChange = useCallback((value: OrderTimeScope) => {
     setTimeScope(value);
     setSearchKeyword('');
-    fetchOrders(activeStatus, false, value);
-  }, [activeStatus, fetchOrders]);
+    void runOrdersRequest('time', () => fetchOrders(activeStatus, false, value));
+  }, [activeStatus, fetchOrders, runOrdersRequest]);
 
   const handleSearch = useCallback((value: string) => {
     const keyword = value?.trim();
     if (!keyword) {
-      fetchOrders(activeStatus, false, timeScope);
+      void runOrdersRequest('filter', () => fetchOrders(activeStatus, false, timeScope));
       return;
     }
-    searchOrders({ search_type: searchType, keyword });
-  }, [activeStatus, fetchOrders, searchOrders, searchType, timeScope]);
+    void runOrdersRequest('search', () => searchOrders({ search_type: searchType, keyword }));
+  }, [activeStatus, fetchOrders, runOrdersRequest, searchOrders, searchType, timeScope]);
 
   const handleLoadMore = useCallback(() => {
-    fetchOrders(activeStatus, true, timeScope);
-  }, [activeStatus, fetchOrders, timeScope]);
+    void runOrdersRequest('loadMore', () => fetchOrders(activeStatus, true, timeScope));
+  }, [activeStatus, fetchOrders, runOrdersRequest, timeScope]);
+
+  const handleRefreshOrders = useCallback(() => {
+    void runOrdersRequest('refresh', () => fetchOrders(activeStatus, false, timeScope));
+  }, [activeStatus, fetchOrders, runOrdersRequest, timeScope]);
 
   const handleViewDetail = useCallback(async (orderId: string) => {
     setDetailModalOpen(true);
@@ -135,8 +165,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         const text = formatOrderAddressForCopy(cache.address);
         navigator.clipboard.writeText(text).then(() => message.success('真实地址已显示并复制')).catch(() => message.success('真实地址已显示'));
       }
-    } catch (err: any) {
-      message.error(`获取真实地址失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`获取真实地址失败: ${getErrorMessage(err)}`);
     } finally {
       setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
@@ -147,8 +177,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     try {
       await fetchRealAddress(orderId, true);
       message.success('真实地址已刷新');
-    } catch (err: any) {
-      message.error(`刷新真实地址失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`刷新真实地址失败: ${getErrorMessage(err)}`);
     } finally {
       setDecodingOrderIds(prev => { const s = new Set(prev); s.delete(orderId); return s; });
     }
@@ -156,7 +186,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
 
   const handleCopyAddress = useCallback((cache: OrderRealAddressCache) => {
     const text = formatOrderAddressForCopy(cache.address);
-    navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
+    navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => message.error('复制地址失败'));
   }, []);
 
   const handleCopyText = useCallback((text: string | undefined, label: string) => {
@@ -201,8 +231,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       await saveProductSources(sourceProduct.product_id, sourceRows.filter(source => source.url.trim()));
       setSourceModalOpen(false);
       message.success('货源已保存');
-    } catch (err: any) {
-      message.error(`保存货源失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`保存货源失败: ${getErrorMessage(err)}`);
     } finally {
       setSourceSaving(false);
     }
@@ -229,16 +259,15 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       async onOk() {
         setCheckingPurchaseOrderIds(previous => new Set(previous).add(associationOrder.order_id));
         try {
-          const result = await ordersClient.taobao.lookupPurchase({
-            accountId,
+          const result = await lookupPurchase({
             orderId: associationOrder.order_id,
             platformOrderId,
           });
           await fetchAssociations();
           setAssociationModalOpen(false);
           message.success(`淘宝订单已读取：${result.snapshot.platformOrderStatus || result.snapshot.logisticsStatus || '已回填'}`);
-        } catch (err: any) {
-          message.error(`淘宝订单读取失败: ${err.message}`);
+        } catch (err: unknown) {
+          message.error(`淘宝订单读取失败: ${getErrorMessage(err)}`);
           throw err;
         } finally {
           setCheckingPurchaseOrderIds(previous => {
@@ -249,7 +278,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [accountId, associationOrder, fetchAssociations]);
+  }, [associationOrder, fetchAssociations, lookupPurchase]);
 
   const handleCheckPurchaseOrder = useCallback(async (order: Order) => {
     const linked = orderAssociations[order.order_id]?.linkedOrders[0];
@@ -260,15 +289,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
     setCheckingPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
     try {
-      const result = await ordersClient.taobao.lookupPurchase({
-        accountId,
+      const result = await lookupPurchase({
         orderId: order.order_id,
         platformOrderId,
       });
       await fetchAssociations();
       message.success(`淘宝订单已读取：${result.snapshot.platformOrderStatus || result.snapshot.logisticsStatus || '已回填'}`);
-    } catch (err: any) {
-      message.error(`检查淘宝发货状态失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`检查淘宝发货状态失败: ${getErrorMessage(err)}`);
     } finally {
       setCheckingPurchaseOrderIds(previous => {
         const next = new Set(previous);
@@ -276,7 +304,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         return next;
       });
     }
-  }, [accountId, fetchAssociations, orderAssociations]);
+  }, [fetchAssociations, lookupPurchase, orderAssociations]);
 
   const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
     if (!associationOrder) return;
@@ -285,8 +313,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       await saveAssociation(associationOrder.order_id, input);
       setAssociationModalOpen(false);
       message.success('采购单详情已保存');
-    } catch (err: any) {
-      message.error(`保存采购单详情失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`保存采购单详情失败: ${getErrorMessage(err)}`);
     } finally {
       setAssociationSaving(false);
     }
@@ -300,15 +328,14 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   ) => {
     setShippingFromPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
     try {
-      const result = await ordersClient.delivery.shipFromPurchase({
-        accountId,
+      const result = await shipFromPurchase({
         orderId: order.order_id,
         logisticsCompany,
         trackingNumber,
         deliveryId,
       });
       message.success(`微信小店发货已提交：${result.deliveryName} ${result.waybillId}`);
-      fetchOrders(activeStatus, false, timeScope);
+      void runOrdersRequest('refresh', () => fetchOrders(activeStatus, false, timeScope));
     } finally {
       setShippingFromPurchaseOrderIds(previous => {
         const next = new Set(previous);
@@ -316,7 +343,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         return next;
       });
     }
-  }, [accountId, activeStatus, fetchOrders, timeScope]);
+  }, [activeStatus, fetchOrders, runOrdersRequest, shipFromPurchase, timeScope]);
 
   const openDeliveryCompanySelector = useCallback(async (
     order: Order,
@@ -327,9 +354,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     let selectedDeliveryId = '';
     let companies: DeliveryCompanyOption[] = [];
     try {
-      companies = await ordersClient.delivery.listCompanies(accountId);
-    } catch (err: any) {
-      message.error(`获取微信小店快递公司列表失败: ${err.message}`);
+      companies = await listDeliveryCompanies();
+    } catch (err: unknown) {
+      message.error(`获取微信小店快递公司列表失败: ${getErrorMessage(err)}`);
       return;
     }
 
@@ -343,9 +370,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             <div>淘宝读取快递单号：{trackingNumber || '-'}</div>
           </div>
           <Select
-            showSearch
+            showSearch={{ optionFilterProp: 'label' }}
             placeholder="选择微信小店快递公司"
-            optionFilterProp="label"
             options={companies.map(company => ({
               value: company.deliveryId,
               label: `${company.deliveryName}（${company.deliveryId}）`,
@@ -366,13 +392,13 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
         try {
           await submitShipFromPurchase(order, logisticsCompany, trackingNumber, selectedDeliveryId);
-        } catch (err: any) {
-          message.error(`回填微信小店发货失败: ${err.message}`);
+        } catch (err: unknown) {
+          message.error(`回填微信小店发货失败: ${getErrorMessage(err)}`);
           throw err;
         }
       },
     });
-  }, [accountId, submitShipFromPurchase]);
+  }, [listDeliveryCompanies, submitShipFromPurchase]);
 
   const handleShipFromPurchase = useCallback((order: Order) => {
     const linked = orderAssociations[order.order_id]?.linkedOrders[0];
@@ -390,7 +416,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       async onOk() {
         try {
           await submitShipFromPurchase(order, logisticsCompany, trackingNumber);
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (isDeliveryCompanyUnmatchedError(err)) {
             await openDeliveryCompanySelector(
               order,
@@ -400,7 +426,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
             );
             return;
           }
-          message.error(`回填微信小店发货失败: ${err.message}`);
+          message.error(`回填微信小店发货失败: ${getErrorMessage(err)}`);
           throw err;
         }
       },
@@ -433,8 +459,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       onOk: async () => {
         setPreparingTaobaoRefundOrderIds(prev => new Set(prev).add(order.order_id));
         try {
-          const result = await ordersClient.taobao.prepareRefund({
-            accountId,
+          const result = await prepareRefund({
             orderId: order.order_id,
             platformOrderId,
             reason: '不想要了',
@@ -444,8 +469,8 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           if (result.snapshot.autoSubmitted) {
             void handleCheckPurchaseOrder(order);
           }
-        } catch (err: any) {
-          message.error(`淘宝退款申请准备失败: ${err.message}`);
+        } catch (err: unknown) {
+          message.error(`淘宝退款申请准备失败: ${getErrorMessage(err)}`);
           throw err;
         } finally {
           setPreparingTaobaoRefundOrderIds(prev => {
@@ -456,7 +481,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [accountId, handleCheckPurchaseOrder, orderAssociations]);
+  }, [handleCheckPurchaseOrder, orderAssociations, prepareRefund]);
 
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;
@@ -521,50 +546,67 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     handlePrepareTaobaoRefund,
   ]);
 
+  const tableLoading = loading && (
+    ordersLoadingAction === null
+    || ordersLoadingAction === 'initial'
+    || ordersLoadingAction === 'filter'
+    || ordersLoadingAction === 'time'
+  );
+  const searchLoading = loading && ordersLoadingAction === 'search';
+  const refreshLoading = loading && ordersLoadingAction === 'refresh';
+  const loadMoreLoading = loading && ordersLoadingAction === 'loadMore';
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <OrderToolbar
         activeStatus={activeStatus}
         timeScope={timeScope}
         searchActive={!!searchKeyword.trim()}
         searchType={searchType}
         searchKeyword={searchKeyword}
-        loading={loading}
+        refreshLoading={refreshLoading}
+        searchLoading={searchLoading}
         error={error}
         onStatusChange={handleStatusChange}
         onTimeScopeChange={handleTimeScopeChange}
         onSearchTypeChange={setSearchType}
         onSearchKeywordChange={setSearchKeyword}
         onSearch={handleSearch}
-        onRefresh={() => fetchOrders(activeStatus, false, timeScope)}
+        onRefresh={handleRefreshOrders}
         onClearError={clearError}
       />
 
-      <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0 }}>
+      <div ref={tableAreaRef} style={{ flex: 1, minHeight: 0, minWidth: 0, paddingTop: 10 }}>
         <Table
           dataSource={orders}
           columns={columns}
           rowKey="order_id"
           size="small"
-          loading={loading}
+          loading={tableLoading}
           pagination={false}
-          scroll={{ x: 1050, y: scrollY }}
+          scroll={{ x: 1120, y: scrollY }}
           styles={{
             content: { height: '100%', display: 'flex', flexDirection: 'column' },
             section: { flex: 1 },
           }}
-          locale={{ emptyText: <Empty description="暂无订单" /> }}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={searchKeyword.trim() ? '未找到匹配订单' : '暂无订单'}
+              />
+            ),
+          }}
           footer={() => {
-            if (loading) return null;
             if (hasMore) {
               return (
-                <div style={{ textAlign: 'center', padding: '8px 0' }}>
-                  <Button size="small" loading={loading} onClick={handleLoadMore}>加载更多</Button>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
+                  <Button size="small" loading={loadMoreLoading} disabled={loading && !loadMoreLoading} onClick={handleLoadMore}>加载更多</Button>
                 </div>
               );
             }
             if (orders.length === 0) return null;
-            return <div style={{ textAlign: 'center', color: '#bbb', fontSize: 12, padding: '8px 0' }}>— 没有更多订单 —</div>;
+            return <div style={{ textAlign: 'center', color: '#8c8c8c', fontSize: 12, padding: '8px 0' }}>已加载 {orders.length} 条，没有更多订单</div>;
           }}
         />
       </div>

@@ -1,13 +1,13 @@
-import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { createScopedAddLog, getViolationWords, setViolationWords, getAccount } from '../../store';
-import type { ViolationMatch, ViolationScanResult } from '../../../shared/types';
+import { createScopedAddLog, getConfig, getViolationWords, setViolationWords, getAccount } from '../../store';
+import type { ViolationMatch, ViolationScanResult, ViolationScanStepResult } from '../../../shared/types';
 import { getClient } from '../../wxshop/client-registry';
 import { batchScan, scanOneByOne, batchDeleteViolations } from '../../modules/violation-detect';
 import { createLogForwarder, withLogForwarding, LogForwarder } from '../utils/log-forwarding';
 import { SessionManager } from '../utils/session-manager';
 import { createLogger } from '../../utils/logger';
+import { handleIpc } from '../utils/handle-ipc';
 
-interface ScanSessionState {
+export interface ViolationScanSessionState {
   generator: AsyncGenerator<ViolationMatch & { scanned: number }> | null;
   current: (ViolationMatch & { scanned: number }) | null;
   done: boolean;
@@ -15,22 +15,22 @@ interface ScanSessionState {
 }
 
 export function registerViolationHandlers(context: {
-  scanSessions: SessionManager<ScanSessionState>;
+  scanSessions: SessionManager<ViolationScanSessionState>;
 }): void {
 
-  ipcMain.handle('violation:getWords', (_, accountId: string): string[] => {
+  handleIpc('violation:getWords', (_, accountId: string): string[] => {
     return getViolationWords(accountId);
-  });
+  }, 'Violation');
 
-  ipcMain.handle('violation:setWords', (_, accountId: string, words: string[]): void => {
+  handleIpc('violation:setWords', (_, accountId: string, words: string[]): void => {
     setViolationWords(accountId, words);
-  });
+  }, 'Violation');
 
-  ipcMain.handle('violation:batchScan', async (event: IpcMainInvokeEvent, accountId: string, limit?: number): Promise<ViolationScanResult> => {
+  handleIpc('violation:batchScan', async (event, accountId: string, limit?: number): Promise<ViolationScanResult> => {
     const logger = createLogger('Violation', accountId);
     const runId = Date.now().toString();
     const scopedAddLog = createScopedAddLog(accountId);
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
     const words = getViolationWords(accountId);
 
     const account = getAccount(accountId);
@@ -51,9 +51,9 @@ export function registerViolationHandlers(context: {
       context.scanSessions.complete(accountId);
       logForwarder.stop();
     }
-  });
+  }, 'Violation');
 
-  ipcMain.handle('violation:scanStep', async (event: IpcMainInvokeEvent, accountId: string, action: 'next' | 'skip' | 'delete'): Promise<any> => {
+  handleIpc('violation:scanStep', async (event, accountId: string, action: 'next' | 'skip' | 'delete'): Promise<ViolationScanStepResult> => {
     const logger = createLogger('Violation', accountId);
     let session = context.scanSessions.get(accountId);
 
@@ -63,7 +63,7 @@ export function registerViolationHandlers(context: {
         return { type: 'done', reason: '词库为空' };
       }
       const account = getAccount(accountId);
-      const api = getClient(accountId);
+      const api = getClient(accountId, getConfig(accountId));
       logger.info(`逐个扫描开始 店铺=${account?.name || '未知'} appId=${api.config.appId} 词库=${words.length}个`);
       const scopedAddLog = createScopedAddLog(accountId);
       const runId = Date.now().toString();
@@ -79,7 +79,7 @@ export function registerViolationHandlers(context: {
     if (action === 'delete' && session.state.current) {
       const scopedAddLog = createScopedAddLog(accountId);
       const runId = Date.now().toString();
-      const api = getClient(accountId);
+      const api = getClient(accountId, getConfig(accountId));
 
       try {
         const result = await batchDeleteViolations(api, scopedAddLog, [session.state.current], runId, accountId);
@@ -91,6 +91,7 @@ export function registerViolationHandlers(context: {
         }
       } catch (error) {
         logger.error('删除违规商品失败:', error);
+        throw error;
       }
     }
 
@@ -104,23 +105,23 @@ export function registerViolationHandlers(context: {
 
     session.state.current = next.value;
     return { type: 'violation', ...next.value };
-  });
+  }, 'Violation');
 
-  ipcMain.handle('violation:batchDelete', async (event: IpcMainInvokeEvent, accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => {
+  handleIpc('violation:batchDelete', async (event, accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> => {
     const runId = Date.now().toString();
     const scopedAddLog = createScopedAddLog(accountId);
-    const api = getClient(accountId);
+    const api = getClient(accountId, getConfig(accountId));
 
     return withLogForwarding(event, accountId, `violation:log:${accountId}`, async () => {
       return await batchDeleteViolations(api, scopedAddLog, violations, runId, accountId);
     });
-  });
+  }, 'Violation');
 
-  ipcMain.handle('violation:stop', (_, accountId: string): void => {
+  handleIpc('violation:stop', (_, accountId: string): void => {
     const session = context.scanSessions.get(accountId);
     if (session) {
       session.state.logForwarder.stop();
       context.scanSessions.stop(accountId);
     }
-  });
+  }, 'Violation');
 }

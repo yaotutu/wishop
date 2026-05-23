@@ -1,5 +1,5 @@
 import { WxShopClient } from '../wxshop/client';
-import type { DraftProduct, AddLogFn, TaskConfig, TaskCycleResult, BlacklistRule, StatusRule } from '../../shared/types';
+import type { AddLogFn, TaskConfig, TaskCycleResult, BlacklistRule, StatusRule } from '../../shared/types';
 import { createLogger } from '../utils/logger';
 
 export type { TaskConfig, TaskCycleResult };

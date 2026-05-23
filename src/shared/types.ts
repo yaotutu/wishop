@@ -8,7 +8,6 @@ export type {
   ScheduledJobScope,
   ScheduledJobStatus,
   ScheduledJobType,
-  ScheduledTask,
 } from './scheduling';
 
 export type {
@@ -23,7 +22,7 @@ export type {
   TaskConfig,
   TaskCycleResult,
 } from './listing';
-export type { ViolationMatch, ViolationScanResult } from './violations';
+export type { ViolationMatch, ViolationScanResult, ViolationScanStepResult } from './violations';
 
 export type {
   CheckoutAddressFillResult,

@@ -35,7 +35,8 @@ interface Props {
   searchActive: boolean;
   searchType: OrderSearchParams['search_type'];
   searchKeyword: string;
-  loading: boolean;
+  refreshLoading: boolean;
+  searchLoading: boolean;
   error: string | null;
   onStatusChange: (value: string | number | null) => void;
   onTimeScopeChange: (value: OrderTimeScope) => void;
@@ -52,7 +53,8 @@ export const OrderToolbar: React.FC<Props> = ({
   searchActive,
   searchType,
   searchKeyword,
-  loading,
+  refreshLoading,
+  searchLoading,
   error,
   onStatusChange,
   onTimeScopeChange,
@@ -62,14 +64,16 @@ export const OrderToolbar: React.FC<Props> = ({
   onRefresh,
   onClearError,
 }) => (
-  <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
-    <Tag.CheckableTagGroup
-      options={STATUS_FILTER_OPTIONS}
-      value={activeStatus ?? 'all'}
-      onChange={onStatusChange}
-    />
-    <Flex gap={8} align="center">
-      <Space.Compact style={{ flex: 1, maxWidth: 480 }}>
+  <Flex vertical gap={8} style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, minWidth: 0 }}>
+    <div style={{ minHeight: 24 }}>
+      <Tag.CheckableTagGroup
+        options={STATUS_FILTER_OPTIONS}
+        value={activeStatus ?? 'all'}
+        onChange={onStatusChange}
+      />
+    </div>
+    <Flex gap={8} align="center" wrap="wrap" style={{ minWidth: 0 }}>
+      <Space.Compact style={{ flex: '1 1 380px', maxWidth: 560, minWidth: 280 }}>
         <Select
           size="small"
           value={searchType}
@@ -84,6 +88,7 @@ export const OrderToolbar: React.FC<Props> = ({
           onSearch={onSearch}
           placeholder="输入关键字搜索"
           allowClear
+          loading={searchLoading}
           style={{ width: '100%' }}
           enterButton="搜索"
         />
@@ -94,10 +99,12 @@ export const OrderToolbar: React.FC<Props> = ({
         onChange={onTimeScopeChange}
         options={TIME_SCOPE_OPTIONS}
         disabled={searchActive}
-        style={{ width: 112 }}
+        style={{ width: 116, flexShrink: 0 }}
       />
-      <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={onRefresh}>刷新</Button>
-      <Text type="secondary" style={{ fontSize: 12 }}>列表每页加载 50 条；搜索不受时间范围限制</Text>
+      <Button size="small" icon={<ReloadOutlined />} loading={refreshLoading} onClick={onRefresh} style={{ flexShrink: 0 }}>刷新</Button>
+      <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+        {searchActive ? '搜索时不受时间范围限制' : '列表每页加载 50 条'}
+      </Text>
     </Flex>
     {error && (
       <Alert type="error" title={error} showIcon closable={{ onClose: onClearError }} />

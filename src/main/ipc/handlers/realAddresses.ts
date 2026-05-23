@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { getClient } from '../../wxshop/client-registry';
-import { getRealAddressCache, getRealAddressCaches, setRealAddressCache } from '../../store';
+import { getConfig, getRealAddressCache, getRealAddressCaches, setRealAddressCache } from '../../store';
 import type { OrderRealAddressCache } from '../../../shared/types';
 
 export function registerRealAddressHandlers(): void {
@@ -15,12 +15,12 @@ export function registerRealAddressHandlers(): void {
   ipcMain.handle('orderRealAddresses:fetch', async (_, accountId: string, orderId: string): Promise<OrderRealAddressCache> => {
     const existing = getRealAddressCache(accountId, orderId);
     if (existing) return existing;
-    const address = await getClient(accountId).decodeOrderSensitiveInfo(orderId);
+    const address = await getClient(accountId, getConfig(accountId)).decodeOrderSensitiveInfo(orderId);
     return setRealAddressCache(accountId, orderId, address);
   });
 
   ipcMain.handle('orderRealAddresses:refresh', async (_, accountId: string, orderId: string): Promise<OrderRealAddressCache> => {
-    const address = await getClient(accountId).decodeOrderSensitiveInfo(orderId);
+    const address = await getClient(accountId, getConfig(accountId)).decodeOrderSensitiveInfo(orderId);
     return setRealAddressCache(accountId, orderId, address);
   });
 }

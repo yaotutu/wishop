@@ -15,6 +15,7 @@ import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 import type { AppSettings } from '../../../shared/settings';
 import type { SyncModuleKey, SyncModuleSetting } from '../../../shared/sync';
+import { getErrorMessage } from '../../../shared/errors';
 import { useAutomationSettings, useCloudSyncSettings, useLicenseSettings } from '../../domains/settings/hooks';
 
 const { Title, Paragraph, Text } = Typography;
@@ -168,8 +169,8 @@ const LicensePanel: React.FC = () => {
     try {
       await activateLicense(licenseKey);
       message.success('授权信息已保存');
-    } catch (error: any) {
-      message.error(error?.message || '保存授权失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '保存授权失败');
     }
   };
 
@@ -178,8 +179,8 @@ const LicensePanel: React.FC = () => {
       await clearLicense();
       setLicenseKey('');
       message.success('授权信息已清除');
-    } catch (error: any) {
-      message.error(error?.message || '清除授权失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '清除授权失败');
     }
   };
 
@@ -227,8 +228,8 @@ const AutomationSettingsPanel: React.FC = () => {
     try {
       await updateShipmentCheck(patch);
       message.success('自动化设置已保存');
-    } catch (error: any) {
-      message.error(error?.message || '保存自动化设置失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '保存自动化设置失败');
     }
   };
 
@@ -330,8 +331,8 @@ const CloudSyncPanel: React.FC = () => {
     try {
       await updateModuleSetting(module, patch);
       message.success('云同步设置已保存');
-    } catch (error: any) {
-      message.error(error?.message || '保存云同步设置失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '保存云同步设置失败');
     }
   };
 
@@ -339,8 +340,8 @@ const CloudSyncPanel: React.FC = () => {
     try {
       await saveCloudCredential();
       message.success('已记录云端执行授权');
-    } catch (error: any) {
-      message.error(error?.message || '凭据授权失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '凭据授权失败');
     }
   };
 
@@ -348,8 +349,8 @@ const CloudSyncPanel: React.FC = () => {
     try {
       await revokeCloudCredential(credentialId);
       message.success('已撤销云端执行授权');
-    } catch (error: any) {
-      message.error(error?.message || '撤销授权失败');
+    } catch (error: unknown) {
+      message.error(getErrorMessage(error) || '撤销授权失败');
     }
   };
 

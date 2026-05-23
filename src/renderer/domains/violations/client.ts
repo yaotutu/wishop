@@ -1,10 +1,5 @@
 import type { LogEntry } from '../../../shared/listing';
-import type { ViolationMatch, ViolationScanResult } from '../../../shared/violations';
-
-export type ViolationScanStepResult =
-  | ({ type: 'violation'; scanned: number } & ViolationMatch)
-  | { type: 'done'; scanned?: number; reason?: string }
-  | { type: 'stopped'; reason?: string };
+import type { ViolationMatch, ViolationScanResult, ViolationScanStepResult } from '../../../shared/violations';
 
 export const violationsClient = {
   getWords(accountId: string): Promise<string[]> {

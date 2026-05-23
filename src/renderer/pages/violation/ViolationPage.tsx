@@ -1,52 +1,45 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Card, Button, Space, Input, InputNumber, Table, Tag, Radio, Modal, Alert, message, Popconfirm, Upload, Divider } from 'antd';
-import { UploadOutlined, DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { ViolationMatch, LogEntry } from '../../../shared/types';
-import { violationsClient } from '../../domains/violations/client';
+import React, { useState } from 'react';
+import { Alert, Card, Button, Empty, Space, Input, InputNumber, Table, Tag, Radio, Modal, message, Popconfirm, Upload } from 'antd';
+import { UploadOutlined, DeleteOutlined, SearchOutlined, StopOutlined, ExclamationCircleOutlined, EyeOutlined } from '@ant-design/icons';
+import { getErrorMessage } from '../../../shared/errors';
+import type { ViolationMatch } from '../../../shared/types';
+import { useViolationWorkflow } from '../../domains/violations/hooks';
 
 interface ViolationProps {
   accountId: string;
 }
 
 const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
-  const [words, setWords] = useState<string[]>([]);
+  const {
+    words,
+    saveWords,
+    scanning,
+    deleting,
+    violations,
+    selectedKeys,
+    setSelectedKeys,
+    currentViolation,
+    oneByOneScanning,
+    logs,
+    scanResult,
+    error,
+    clearError,
+    batchScan,
+    batchDelete,
+    startOneByOne,
+    nextViolation,
+    deleteCurrentViolation,
+    stop,
+  } = useViolationWorkflow(accountId);
   const [wordsExpanded, setWordsExpanded] = useState(false);
   const [mode, setMode] = useState<'batch' | 'onebyone'>('batch');
   const [scanLimit, setScanLimit] = useState(100);
-  const [scanning, setScanning] = useState(false);
-  const [violations, setViolations] = useState<ViolationMatch[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([]);
-  const [deleting, setDeleting] = useState(false);
-
-  // file upload preview
   const [previewWords, setPreviewWords] = useState<string[]>([]);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
-
-  // one-by-one state
-  const [currentViolation, setCurrentViolation] = useState<(ViolationMatch & { scanned: number }) | null>(null);
-  const [oneByOneScanning, setOneByOneScanning] = useState(false);
-  const stoppedRef = useRef(false);
-
-  // logs
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-
-  // scan result summary
-  const [scanResult, setScanResult] = useState<{ scanned: number; total: number } | null>(null);
-
-  // result area tab
   const [activeResultTab, setActiveResultTab] = useState<'result' | 'logs'>('result');
 
-  useEffect(() => {
-    loadWords();
-    return () => {
-      unsubscribeRef.current?.();
-    };
-  }, [accountId]);
-
-  const loadWords = async () => {
-    const data = await violationsClient.getWords(accountId);
-    setWords(data);
+  const showOperationError = (operation: string, err: unknown) => {
+    message.error(`${operation}失败: ${getErrorMessage(err)}`);
   };
 
   const handleFileUpload = (file: File) => {
@@ -70,22 +63,14 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   };
 
   const handleConfirmImport = async () => {
-    await violationsClient.saveWords(accountId, previewWords);
-    setWords(previewWords);
-    setPreviewModalOpen(false);
-    setPreviewWords([]);
-    message.success(`已导入 ${previewWords.length} 个违规词`);
-  };
-
-  const subscribeLogs = () => {
-    unsubscribeRef.current = violationsClient.onLog(accountId, (log: LogEntry) => {
-      setLogs(prev => [...prev, log]);
-    });
-  };
-
-  const unsubscribeLogs = () => {
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = null;
+    try {
+      await saveWords(previewWords);
+      setPreviewModalOpen(false);
+      setPreviewWords([]);
+      message.success(`已导入 ${previewWords.length} 个违规词`);
+    } catch (err: unknown) {
+      showOperationError('导入违规词', err);
+    }
   };
 
   // --- Batch scan ---
@@ -94,43 +79,26 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
       message.warning('请先上传违规词文件');
       return;
     }
-    setScanning(true);
-    setViolations([]);
-    setSelectedKeys([]);
-    setScanResult(null);
-    setLogs([]);
     setActiveResultTab('logs');
-    subscribeLogs();
     try {
-      const result = await violationsClient.batchScan(accountId, scanLimit);
-      setViolations(result.violations);
-      setScanResult({ scanned: result.scanned, total: result.violations.length });
+      const result = await batchScan(scanLimit);
       setActiveResultTab('result');
       if (result.stopped) {
         message.warning(result.reason || '扫描已停止');
       }
-    } finally {
-      unsubscribeLogs();
-      setScanning(false);
+    } catch (err: unknown) {
+      showOperationError('批量扫描', err);
     }
   };
 
   const handleBatchDelete = async () => {
     if (selectedKeys.length === 0) return;
     const toDelete = violations.filter(v => selectedKeys.includes(v.productId));
-    setDeleting(true);
-    subscribeLogs();
     try {
-      const result = await violationsClient.batchDelete(accountId, toDelete);
+      const result = await batchDelete(toDelete);
       message.success(`已删除 ${result.deleted} 条，失败 ${result.errors} 条`);
-      setSelectedKeys([]);
-      setViolations(prev => prev.filter(v => !toDelete.some(d => d.productId === v.productId)));
-      if (scanResult) {
-        setScanResult({ ...scanResult, total: violations.length - toDelete.length });
-      }
-    } finally {
-      unsubscribeLogs();
-      setDeleting(false);
+    } catch (err: unknown) {
+      showOperationError('批量删除', err);
     }
   };
 
@@ -140,65 +108,59 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
       message.warning('请先上传违规词文件');
       return;
     }
-    setOneByOneScanning(true);
-    stoppedRef.current = false;
-    setLogs([]);
-    setScanResult(null);
     setActiveResultTab('logs');
-    subscribeLogs();
-    await handleNextViolation();
+    try {
+      const result = await startOneByOne();
+      if (result.type === 'done') {
+        if (result.reason) message.warning(result.reason);
+        else message.info('扫描完成，未发现违规商品');
+      } else if (result.type === 'stopped') {
+        message.warning(result.reason || '已停止');
+      }
+    } catch (err: unknown) {
+      showOperationError('逐个扫描', err);
+    }
   };
 
   const handleNextViolation = async () => {
-    if (stoppedRef.current) return;
-    const result = await violationsClient.scanStep(accountId, 'next');
-    if (stoppedRef.current) return;
-    if (result.type === 'done') {
-      setCurrentViolation(null);
-      setOneByOneScanning(false);
-      unsubscribeLogs();
-      if (result.reason) {
-        message.warning(result.reason);
-      } else {
-        message.info('扫描完成，未发现违规商品');
+    try {
+      const result = await nextViolation();
+      if (result.type === 'done') {
+        if (result.reason) {
+          message.warning(result.reason);
+        } else {
+          message.info('扫描完成，未发现违规商品');
+        }
+      } else if (result.type === 'stopped') {
+        message.warning(result.reason || '已停止');
       }
-    } else if (result.type === 'stopped') {
-      setCurrentViolation(null);
-      setOneByOneScanning(false);
-      unsubscribeLogs();
-      message.warning(result.reason || '已停止');
-    } else if (result.type === 'violation') {
-      setCurrentViolation(result);
+    } catch (err: unknown) {
+      showOperationError('继续扫描', err);
     }
   };
 
   const handleOneByOneSkip = async () => {
-    setCurrentViolation(null);
     await handleNextViolation();
   };
 
   const handleOneByOneDelete = async () => {
-    if (!currentViolation || stoppedRef.current) return;
-    const result = await violationsClient.scanStep(accountId, 'delete');
-    if (stoppedRef.current) return;
-    if (result.type === 'stopped') {
-      setCurrentViolation(null);
-      setOneByOneScanning(false);
-      unsubscribeLogs();
-      message.warning(result.reason || '已停止');
-    } else {
-      setCurrentViolation(null);
-      await handleNextViolation();
+    if (!currentViolation) return;
+    try {
+      const result = await deleteCurrentViolation();
+      if (result.type === 'stopped') {
+        message.warning(result.reason || '已停止');
+      }
+    } catch (err: unknown) {
+      showOperationError('删除违规商品', err);
     }
   };
 
   const handleStop = async () => {
-    stoppedRef.current = true;
-    await violationsClient.stop(accountId);
-    setScanning(false);
-    setOneByOneScanning(false);
-    setCurrentViolation(null);
-    unsubscribeLogs();
+    try {
+      await stop();
+    } catch (err: unknown) {
+      showOperationError('停止扫描', err);
+    }
   };
 
   const highlightTitle = (title: string, matchedWords: string[]) => {
@@ -260,17 +222,15 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
         <Popconfirm
           title="确认删除此商品？"
           onConfirm={async () => {
-            subscribeLogs();
             try {
-              const result = await violationsClient.batchDelete(accountId, [record]);
+              const result = await batchDelete([record]);
               if (result.deleted > 0) {
                 message.success('已删除');
-                setViolations(prev => prev.filter(v => v.productId !== record.productId));
               } else {
                 message.error('删除失败');
               }
-            } finally {
-              unsubscribeLogs();
+            } catch (err: unknown) {
+              showOperationError('删除违规商品', err);
             }
           }}
           okText="删除"
@@ -283,12 +243,22 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
   ];
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      {error && (
+        <Alert
+          type="error"
+          showIcon
+          closable
+          message={error}
+          onClose={clearError}
+        />
+      )}
+
       {/* 操作栏 */}
       <Card size="small">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, minWidth: 0 }}>
           {/* 左侧：词库状态 */}
-          <Space size={16}>
+          <Space size={16} wrap>
             {words.length > 0 ? (
               <>
                 <Tag color="green">已加载 {words.length} 个违规词</Tag>
@@ -301,14 +271,17 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
             )}
           </Space>
           {/* 右侧：按钮组 */}
-          <Space size={8}>
+          <Space size={8} wrap>
             {words.length > 0 && (
               <Popconfirm
                 title="确认清空违规词库？"
                 onConfirm={async () => {
-                  await violationsClient.saveWords(accountId, []);
-                  setWords([]);
-                  message.success('已清空');
+                  try {
+                    await saveWords([]);
+                    message.success('已清空');
+                  } catch (err: unknown) {
+                    showOperationError('清空违规词库', err);
+                  }
                 }}
                 okText="清空"
                 cancelText="取消"
@@ -336,8 +309,8 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
 
       {/* 扫描控制 */}
       <Card size="small">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Space size={16}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Space size={16} wrap>
             <Space size={4}>
               <Tag color="blue">草稿箱</Tag>
               <Radio.Group value={mode} onChange={e => setMode(e.target.value)} size="small">
@@ -351,7 +324,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
               <span style={{ color: '#999', fontSize: 12 }}>条</span>
             </Space>
           </Space>
-          <Space>
+          <Space wrap>
             {isRunning && <span style={{ color: '#999', fontSize: 12 }}>执行中...</span>}
             {isRunning ? (
               <Button danger size="small" icon={<StopOutlined />} onClick={handleStop}>停止</Button>
@@ -388,8 +361,8 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               {/* 摘要 + 操作栏 */}
               {scanResult && mode === 'batch' && (
-                <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Space size={12}>
+                <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <Space size={12} wrap>
                     <span style={{ fontSize: 13 }}>已扫描 <b>{scanResult.scanned}</b> 条</span>
                     {scanResult.total > 0 ? (
                       <Tag color="error">{scanResult.total} 条违规</Tag>
@@ -398,7 +371,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
                     )}
                   </Space>
                   {violations.length > 0 && (
-                    <Space size={8}>
+                    <Space size={8} wrap>
                       <Button
                         size="small"
                         onClick={() => {
@@ -425,7 +398,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
               )}
               {/* 表格 */}
               {mode === 'batch' && violations.length > 0 ? (
-                <div style={{ flex: 1, overflow: 'auto' }}>
+                <div style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
                   <Table
                     dataSource={violations}
                     rowKey="productId"
@@ -436,11 +409,12 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
                       onChange: keys => setSelectedKeys(keys),
                     }}
                     columns={columns}
+                    scroll={{ x: 720 }}
                   />
                 </div>
               ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb' }}>
-                  {scanResult ? '无违规商品' : '尚未扫描'}
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={scanResult ? '无违规商品' : '尚未扫描'} />
                 </div>
               )}
             </div>
@@ -450,7 +424,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
           {activeResultTab === 'logs' && (
             <div style={{ flex: 1, overflow: 'auto', padding: '8px 12px' }}>
               {logs.length === 0 ? (
-                <div style={{ color: '#bbb', textAlign: 'center', padding: 32 }}>暂无日志</div>
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无日志" style={{ padding: 32 }} />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {[...logs].reverse().map(log => {

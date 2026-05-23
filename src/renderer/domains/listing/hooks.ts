@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { BlacklistRule, LogEntry, QuotaResult, StatusRule, TaskConfig } from '../../../shared/listing';
-import type { ScheduledTask } from '../../../shared/scheduling';
 import { isCredentialError } from '../../../shared/errors';
 import { useCredentialError } from '../../contexts/CredentialErrorContext';
 import { listingClient } from './client';
@@ -81,47 +80,6 @@ export function useQuota(accountId: string) {
     quota: query.data || emptyQuota,
     loading: query.isLoading,
     fetchQuota: () => query.refetch(),
-  };
-}
-
-export function useSchedulers(accountId: string) {
-  const queryClient = useQueryClient();
-  const key = ['listing', accountId, 'schedulers'];
-  const query = useQuery({
-    queryKey: key,
-    enabled: !!accountId,
-    queryFn: () => listingClient.schedulers.list(accountId),
-    initialData: [],
-  });
-  const addMutation = useMutation({
-    mutationFn: (task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>) =>
-      listingClient.schedulers.add(accountId, task),
-    onSuccess: task => queryClient.setQueryData<ScheduledTask[]>(key, previous => [...(previous || []), task]),
-  });
-  const updateMutation = useMutation({
-    mutationFn: ({ taskId, patch }: { taskId: string; patch: Partial<ScheduledTask> }) =>
-      listingClient.schedulers.update(accountId, taskId, patch),
-    onSuccess: (_result, input) => {
-      queryClient.setQueryData<ScheduledTask[]>(key, previous => (previous || []).map(task => (
-        task.id === input.taskId ? { ...task, ...input.patch } : task
-      )));
-    },
-  });
-  const removeMutation = useMutation({
-    mutationFn: (taskId: string) => listingClient.schedulers.remove(accountId, taskId),
-    onSuccess: (_result, taskId) => {
-      queryClient.setQueryData<ScheduledTask[]>(key, previous => (previous || []).filter(task => task.id !== taskId));
-    },
-  });
-
-  return {
-    tasks: query.data || [],
-    loading: query.isLoading,
-    fetchTasks: () => query.refetch(),
-    addTask: (task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>) => addMutation.mutateAsync(task),
-    updateTask: (taskId: string, patch: Partial<ScheduledTask>) => updateMutation.mutateAsync({ taskId, patch }),
-    removeTask: (taskId: string) => removeMutation.mutateAsync(taskId),
-    defaultTaskConfig,
   };
 }
 

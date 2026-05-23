@@ -8,11 +8,13 @@ import {
   getAccounts,
   getAppSettings,
   getBlacklistRules,
+  getConfig,
   getOrderAssociations,
   getScheduledJobs,
   getSkipKeywords,
   getStatusRules,
   getViolationWords,
+  setOrderAssociation,
   updateScheduledJobAccountStats,
   updateScheduledJobStats,
 } from '../store';
@@ -61,8 +63,8 @@ function targetAccountIds(job: ScheduledJob): string[] {
   return getAccounts().filter(account => !excluded.has(account.id)).map(account => account.id);
 }
 
-async function runListingJob(job: ScheduledJob, accountId: string, runId: string): Promise<ScheduledJobExecutorResult> {
-  const api = getClient(accountId);
+async function runListingJob(job: ScheduledJob, accountId: string, runId: string, signal?: AbortSignal): Promise<ScheduledJobExecutorResult> {
+  const api = getClient(accountId, getConfig(accountId));
   const quota = await api.getAuditQuota();
   if (quota.quota <= 0) {
     return { listed: 0, status: 'skipped', error: '今日提审配额已用完' };
@@ -81,7 +83,7 @@ async function runListingJob(job: ScheduledJob, accountId: string, runId: string
     createScopedAddLog(accountId),
     taskConfig,
     runId,
-    undefined,
+    signal,
     accountId,
     getBlacklistRules(),
     getSkipKeywords(),
@@ -95,16 +97,16 @@ async function runListingJob(job: ScheduledJob, accountId: string, runId: string
   };
 }
 
-async function runViolationJob(job: ScheduledJob, accountId: string, runId: string): Promise<ScheduledJobExecutorResult> {
+async function runViolationJob(job: ScheduledJob, accountId: string, runId: string, signal?: AbortSignal): Promise<ScheduledJobExecutorResult> {
   const words = getViolationWords(accountId);
   if (words.length === 0) return { listed: 0, status: 'skipped', error: '违规词库为空' };
   const payload = (job.payload || {}) as Partial<{ limit: number }>;
   const result = await batchScan(
-    getClient(accountId),
+    getClient(accountId, getConfig(accountId)),
     createScopedAddLog(accountId),
     words,
     runId,
-    undefined,
+    signal,
     payload.limit || 200,
     accountId,
   );
@@ -120,7 +122,7 @@ function hasWxDelivery(order: Order): boolean {
 }
 
 async function fetchPendingShipmentOrders(accountId: string, lookbackDays: number): Promise<Order[]> {
-  const api = getClient(accountId);
+  const api = getClient(accountId, getConfig(accountId));
   const nowSeconds = Math.floor(Date.now() / 1000);
   const listResult = await api.getOrderList({
     page_size: 50,
@@ -173,7 +175,7 @@ async function runOrderShipmentCheckJob(accountId: string): Promise<ScheduledJob
       accountId,
       orderId: candidate.order.order_id,
       platformOrderId: candidate.linked.platformOrderId,
-    });
+    }, { getOrderAssociations, setOrderAssociation });
     completed += 1;
     if (settings.minTaskSpacingSeconds > 0) {
       await new Promise(resolve => setTimeout(resolve, settings.minTaskSpacingSeconds * 1000));
@@ -187,7 +189,7 @@ async function runOrderShipmentCheckJob(accountId: string): Promise<ScheduledJob
   };
 }
 
-async function executeForAccount(job: ScheduledJob, accountId: string): Promise<void> {
+async function executeForAccount(job: ScheduledJob, accountId: string, signal?: AbortSignal): Promise<void> {
   const logger = createLogger('ScheduledJob', accountId);
   const stat = statsFor(job, accountId);
   const currentDate = todayKey();
@@ -213,9 +215,9 @@ async function executeForAccount(job: ScheduledJob, accountId: string): Promise<
   try {
     let result: ScheduledJobExecutorResult | undefined;
     if (job.jobType === 'listing.submitDrafts') {
-      result = await runListingJob(job, accountId, runId);
+      result = await runListingJob(job, accountId, runId, signal);
     } else if (job.jobType === 'violation.scanProducts') {
-      result = await runViolationJob(job, accountId, runId);
+      result = await runViolationJob(job, accountId, runId, signal);
     } else if (job.jobType === 'orders.checkShipmentStatus') {
       result = await runOrderShipmentCheckJob(accountId);
     } else {
@@ -247,7 +249,7 @@ async function executeJob(jobId: string, signal?: AbortSignal): Promise<void> {
   if (!job?.enabled) return;
   for (const accountId of targetAccountIds(job)) {
     if (signal?.aborted) return;
-    await executeForAccount(job, accountId);
+    await executeForAccount(job, accountId, signal);
     if (job.scope === 'global' && (job.staggerMinutes || 0) > 0) {
       await new Promise<void>(resolve => {
         const timer = setTimeout(resolve, (job.staggerMinutes || 0) * 60 * 1000);

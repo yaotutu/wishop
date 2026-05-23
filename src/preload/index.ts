@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult, ShippingAssistantSession } from '../shared/types';
+import type { IpcRendererEvent } from 'electron';
+import type { Config, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, ViolationScanStepResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState, DeliveryCompanyOption, ShipOrderFromPurchaseInput, ShipOrderFromPurchaseResult, PurchaseLookupAutomationInput, PurchaseLookupAutomationResult, TaobaoRefundAutomationInput, TaobaoRefundAutomationResult, CheckoutAddressFillResult, ShippingAssistantSession } from '../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../shared/settings';
@@ -7,9 +8,9 @@ import type { CredentialMeta, CredentialPlatform, CredentialScope } from '../sha
 import type { SyncModuleKey, SyncModuleSetting, SyncSettings } from '../shared/sync';
 import type { CloudTaskCapabilities } from '../shared/cloud-tasks';
 
-export type { Config, ScheduledTask, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState };
+export type { Config, ScheduledJob, LogEntry, DraftProduct, QuotaResult, TaskConfig, Account, Order, OrderSearchParams, OrderStatus, OrderAddressInfo, OrderTimeScope, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderRealAddressCache, LicenseActivationInput, LicenseState };
 
-const electronAPI = {
+const wishopAPI = {
   accounts: {
     list: (): Promise<Account[]> => ipcRenderer.invoke('accounts:list'),
     add: (name: string, config: Config): Promise<Account> =>
@@ -154,16 +155,6 @@ const electronAPI = {
     getStatus: (): Promise<{ connected: boolean; message: string }> =>
       ipcRenderer.invoke('cloudTasks:getStatus'),
   },
-  scheduler: {
-    list: (accountId: string): Promise<ScheduledTask[]> =>
-      ipcRenderer.invoke('scheduler:list', accountId),
-    add: (accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): Promise<ScheduledTask> =>
-      ipcRenderer.invoke('scheduler:add', accountId, task),
-    update: (accountId: string, taskId: string, patch: Partial<ScheduledTask>): Promise<void> =>
-      ipcRenderer.invoke('scheduler:update', accountId, taskId, patch),
-    remove: (accountId: string, taskId: string): Promise<void> =>
-      ipcRenderer.invoke('scheduler:remove', accountId, taskId),
-  },
   scheduledJobs: {
     list: (): Promise<ScheduledJob[]> =>
       ipcRenderer.invoke('scheduledJobs:list'),
@@ -191,14 +182,14 @@ const electronAPI = {
       ipcRenderer.invoke('taskConfig:set', accountId, config),
   },
   task: {
-    run: (accountId: string, config: TaskConfig): Promise<any> =>
+    run: (accountId: string, config: TaskConfig): Promise<TaskCycleResult> =>
       ipcRenderer.invoke('task:run', accountId, config),
     stop: (accountId: string): Promise<void> =>
       ipcRenderer.invoke('task:stop', accountId),
     status: (accountId: string): Promise<{ id: string; state: string; logs: string[] }> =>
       ipcRenderer.invoke('task:status', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => {
-      const handler = (_: any, log: LogEntry) => callback(log);
+      const handler = (_: IpcRendererEvent, log: LogEntry) => callback(log);
       ipcRenderer.on(`log:added:${accountId}`, handler);
       return () => ipcRenderer.removeListener(`log:added:${accountId}`, handler);
     },
@@ -210,14 +201,14 @@ const electronAPI = {
       ipcRenderer.invoke('violation:setWords', accountId, words),
     batchScan: (accountId: string, limit?: number): Promise<ViolationScanResult> =>
       ipcRenderer.invoke('violation:batchScan', accountId, limit),
-    scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<any> =>
+    scanStep: (accountId: string, action: 'next' | 'skip' | 'delete'): Promise<ViolationScanStepResult> =>
       ipcRenderer.invoke('violation:scanStep', accountId, action),
     batchDelete: (accountId: string, violations: ViolationMatch[]): Promise<{ deleted: number; errors: number; stopped: boolean }> =>
       ipcRenderer.invoke('violation:batchDelete', accountId, violations),
     stop: (accountId: string): Promise<void> =>
       ipcRenderer.invoke('violation:stop', accountId),
     onLog: (accountId: string, callback: (log: LogEntry) => void) => {
-      const handler = (_: any, log: LogEntry) => callback(log);
+      const handler = (_: IpcRendererEvent, log: LogEntry) => callback(log);
       ipcRenderer.on(`violation:log:${accountId}`, handler);
       return () => ipcRenderer.removeListener(`violation:log:${accountId}`, handler);
     },
@@ -247,8 +238,9 @@ const electronAPI = {
   },
 };
 
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-contextBridge.exposeInMainWorld('wishop', electronAPI);
+export type WishopAPI = typeof wishopAPI;
+
+contextBridge.exposeInMainWorld('wishop', wishopAPI);
 
 contextBridge.exposeInMainWorld('appVersion', {
   get: (): Promise<string> => ipcRenderer.invoke('app:version'),
@@ -276,8 +268,7 @@ contextBridge.exposeInMainWorld('updater', {
 
 declare global {
   interface Window {
-    electronAPI: typeof electronAPI;
-    wishop: typeof electronAPI;
+    wishop: typeof wishopAPI;
     appVersion: {
       get: () => Promise<string>;
     };

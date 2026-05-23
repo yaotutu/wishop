@@ -5,6 +5,10 @@ export function isCredentialError(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith(CREDENTIAL_PREFIX);
 }
 
+export function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function getCredentialMessage(error: unknown): string {
   if (error instanceof Error && error.message.startsWith(CREDENTIAL_PREFIX)) {
     return error.message.slice(CREDENTIAL_PREFIX.length);

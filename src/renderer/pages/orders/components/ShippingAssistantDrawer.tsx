@@ -3,6 +3,7 @@ import { Button, Descriptions, Drawer, Space, Typography, message } from 'antd';
 import { CopyOutlined, FormOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { CheckoutAddressFillResult, OrderAddressInfo, OrderProductInfo, OrderRealAddressCache, ProductSourceItem } from '../../../../shared/types';
 import { formatOrderAddressForCopy } from '../../../../shared/address-format';
+import { getErrorMessage } from '../../../../shared/errors';
 
 const { Text } = Typography;
 
@@ -93,8 +94,8 @@ export const ShippingAssistantDrawer: React.FC<Props> = ({
       } else {
         message.warning(warningText || '未填写任何字段');
       }
-    } catch (err: any) {
-      message.error(`自动填写地址失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`自动填写地址失败: ${getErrorMessage(err)}`);
     } finally {
       setFillAddressLoading(false);
     }

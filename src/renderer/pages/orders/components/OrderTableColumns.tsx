@@ -10,6 +10,11 @@ import { canPrepareTaobaoRefund as canPrepareTaobaoRefundForOrder, isLinkedPurch
 
 const { Text } = Typography;
 
+const compactActionButtonStyle: React.CSSProperties = {
+  height: 22,
+  padding: '0 4px',
+};
+
 interface CreateOrderColumnsOptions {
   realAddressCaches: Record<string, OrderRealAddressCache>;
   decodingOrderIds: Set<string>;
@@ -281,20 +286,21 @@ export function createOrderColumns(options: CreateOrderColumnsOptions) {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 132,
+      fixed: 'right' as const,
       render: (_: unknown, record: Order) => {
         const product = firstProduct(record);
         const sources = product?.product_id ? options.productSources[product.product_id] || [] : [];
         return (
-          <Flex vertical align="flex-start">
-            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record.order_id)}>
+          <Flex vertical align="flex-start" gap={2} style={{ minWidth: 104 }}>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => options.onViewDetail(record.order_id)} style={compactActionButtonStyle}>
               详情
             </Button>
-            <Button type="link" size="small" icon={<LinkOutlined />} disabled={!product?.product_id} onClick={() => product && options.onOpenSourceManager(product)}>
+            <Button type="link" size="small" icon={<LinkOutlined />} disabled={!product?.product_id} onClick={() => product && options.onOpenSourceManager(product)} style={compactActionButtonStyle}>
               管理货源
             </Button>
             {product?.product_id && sources.length > 0 && (
-              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => options.onOpenShipSources(record, product)}>
+              <Button type="link" size="small" icon={<ShoppingCartOutlined />} onClick={() => options.onOpenShipSources(record, product)} style={compactActionButtonStyle}>
                 去发货
               </Button>
             )}

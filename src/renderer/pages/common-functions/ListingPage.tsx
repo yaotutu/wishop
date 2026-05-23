@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Table, Switch, Input, message, Empty, Popconfirm, Select, Tooltip } from 'antd';
-import { PlayCircleOutlined, CloseCircleOutlined, WarningOutlined, DeleteOutlined, ReloadOutlined, ExclamationCircleOutlined, ClockCircleOutlined, PlusOutlined, EditOutlined, StopOutlined, QuestionCircleOutlined } from '@ant-design/icons';
-import { useBlacklistRules, useLogs, useQuota, useSchedulers, useSkipKeywords, useStatusRules, useTaskConfig } from '../../domains/listing/hooks';
-import type { TaskConfig, TaskCycleResult, LogEntry, ScheduledTask, BlacklistRule, ErrorCodeSummary, StatusRule } from '../../../shared/types';
-import { cronToTimeInput, dailyCronPresets, formatCron, timeInputToDailyCron } from '../../utils/cron';
+import { Checkbox, InputNumber, Button, Space, Alert, Tag, Divider, Modal, Input, message, Popconfirm, Select, Tooltip } from 'antd';
+import { PlayCircleOutlined, CloseCircleOutlined, DeleteOutlined, ReloadOutlined, PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { useBlacklistRules, useLogs, useQuota, useSkipKeywords, useStatusRules, useTaskConfig } from '../../domains/listing/hooks';
+import type { TaskConfig, TaskCycleResult, LogEntry, BlacklistRule } from '../../../shared/types';
 
 interface ListingProps {
   accountId: string;
@@ -19,23 +18,12 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const { taskConfig, fetchTaskConfig, saveTaskConfig, runTask, stopTask, onTaskLog } = useTaskConfig(accountId);
   const { logs, fetchLogs, clearLogs } = useLogs(accountId);
   const { quota, fetchQuota } = useQuota(accountId);
-  const { tasks, fetchTasks, addTask, updateTask, removeTask } = useSchedulers(accountId);
   const { rules: blacklistRules, fetchRules: fetchBlacklistRules, saveRules: saveBlacklistRules, defaultCodes: blacklistDefaultCodes } = useBlacklistRules();
   const { keywords: skipKeywords, fetchKeywords, saveKeywords } = useSkipKeywords();
   const { rules: statusRules, fetchRules: fetchStatusRules, saveRules: saveStatusRules, resetRules: resetStatusRules } = useStatusRules();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TaskCycleResult | null>(null);
   const [localListedCount, setLocalListedCount] = useState(0);
-  const [schedulerOpen, setSchedulerOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    cronExpression: '0 9 * * *',
-    dailyLimit: 0,
-    enabled: true,
-    taskConfig: { ...defaultTaskConfig },
-  });
 
   // 黑名单管理（内部 state，不再单独弹窗）
   const [newRuleCode, setNewRuleCode] = useState('');
@@ -55,7 +43,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     fetchTaskConfig();
     fetchLogs();
     fetchQuota();
-    fetchTasks();
     fetchBlacklistRules();
     fetchKeywords();
     fetchStatusRules();
@@ -108,45 +95,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
   const updateConfig = (patch: Partial<TaskConfig>) => {
     saveTaskConfig({ ...taskConfig, ...patch });
-  };
-
-  const openAddModal = () => {
-    setEditingTask(null);
-    setFormData({ name: '', cronExpression: '0 9 * * *', dailyLimit: 0, enabled: true, taskConfig: { ...defaultTaskConfig } });
-    setEditModalOpen(true);
-  };
-
-  const openEditModal = (task: ScheduledTask) => {
-    setEditingTask(task);
-    setFormData({
-      name: task.name,
-      cronExpression: task.cronExpression,
-      dailyLimit: task.dailyLimit,
-      enabled: task.enabled,
-      taskConfig: { ...task.taskConfig },
-    });
-    setEditModalOpen(true);
-  };
-
-  const handleSaveTask = async () => {
-    if (!formData.name.trim()) {
-      message.error('请输入任务名称');
-      return;
-    }
-    if (editingTask) {
-      await updateTask(editingTask.id, {
-        name: formData.name,
-        cronExpression: formData.cronExpression,
-        dailyLimit: formData.dailyLimit,
-        enabled: formData.enabled,
-        taskConfig: formData.taskConfig,
-      });
-      message.success('任务已更新');
-    } else {
-      await addTask(formData);
-      message.success('任务已创建');
-    }
-    setEditModalOpen(false);
   };
 
   // 从日志加入黑名单
@@ -257,12 +205,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
     message.success('已更新');
   };
 
-  // 删除单条规则
-  const handleDeleteStatusRule = async (editStatus: number) => {
-    await saveStatusRules(statusRules.filter(r => r.editStatus !== editStatus));
-    message.success('已删除');
-  };
-
   // 手动添加新规则
   const handleAddStatusRule = async () => {
     if (newRuleStatus === undefined || isNaN(newRuleStatus)) {
@@ -294,11 +236,11 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
   const quotaExhausted = displayQuota <= 0 && quota.total > 0;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       {/* 任务配置 + 执行 */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Space size={24}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Space size={24} wrap>
             <Space size={8}>
               <Checkbox
                 checked={taskConfig.listUnreviewed}
@@ -332,16 +274,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
               </Tooltip>
             </Checkbox>
           </Space>
-          <Space>
-            <Button
-              size="small"
-              icon={<ClockCircleOutlined />}
-              onClick={() => setSchedulerOpen(!schedulerOpen)}
-              type={schedulerOpen ? 'primary' : 'default'}
-              ghost={schedulerOpen}
-            >
-              定时任务{tasks.length > 0 ? ` (${tasks.length})` : ''}
-            </Button>
+          <Space wrap>
             {quota.total > 0 && (
               <Tag color={quotaExhausted ? 'red' : 'green'}>
                 配额 {displayQuota}/{quota.total}
@@ -397,51 +330,8 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         />
       )}
 
-      {/* 定时任务弹窗 */}
-      <Modal
-        title="定时任务"
-        open={schedulerOpen}
-        onCancel={() => setSchedulerOpen(false)}
-        footer={null}
-        width={720}
-        centered
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAddModal}>添加任务</Button>
-        </div>
-        {tasks.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无定时任务" style={{ padding: '32px 0' }}>
-            <Button type="primary" onClick={openAddModal}>创建第一个任务</Button>
-          </Empty>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {tasks.map(task => (
-              <div key={task.id} style={{
-                display: 'flex', alignItems: 'center', gap: 16,
-                padding: '14px 16px', background: '#fafafa', borderRadius: 8,
-              }}>
-                <Switch
-                  checked={task.enabled}
-                  onChange={checked => updateTask(task.id, { enabled: checked })}
-                />
-                <span style={{ fontWeight: 500, fontSize: 14, minWidth: 100 }}>{task.name}</span>
-                <Tag color={task.enabled ? 'blue' : 'default'}>{formatCron(task.cronExpression)}</Tag>
-                <span style={{ color: '#999', fontSize: 13 }}>
-                  今日 {task.todayListedCount}{task.dailyLimit > 0 ? `/${task.dailyLimit}` : ''}
-                </span>
-                <span style={{ flex: 1 }} />
-                <Button type="text" icon={<EditOutlined />} onClick={() => openEditModal(task)}>编辑</Button>
-                <Popconfirm title="确认删除此任务？" onConfirm={() => removeTask(task.id)} okText="删除" cancelText="取消">
-                  <Button type="text" danger icon={<DeleteOutlined />}>删除</Button>
-                </Popconfirm>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
-
       {/* 运行规则 — 默认锁定 */}
-      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, opacity: rulesLocked ? 0.75 : 1 }}>
+      <div style={{ flexShrink: 0, borderBottom: '1px solid #f0f0f0', paddingBottom: 10, opacity: rulesLocked ? 0.75 : 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontWeight: 500 }}>运行规则</span>
           <Button
@@ -550,6 +440,14 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
                       size="small"
                       onPressEnter={handleAddRule}
                     />
+                    <Input
+                      placeholder="说明"
+                      value={newRuleDesc}
+                      onChange={e => setNewRuleDesc(e.target.value)}
+                      style={{ width: 120 }}
+                      size="small"
+                      onPressEnter={handleAddRule}
+                    />
                     <Button size="small" icon={<PlusOutlined />} onClick={handleAddRule} />
                   </>
                 )}
@@ -591,7 +489,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
 
       {/* 执行记录 */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingTop: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexShrink: 0, gap: 8 }}>
           <span style={{ fontWeight: 500 }}>执行记录</span>
           <Space size={4}>
             <Button size="small" type="text" icon={<ReloadOutlined />} onClick={() => { fetchLogs(); fetchQuota(); }} />
@@ -682,98 +580,6 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
         </div>
       </div>
 
-      {/* 新建/编辑定时任务弹窗 */}
-      <Modal
-        title={editingTask ? '编辑定时任务' : '新建定时任务'}
-        open={editModalOpen}
-        onOk={handleSaveTask}
-        onCancel={() => setEditModalOpen(false)}
-        okText="保存"
-        cancelText="取消"
-        width={520}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
-          <div>
-            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>任务名称</div>
-            <Input
-              placeholder="如：早间上架、午间清理"
-              value={formData.name}
-              onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            />
-          </div>
-          <div>
-            <div style={{ marginBottom: 4, fontSize: 13, fontWeight: 500 }}>执行时间</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {dailyCronPresets.map(preset => (
-                <Tag
-                  key={preset.value}
-                  color={formData.cronExpression === preset.value ? 'blue' : 'default'}
-                  style={{ cursor: 'pointer', padding: '2px 8px' }}
-                  onClick={() => setFormData(prev => ({ ...prev, cronExpression: preset.value }))}
-                >
-                  {preset.label}
-                </Tag>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#666' }}>自定义时间：</span>
-              <Input
-                placeholder="HH:mm"
-                value={cronToTimeInput(formData.cronExpression)}
-                onChange={e => {
-                  const cron = timeInputToDailyCron(e.target.value);
-                  if (cron) setFormData(prev => ({ ...prev, cronExpression: cron }));
-                }}
-                style={{ width: 100 }}
-              />
-            </div>
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <Checkbox
-                checked={formData.dailyLimit > 0}
-                onChange={e => setFormData(prev => ({ ...prev, dailyLimit: e.target.checked ? 100 : 0 }))}
-              >
-                <span style={{ fontSize: 13, fontWeight: 500 }}>限制每日上限</span>
-              </Checkbox>
-            </div>
-            {formData.dailyLimit > 0 && (
-              <InputNumber controls={false} min={1} max={1000} value={formData.dailyLimit} onChange={v => setFormData(prev => ({ ...prev, dailyLimit: v || 100 }))} style={{ width: 200 }} />
-            )}
-          </div>
-          <div>
-            <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>任务配置</div>
-            <Space vertical styles={{ item: { display: 'block' } }}>
-              <Checkbox
-                checked={formData.taskConfig.listUnreviewed}
-                onChange={e => setFormData(prev => ({
-                  ...prev,
-                  taskConfig: { ...prev.taskConfig, listUnreviewed: e.target.checked },
-                }))}
-              >
-                提交未审核商品
-              </Checkbox>
-              {formData.taskConfig.listUnreviewed && (
-                <Space style={{ marginLeft: 24 }}>
-                  <span style={{ color: '#666', fontSize: 12 }}>每次</span>
-                  <InputNumber size="small" controls={false} min={1} max={quota.quota || undefined} value={formData.taskConfig.listUnreviewedQuantity}
-                    onChange={v => setFormData(prev => ({
-                      ...prev,
-                      taskConfig: { ...prev.taskConfig, listUnreviewedQuantity: v || 2 },
-                    }))}
-                    style={{ width: 60 }}
-                  />
-                  <span style={{ color: '#666', fontSize: 12 }}>条</span>
-                </Space>
-              )}
-            </Space>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Switch checked={formData.enabled} onChange={checked => setFormData(prev => ({ ...prev, enabled: checked }))} />
-            <span>{formData.enabled ? '创建后立即启用' : '创建后不启用'}</span>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 };

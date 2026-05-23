@@ -1,4 +1,4 @@
-import type { Config, FullAccount, ScheduledTask, TaskConfig } from '../../../shared/types';
+import type { Config, FullAccount, TaskConfig } from '../../../shared/types';
 
 const DEFAULT_TASK_CONFIG: TaskConfig = {
   listUnreviewed: true,
@@ -31,7 +31,6 @@ export function createAccountRepository(deps: AccountRepositoryDeps) {
         id: deps.createId(),
         name,
         config,
-        schedulers: [],
         taskConfig: { ...DEFAULT_TASK_CONFIG },
         violationWords: [],
         productSources: [],
@@ -73,39 +72,5 @@ export function createAccountRepository(deps: AccountRepositoryDeps) {
       this.updateAccount(accountId, { config });
     },
 
-    getSchedulers(accountId: string): ScheduledTask[] {
-      return getAccount(accountId)?.schedulers || [];
-    },
-
-    addScheduler(accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): ScheduledTask {
-      const newTask: ScheduledTask = {
-        ...task,
-        id: deps.createId(),
-        lastRunDate: '',
-        todayListedCount: 0,
-      };
-      deps.setAccounts(deps.getAccounts().map(account => (
-        account.id === accountId ? { ...account, schedulers: [...account.schedulers, newTask] } : account
-      )));
-      return newTask;
-    },
-
-    updateScheduler(accountId: string, taskId: string, patch: Partial<ScheduledTask>): void {
-      deps.setAccounts(deps.getAccounts().map(account => {
-        if (account.id !== accountId) return account;
-        return {
-          ...account,
-          schedulers: account.schedulers.map(task => task.id === taskId ? { ...task, ...patch } : task),
-        };
-      }));
-    },
-
-    removeScheduler(accountId: string, taskId: string): void {
-      deps.setAccounts(deps.getAccounts().map(account => (
-        account.id === accountId
-          ? { ...account, schedulers: account.schedulers.filter(task => task.id !== taskId) }
-          : account
-      )));
-    },
   };
 }

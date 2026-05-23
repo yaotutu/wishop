@@ -7,7 +7,6 @@ function makeAccount(): FullAccount {
     id: 'account-1',
     name: '店铺',
     config: { appId: 'app', appSecret: 'secret' },
-    schedulers: [],
     taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
     logs: [],
     violationWords: [],

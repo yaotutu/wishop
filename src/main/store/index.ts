@@ -1,135 +1,31 @@
-import Store from 'electron-store';
 import { EventEmitter } from 'events';
-import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
-import { createLogger } from '../utils/logger';
+import type { Config, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, ProductSourceBinding, ProductSourceItem, OrderAssociation, OrderAddressInfo, OrderRealAddressCache, LicenseState, ScheduledJob, ScheduledJobRunStats } from '../../shared/types';
 import type { GlobalLogEntry, GlobalLogInput } from '../../shared/global-log';
 import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
 import type { AppSettings, AppSettingsPatch } from '../../shared/settings';
-import { DEFAULT_APP_SETTINGS } from '../../shared/settings';
 import type { CredentialMeta } from '../../shared/credentials';
 import type { SyncModuleKey, SyncModuleSetting, SyncSettings } from '../../shared/sync';
-import { DEFAULT_SYNC_SETTINGS } from '../../shared/sync';
-import { createAccountRepository } from './repositories/account-repository';
-import { createOrderRepository } from './repositories/order-repository';
-import { createListingRepository } from './repositories/listing-repository';
-import { createViolationRepository } from './repositories/violation-repository';
-import { createScheduledJobRepository } from './repositories/scheduled-job-repository';
-import { createLicenseRepository } from './repositories/license-repository';
-import { createGlobalEventRepository } from './repositories/global-event-repository';
-import { createAppSettingsRepository } from './repositories/app-settings-repository';
-import { createSyncCredentialRepository } from './repositories/sync-credential-repository';
-import { migrateStoreIfNeeded } from './migrations';
+import store, {
+  accountRepository,
+  appSettingsRepository,
+  globalEventRepository,
+  licenseRepository,
+  listingRepository,
+  orderRepository,
+  scheduledJobRepository,
+  syncCredentialRepository,
+  violationRepository,
+} from './container';
+export type { StoreSchema } from './container';
 
-export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
+export type { Config, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
 export type Account = FullAccount;
 
 export const logEmitter = new EventEmitter();
-let logCounter = 0;
 
 export function createScopedAddLog(accountId: string): AddLogFn {
   return (log: Omit<LogEntry, 'id' | 'timestamp'>) => addLog(accountId, log);
 }
-
-export interface StoreSchema {
-  accounts: FullAccount[];
-  activeAccountId: string;
-  config?: Config;
-  scheduler?: { enabled: boolean; cronExpression: string; dailyLimit: number; lastRunDate: string; todayListedCount: number };
-  taskConfig?: TaskConfig;
-  logs?: LogEntry[];
-  skipKeywords?: string[];
-  blacklistRules?: BlacklistRule[];
-  statusRules?: StatusRule[];
-  licenseState?: LicenseState;
-  scheduledJobs?: ScheduledJob[];
-  globalLogs?: GlobalLogEntry[];
-  notifications?: NotificationEntry[];
-  notificationPreference?: NotificationPreference;
-  appSettings?: AppSettings;
-  syncSettings?: SyncSettings;
-  credentialMetas?: CredentialMeta[];
-}
-
-const store = new Store<StoreSchema>({
-  defaults: {
-    accounts: [],
-    activeAccountId: '',
-    appSettings: DEFAULT_APP_SETTINGS,
-    syncSettings: DEFAULT_SYNC_SETTINGS,
-    credentialMetas: [],
-  },
-});
-
-const accountRepository = createAccountRepository({
-  getAccounts: () => store.get('accounts'),
-  setAccounts: accounts => store.set('accounts', accounts),
-  getActiveAccountId: () => store.get('activeAccountId'),
-  setActiveAccountId: accountId => store.set('activeAccountId', accountId),
-  createId: () => uuidv4(),
-  now: () => Date.now(),
-  env: process.env,
-});
-
-const orderRepository = createOrderRepository({
-  getAccounts: () => store.get('accounts'),
-  setAccounts: accounts => store.set('accounts', accounts),
-  now: () => Date.now(),
-  createId: () => uuidv4(),
-});
-
-const listingRepository = createListingRepository({
-  getAccounts: () => store.get('accounts'),
-  setAccounts: accounts => store.set('accounts', accounts),
-  getGlobal: <T,>(key: string) => store.get(key as keyof StoreSchema) as T | undefined,
-  setGlobal: (key, value) => store.set(key as keyof StoreSchema, value as never),
-  now: () => Date.now(),
-  createId: () => `${Date.now()}-${++logCounter}`,
-});
-
-const violationRepository = createViolationRepository({
-  getAccounts: () => store.get('accounts'),
-  setAccounts: accounts => store.set('accounts', accounts),
-});
-
-const scheduledJobRepository = createScheduledJobRepository({
-  getJobs: () => store.get('scheduledJobs') || [],
-  setJobs: jobs => store.set('scheduledJobs', jobs),
-  createId: () => uuidv4(),
-  now: () => Date.now(),
-});
-
-const licenseRepository = createLicenseRepository({
-  getLicenseState: () => store.get('licenseState'),
-  setLicenseState: state => store.set('licenseState', state),
-  createId: () => uuidv4(),
-});
-
-const globalEventRepository = createGlobalEventRepository({
-  getGlobalLogs: () => store.get('globalLogs') || [],
-  setGlobalLogs: logs => store.set('globalLogs', logs),
-  getNotifications: () => store.get('notifications') || [],
-  setNotifications: notifications => store.set('notifications', notifications),
-  getNotificationPreference: () => store.get('notificationPreference'),
-  setNotificationPreference: preference => store.set('notificationPreference', preference),
-  createId: () => uuidv4(),
-  now: () => Date.now(),
-});
-
-const appSettingsRepository = createAppSettingsRepository({
-  getSettings: () => store.get('appSettings'),
-  setSettings: settings => store.set('appSettings', settings),
-});
-
-const syncCredentialRepository = createSyncCredentialRepository({
-  getSyncSettings: () => store.get('syncSettings'),
-  setSyncSettings: settings => store.set('syncSettings', settings),
-  getCredentialMetas: () => store.get('credentialMetas') || [],
-  setCredentialMetas: metas => store.set('credentialMetas', metas),
-  now: () => Date.now(),
-});
-
-migrateStoreIfNeeded(store, { info: message => createLogger('Store', 'system').info(message) });
 
 // --- Account management ---
 
@@ -169,24 +65,6 @@ export function getConfig(accountId: string): Config {
 
 export function setConfig(accountId: string, config: Config): void {
   accountRepository.setConfig(accountId, config);
-}
-
-// --- Per-account schedulers ---
-
-export function getSchedulers(accountId: string): ScheduledTask[] {
-  return accountRepository.getSchedulers(accountId);
-}
-
-export function addScheduler(accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): ScheduledTask {
-  return accountRepository.addScheduler(accountId, task);
-}
-
-export function updateScheduler(accountId: string, taskId: string, patch: Partial<ScheduledTask>): void {
-  accountRepository.updateScheduler(accountId, taskId, patch);
-}
-
-export function removeScheduler(accountId: string, taskId: string): void {
-  accountRepository.removeScheduler(accountId, taskId);
 }
 
 // --- Global scheduled jobs ---

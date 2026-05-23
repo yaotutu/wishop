@@ -3,6 +3,7 @@ import { Button, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Spa
 import type { TableProps } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { Account, ScheduledJob, ScheduledJobRunStats, ScheduledJobStatus } from '../../../shared/types';
+import { getErrorMessage } from '../../../shared/errors';
 import { useScheduledJobs } from '../../domains/scheduled-jobs/hooks';
 import { cronPresets, formatCron } from '../../utils/cron';
 
@@ -224,8 +225,8 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
         message.success('调度任务已创建');
       }
       setModalOpen(false);
-    } catch (err: any) {
-      message.error(`保存调度任务失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`保存调度任务失败: ${getErrorMessage(err)}`);
     } finally {
       setSaving(false);
     }
@@ -235,8 +236,8 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     try {
       await updateJob(job.id, { enabled });
       message.success(enabled ? '任务已启用' : '任务已停用');
-    } catch (err: any) {
-      message.error(`更新任务失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`更新任务失败: ${getErrorMessage(err)}`);
     }
   };
 
@@ -244,8 +245,8 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
     try {
       await removeJob(job.id);
       message.success('调度任务已删除');
-    } catch (err: any) {
-      message.error(`删除任务失败: ${err.message}`);
+    } catch (err: unknown) {
+      message.error(`删除任务失败: ${getErrorMessage(err)}`);
     }
   };
 
@@ -378,14 +379,14 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, paddingBottom: 12, borderBottom: '1px solid #f0f0f0' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600 }}>调度任务</div>
           <div style={{ color: '#666', fontSize: 13, marginTop: 4 }}>
             共 {rows.length} 个任务，{enabledCount} 个启用，{globalCount} 个全账号任务，{runningCount} 个运行中
           </div>
         </div>
-        <Space>
+        <Space wrap>
           <Button icon={<ReloadOutlined />} onClick={() => fetchJobs()} loading={loading}>
             刷新
           </Button>
@@ -395,7 +396,7 @@ const ScheduledJobsPage: React.FC<ScheduledJobsPageProps> = ({ accounts }) => {
         </Space>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, paddingTop: 12 }}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, paddingTop: 12 }}>
         <Table<ScheduledJob>
           rowKey="id"
           size="small"

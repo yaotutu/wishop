@@ -1,5 +1,4 @@
 import type { BlacklistRule, LogEntry, QuotaResult, StatusRule, TaskConfig, TaskCycleResult } from '../../../shared/listing';
-import type { ScheduledTask } from '../../../shared/scheduling';
 
 export const listingClient = {
   taskConfig: {
@@ -30,20 +29,6 @@ export const listingClient = {
   quota: {
     get(accountId: string): Promise<QuotaResult> {
       return window.wishop.quota.get(accountId);
-    },
-  },
-  schedulers: {
-    list(accountId: string): Promise<ScheduledTask[]> {
-      return window.wishop.scheduler.list(accountId);
-    },
-    add(accountId: string, task: Omit<ScheduledTask, 'id' | 'lastRunDate' | 'todayListedCount'>): Promise<ScheduledTask> {
-      return window.wishop.scheduler.add(accountId, task);
-    },
-    update(accountId: string, taskId: string, patch: Partial<ScheduledTask>): Promise<void> {
-      return window.wishop.scheduler.update(accountId, taskId, patch);
-    },
-    remove(accountId: string, taskId: string): Promise<void> {
-      return window.wishop.scheduler.remove(accountId, taskId);
     },
   },
   rules: {

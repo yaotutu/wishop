@@ -1,9 +1,8 @@
 import { BrowserWindow, ipcMain, screen } from 'electron';
 import path from 'path';
 import type { CheckoutAddressFillResult, OrderRealAddressCache, ShippingAssistantSession } from '../../shared/types';
-import { getRealAddressCache, setRealAddressCache } from '../store';
+import { getConfig, getRealAddressCache, setRealAddressCache } from '../store';
 import { getClient } from '../wxshop/client-registry';
-import { openCleanBrowserWindow } from './clean-taobao-window.js';
 import { assistantHtml, normalizeAssistantSession } from './shipping-assistant-page.js';
 
 const SHIPPING_ASSISTANT_WIDTH = 420;
@@ -81,13 +80,11 @@ export function closeShippingAssistantWindows(): void {
   shippingAssistantWindows.clear();
 }
 
-export function openCleanBrowserShippingAssistant(
-  parent: BrowserWindow,
+export function openShippingAssistantWindow(
+  taobaoWindow: BrowserWindow,
   profileId: string,
-  url: string,
   session: ShippingAssistantSession,
 ): void {
-  const taobaoWindow = openCleanBrowserWindow(parent, profileId, url);
   const existing = shippingAssistantWindows.get(profileId);
   if (existing && !existing.isDestroyed()) {
     shippingAssistantSessions.set(existing.webContents.id, session);
@@ -151,7 +148,7 @@ export function registerShippingAssistantHandlers(): void {
       session.address = existing.address;
       return existing;
     }
-    const address = await getClient(session.accountId).decodeOrderSensitiveInfo(session.orderId);
+    const address = await getClient(session.accountId, getConfig(session.accountId)).decodeOrderSensitiveInfo(session.orderId);
     session.address = address;
     return setRealAddressCache(session.accountId, session.orderId, address);
   });

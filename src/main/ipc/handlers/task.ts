@@ -1,6 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { createScopedAddLog, getTaskConfig, setTaskConfig, getBlacklistRules, getSkipKeywords, getStatusRules } from '../../store';
+import { createScopedAddLog, getConfig, getTaskConfig, setTaskConfig, getBlacklistRules, getSkipKeywords, getStatusRules } from '../../store';
 import type { TaskConfig, TaskCycleResult } from '../../../shared/types';
+import { getErrorMessage } from '../../../shared/errors';
 import { getClient } from '../../wxshop/client-registry';
 import { runTaskCycle } from '../../modules/task-cycle';
 import { withLogForwarding } from '../utils/log-forwarding';
@@ -26,20 +27,21 @@ export function registerTaskHandlers(context: { taskSessions: SessionManager<voi
 
     if (taskConfig.listUnreviewed) {
       try {
-        const api = getClient(accountId);
+        const api = getClient(accountId, getConfig(accountId));
         const quota = await api.getAuditQuota();
         logger.info(`配额检查: 剩余 ${quota.quota} / 总共 ${quota.total}`);
         scopedAddLog({ runId, productId: '', productTitle: `今日提审配额: 剩余${quota.quota}/${quota.total}`, action: 'check', status: quota.quota > 0 ? 'success' : 'failed' });
-      } catch (error: any) {
-        scopedAddLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${error.message}` });
+      } catch (error: unknown) {
+        const message = getErrorMessage(error);
+        scopedAddLog({ runId, productId: '', productTitle: '', action: 'check', status: 'failed', errorMsg: `配额检查失败: ${message}` });
         logger.error(`配额检查失败:`, error);
-        return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${error.message}` };
+        return { scanned: 0, deleted: 0, listed: 0, errors: 0, skipped: 0, stopped: true, reason: `配额检查失败: ${message}` };
       }
     }
 
     return withLogForwarding(event, accountId, `log:added:${accountId}`, async () => {
       try {
-        const api = getClient(accountId);
+        const api = getClient(accountId, getConfig(accountId));
         const blacklistRules = getBlacklistRules();
         const skipKeywords = getSkipKeywords();
         const statusRules = getStatusRules();

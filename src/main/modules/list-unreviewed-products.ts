@@ -1,14 +1,15 @@
 import { WxShopClient, DraftProduct } from '../wxshop/client';
-import { AddLogFn } from '../store';
+import type { AddLogFn } from '../../shared/types';
 import type { BlacklistRule } from '../../shared/types';
-import { createLogger } from '../utils/logger';
+import { getErrorMessage } from '../../shared/errors';
+import { createLogger, type AppLogger } from '../utils/logger';
 
 export type ListOneResult = 'success' | 'skipped' | 'stopped' | 'deleted';
 
 const SUBMIT_INTERVAL_MS = 3000;
 const lastSubmitTimeMap = new Map<string, number>();
 
-async function waitInterval(cacheKey: string, signal?: AbortSignal, logger?: any): Promise<void> {
+async function waitInterval(cacheKey: string, signal?: AbortSignal, logger?: AppLogger): Promise<void> {
   const lastSubmitTime = lastSubmitTimeMap.get(cacheKey) || 0;
   const now = Date.now();
   const elapsed = now - lastSubmitTime;
@@ -92,8 +93,8 @@ export async function listOne(
         const reason = res.errmsg ? `errcode:${res.errcode} ${res.errmsg}` : `errcode:${res.errcode}`;
         addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'success', errorMsg: `上架失败，已自动删除。原因: ${reason}` });
         logger.info(`上架失败，已删除: ${product.title} (errcode=${res.errcode})`);
-      } catch (e: any) {
-        addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: `上架失败(errcode:${res.errcode})，删除也失败: ${e.message}` });
+      } catch (e: unknown) {
+        addLog({ runId, productId: product.productId, productTitle: product.title, action: 'delete', status: 'failed', errorMsg: `上架失败(errcode:${res.errcode})，删除也失败: ${getErrorMessage(e)}` });
         logger.error(`上架后删除失败: ${product.title}`, e);
       }
       return 'deleted';
@@ -101,8 +102,8 @@ export async function listOne(
       logger.info(`上架失败，跳过: ${product.title} (errcode=${res.errcode})`);
       return 'skipped';
     }
-  } catch (error: any) {
-    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorMsg: error.message });
+  } catch (error: unknown) {
+    addLog({ runId, productId: product.productId, productTitle: product.title, action: 'list', status: 'failed', errorMsg: getErrorMessage(error) });
     logger.error(`异常: ${product.title}`, error);
     return 'deleted';
   }

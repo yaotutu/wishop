@@ -15,6 +15,20 @@ export async function flushBrowserSession(profileId = 'baseline'): Promise<void>
   await ses.cookies.flushStore();
 }
 
+export async function flushBrowserSessionWithTimeout(profileId = 'baseline', timeoutMs = 3000): Promise<boolean> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      flushBrowserSession(profileId).then(() => true),
+      new Promise<false>(resolve => {
+        timeout = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export function openCleanBrowserWindow(parent: BrowserWindow, profileId: string, url = 'https://www.taobao.com'): BrowserWindow {
   const existingWindow = cleanBrowserWindows.get(profileId);
   if (existingWindow && !existingWindow.isDestroyed()) {
@@ -73,7 +87,8 @@ export function openCleanBrowserWindow(parent: BrowserWindow, profileId: string,
   return cleanBrowserWindow;
 }
 
-export function getCleanBrowserWindow(): BrowserWindow | null {
+export function getCleanBrowserWindow(profileId?: string): BrowserWindow | null {
+  if (profileId) return cleanBrowserWindows.get(profileId) || null;
   return cleanBrowserWindows.get('baseline') || cleanBrowserWindows.values().next().value || null;
 }
 

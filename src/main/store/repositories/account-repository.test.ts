@@ -7,7 +7,6 @@ function makeAccount(id = 'account-1'): FullAccount {
     id,
     name: '店铺',
     config: { appId: 'app', appSecret: 'secret' },
-    schedulers: [],
     taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
     logs: [],
     violationWords: [],
@@ -52,29 +51,5 @@ describe('account repository', () => {
     });
 
     expect(repo.getConfig('account-1')).toEqual({ appId: 'env-app', appSecret: 'env-secret' });
-  });
-
-  it('updates per-account schedulers without mutating other accounts', () => {
-    let accounts = [makeAccount('account-1'), makeAccount('account-2')];
-    const repo = createAccountRepository({
-      getAccounts: () => accounts,
-      setAccounts: next => { accounts = next; },
-      getActiveAccountId: () => 'account-1',
-      setActiveAccountId: () => undefined,
-      createId: () => 'scheduler-1',
-      now: () => 1,
-    });
-
-    repo.addScheduler('account-1', {
-      name: '定时提审',
-      enabled: true,
-      cronExpression: '0 9 * * *',
-      dailyLimit: 2,
-      taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
-    });
-    repo.updateScheduler('account-1', 'scheduler-1', { enabled: false });
-
-    expect(accounts[0].schedulers[0]).toMatchObject({ id: 'scheduler-1', enabled: false });
-    expect(accounts[1].schedulers).toEqual([]);
   });
 });

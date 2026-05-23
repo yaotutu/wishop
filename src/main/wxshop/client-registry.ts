@@ -1,12 +1,12 @@
 import { createWxShopClient, WxShopClient } from './client';
-import { getConfig } from '../store';
+import type { Config } from '../../shared/types';
 
 const clients = new Map<string, WxShopClient>();
 
-export function getClient(accountId: string): WxShopClient {
+export function getClient(accountId: string, config: Config): WxShopClient {
   let client = clients.get(accountId);
   if (!client) {
-    client = createWxShopClient(getConfig(accountId));
+    client = createWxShopClient(config);
     clients.set(accountId, client);
   }
   return client;
