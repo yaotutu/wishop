@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Layout as AntLayout, Tabs, Empty, Spin } from 'antd';
+import { Layout as AntLayout, Tabs, Empty, Spin, Button } from 'antd';
+import { ShoppingOutlined } from '@ant-design/icons';
 import { useAccounts } from '../domains/accounts/hooks';
 import type { Account, ShippingAssistantSession } from '../../shared/types';
 import { useBrowser } from '../domains/browser/hooks';
@@ -7,6 +8,7 @@ import GlobalLogDrawer from './GlobalLogDrawer';
 import NotificationCenter from './NotificationCenter';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 import { useAppStore, type AppModule } from '../state/app-store';
+import TaobaoWorkbench from '../domains/browser/TaobaoWorkbench';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -57,10 +59,11 @@ function requestIdleWork(callback: () => void): () => void {
 }
 
 export const BrowserContext = React.createContext<{
+  openTaobaoBrowser: () => void;
   openBrowser: (profileId?: string, url?: string) => void;
   openCleanBrowser: (profileId?: string, url?: string) => void;
   openShippingAssistant: (profileId: string, url: string, session: ShippingAssistantSession) => void;
-}>({ openBrowser: () => {}, openCleanBrowser: () => {}, openShippingAssistant: () => {} });
+}>({ openTaobaoBrowser: () => {}, openBrowser: () => {}, openCleanBrowser: () => {}, openShippingAssistant: () => {} });
 
 const PageFallback: React.FC = () => (
   <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -177,7 +180,7 @@ const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
   const [listingScope, setListingScope] = useState<'account' | 'global'>('account');
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const { openBrowser, openCleanBrowser, openShippingAssistant } = useBrowser();
+  const { openTaobaoBrowser, openBrowser, openCleanBrowser, openShippingAssistant } = useBrowser();
   const moduleSwitchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -201,7 +204,10 @@ const Layout: React.FC = () => {
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
   const activeModuleMounted = mountedModules.includes(activeModule);
-  const browserValue = useMemo(() => ({ openBrowser, openCleanBrowser, openShippingAssistant }), [openBrowser, openCleanBrowser, openShippingAssistant]);
+  const browserValue = useMemo(
+    () => ({ openTaobaoBrowser, openBrowser, openCleanBrowser, openShippingAssistant }),
+    [openTaobaoBrowser, openBrowser, openCleanBrowser, openShippingAssistant],
+  );
 
   const switchModule = useCallback((module: ModuleType) => {
     setActiveModule(module);
@@ -220,6 +226,10 @@ const Layout: React.FC = () => {
     setSettingsTab('about');
     switchModule('settings');
   }, [setSettingsTab, switchModule]);
+
+  const handleOpenTaobaoBrowser = useCallback(() => {
+    void openTaobaoBrowser();
+  }, [openTaobaoBrowser]);
 
   const navigateToStoreManagement = useCallback(() => {
     switchModule('storeManagement');
@@ -245,6 +255,14 @@ const Layout: React.FC = () => {
               style={{ flex: 1, minWidth: 0 }}
               tabBarStyle={{ margin: 0 }}
             />
+            <Button
+              size="small"
+              icon={<ShoppingOutlined />}
+              onClick={handleOpenTaobaoBrowser}
+              style={{ marginLeft: 8, flexShrink: 0 }}
+            >
+              淘宝浏览器
+            </Button>
             <span
               onClick={handleVersionClick}
               style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
@@ -321,6 +339,7 @@ const Layout: React.FC = () => {
           </AntLayout>
           <NotificationCenter />
           <GlobalLogDrawer />
+          <TaobaoWorkbench />
         </AntLayout>
       </CredentialErrorProvider>
     </BrowserContext.Provider>

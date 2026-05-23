@@ -1,34 +1,29 @@
-import { ipcMain, BrowserWindow } from 'electron';
-import type { ShippingAssistantSession } from '../../../shared/types';
+import { ipcMain } from 'electron';
 import {
   closeBrowserWindow,
-  openCleanBrowserShippingAssistant,
-  openCleanBrowserWindow,
+  registerCleanBrowserWebContents,
   registerShippingAssistantHandlers,
+  unregisterCleanBrowserWebContents,
 } from '../../browser/browser-window.js';
 
 export function registerBrowserHandlers(): void {
   registerShippingAssistantHandlers();
 
-  ipcMain.handle('browser:open', (event, profileId: string, url?: string) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return;
-    openCleanBrowserWindow(win, profileId, url);
+  ipcMain.handle('browser:registerTaobaoWebContents', (_event, profileId: string, webContentsId: number) => {
+    registerCleanBrowserWebContents(profileId, webContentsId);
   });
+
+  ipcMain.handle('browser:unregisterTaobaoWebContents', (_event, profileId: string, webContentsId: number) => {
+    unregisterCleanBrowserWebContents(profileId, webContentsId);
+  });
+
+  ipcMain.handle('browser:open', () => undefined);
 
   ipcMain.handle('browser:close', () => {
     closeBrowserWindow();
   });
 
-  ipcMain.handle('browser:openClean', (event, profileId: string, url?: string) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return;
-    openCleanBrowserWindow(win, profileId, url);
-  });
+  ipcMain.handle('browser:openClean', () => undefined);
 
-  ipcMain.handle('browser:openShippingAssistant', (event, profileId: string, url: string, session: ShippingAssistantSession) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win) return;
-    openCleanBrowserShippingAssistant(win, profileId, url, session);
-  });
+  ipcMain.handle('browser:openShippingAssistant', () => undefined);
 }

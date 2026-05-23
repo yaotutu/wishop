@@ -174,6 +174,10 @@ const wishopAPI = {
       ipcRenderer.invoke('browser:openClean', profileId, url),
     openShippingAssistant: (profileId: string, url: string, session: ShippingAssistantSession): Promise<void> =>
       ipcRenderer.invoke('browser:openShippingAssistant', profileId, url, session),
+    registerTaobaoWebContents: (profileId: string, webContentsId: number): Promise<void> =>
+      ipcRenderer.invoke('browser:registerTaobaoWebContents', profileId, webContentsId),
+    unregisterTaobaoWebContents: (profileId: string, webContentsId: number): Promise<void> =>
+      ipcRenderer.invoke('browser:unregisterTaobaoWebContents', profileId, webContentsId),
     close: (): Promise<void> =>
       ipcRenderer.invoke('browser:close'),
   },

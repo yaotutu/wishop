@@ -1,15 +1,37 @@
-import { BrowserWindow, session } from 'electron';
-import path from 'path';
+import { session, webContents } from 'electron';
+import type { WebContents } from 'electron';
 
 const CLEAN_PARTITION_PREFIX = 'persist:taobao-clean-';
-const TAOBAO_BROWSER_PRELOAD = path.join(__dirname, '..', '..', 'preload', 'taobao-browser.js');
 
-const cleanBrowserWindows = new Map<string, BrowserWindow>();
+const cleanBrowserWebContents = new Map<string, number>();
 let isQuitting = false;
 
 export function setBrowserQuitting(value: boolean): void {
   isQuitting = value;
 }
+
+export function registerCleanBrowserWebContents(profileId: string, webContentsId: number): void {
+  cleanBrowserWebContents.set(profileId, webContentsId);
+}
+
+export function unregisterCleanBrowserWebContents(profileId: string, webContentsId: number): void {
+  if (cleanBrowserWebContents.get(profileId) === webContentsId) {
+    cleanBrowserWebContents.delete(profileId);
+  }
+}
+
+export function getCleanBrowserWebContents(profileId = 'baseline'): WebContents | null {
+  const id = cleanBrowserWebContents.get(profileId) || cleanBrowserWebContents.get('baseline');
+  if (!id) return null;
+  const contents = webContents.fromId(id);
+  if (!contents || contents.isDestroyed()) {
+    cleanBrowserWebContents.delete(profileId);
+    return null;
+  }
+  return contents;
+}
+
+export const getCleanBrowserWindow = getCleanBrowserWebContents;
 
 export async function flushBrowserSession(profileId = 'baseline'): Promise<void> {
   const ses = session.fromPartition(`${CLEAN_PARTITION_PREFIX}${profileId}`);
@@ -31,72 +53,14 @@ export async function flushBrowserSessionWithTimeout(profileId = 'baseline', tim
   }
 }
 
-export function openCleanBrowserWindow(parent: BrowserWindow, profileId: string, url = 'https://www.taobao.com'): BrowserWindow {
-  const existingWindow = cleanBrowserWindows.get(profileId);
-  if (existingWindow && !existingWindow.isDestroyed()) {
-    existingWindow.show();
-    existingWindow.focus();
-    if (existingWindow.webContents.getURL() !== url) {
-      existingWindow.loadURL(url);
-    }
-    return existingWindow;
-  }
-
-  const partition = `${CLEAN_PARTITION_PREFIX}${profileId}`;
-  const parentBounds = parent.getBounds();
-  const width = Math.min(1280, Math.floor(parentBounds.width * 0.9));
-  const height = Math.min(860, Math.floor(parentBounds.height * 0.9));
-  const x = parentBounds.x + Math.floor((parentBounds.width - width) / 2);
-  const y = parentBounds.y + Math.floor((parentBounds.height - height) / 2);
-
-  const cleanBrowserWindow = new BrowserWindow({
-    width,
-    height,
-    x,
-    y,
-    parent,
-    closable: true,
-    minimizable: true,
-    maximizable: true,
-    resizable: true,
-    title: '淘宝',
-    webPreferences: {
-      partition,
-      preload: TAOBAO_BROWSER_PRELOAD,
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-    },
-  });
-
-  cleanBrowserWindow.webContents.setWindowOpenHandler(({ url: newUrl }) => {
-    cleanBrowserWindow.loadURL(newUrl);
-    return { action: 'deny' };
-  });
-
-  cleanBrowserWindow.on('close', (event) => {
-    if (isQuitting) return;
-    event.preventDefault();
-    cleanBrowserWindow.hide();
-  });
-
-  cleanBrowserWindow.on('closed', () => {
-    cleanBrowserWindows.delete(profileId);
-  });
-
-  cleanBrowserWindows.set(profileId, cleanBrowserWindow);
-  cleanBrowserWindow.loadURL(url);
-  return cleanBrowserWindow;
-}
-
-export function getCleanBrowserWindow(profileId?: string): BrowserWindow | null {
-  if (profileId) return cleanBrowserWindows.get(profileId) || null;
-  return cleanBrowserWindows.get('baseline') || cleanBrowserWindows.values().next().value || null;
-}
-
 export function hideCleanBrowserWindows(): void {
-  cleanBrowserWindows.forEach(win => {
-    if (!win.isDestroyed()) win.hide();
-  });
+  cleanBrowserWebContents.clear();
+}
+
+export function openCleanBrowserWindow(): WebContents | null {
+  return getCleanBrowserWebContents();
+}
+
+export function isBrowserQuitting(): boolean {
+  return isQuitting;
 }

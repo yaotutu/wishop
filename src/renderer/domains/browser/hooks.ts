@@ -3,6 +3,10 @@ import type { ShippingAssistantSession } from '../../../shared/types';
 import { browserClient } from './client';
 
 export function useBrowser() {
+  const openTaobaoBrowser = useCallback(async () => {
+    await browserClient.openTaobaoBrowser();
+  }, []);
+
   const openBrowser = useCallback(async (profileId: string = 'default', url?: string) => {
     await browserClient.openClean(profileId, url);
   }, []);
@@ -19,5 +23,5 @@ export function useBrowser() {
     await browserClient.close();
   }, []);
 
-  return { openBrowser, openCleanBrowser, openShippingAssistant, closeBrowser };
+  return { openTaobaoBrowser, openBrowser, openCleanBrowser, openShippingAssistant, closeBrowser };
 }

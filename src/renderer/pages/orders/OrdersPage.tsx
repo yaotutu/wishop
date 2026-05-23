@@ -47,7 +47,7 @@ async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders } = useOrders(accountId);
-  const { openShippingAssistant } = React.useContext(BrowserContext);
+  const { openCleanBrowser, openShippingAssistant } = React.useContext(BrowserContext);
   const { productSources, saveProductSources } = useProductSources(accountId);
   const { realAddressCaches, fetchRealAddress } = useRealAddressCaches(accountId);
   const { orderAssociations, fetchAssociations, saveAssociation } = useOrderAssociations(accountId);
@@ -257,8 +257,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       okText: '打开并读取',
       cancelText: '取消',
       async onOk() {
-        setCheckingPurchaseOrderIds(previous => new Set(previous).add(associationOrder.order_id));
+          setCheckingPurchaseOrderIds(previous => new Set(previous).add(associationOrder.order_id));
         try {
+          await openCleanBrowser('baseline');
           const result = await lookupPurchase({
             orderId: associationOrder.order_id,
             platformOrderId,
@@ -278,7 +279,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [associationOrder, fetchAssociations, lookupPurchase]);
+  }, [associationOrder, fetchAssociations, lookupPurchase, openCleanBrowser]);
 
   const handleCheckPurchaseOrder = useCallback(async (order: Order) => {
     const linked = orderAssociations[order.order_id]?.linkedOrders[0];
@@ -289,6 +290,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     }
     setCheckingPurchaseOrderIds(previous => new Set(previous).add(order.order_id));
     try {
+      await openCleanBrowser('baseline');
       const result = await lookupPurchase({
         orderId: order.order_id,
         platformOrderId,
@@ -304,7 +306,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         return next;
       });
     }
-  }, [fetchAssociations, lookupPurchase, orderAssociations]);
+  }, [fetchAssociations, lookupPurchase, openCleanBrowser, orderAssociations]);
 
   const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
     if (!associationOrder) return;
@@ -459,6 +461,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
       onOk: async () => {
         setPreparingTaobaoRefundOrderIds(prev => new Set(prev).add(order.order_id));
         try {
+          await openCleanBrowser('baseline');
           const result = await prepareRefund({
             orderId: order.order_id,
             platformOrderId,
@@ -481,7 +484,7 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
         }
       },
     });
-  }, [handleCheckPurchaseOrder, orderAssociations, prepareRefund]);
+  }, [handleCheckPurchaseOrder, openCleanBrowser, orderAssociations, prepareRefund]);
 
   const handleOpenShippingSession = useCallback(async (source: ProductSourceItem) => {
     if (!shipSourceOrder || !shipSourceProduct) return;

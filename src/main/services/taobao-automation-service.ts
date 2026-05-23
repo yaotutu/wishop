@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron';
-import { getCleanBrowserWindow } from '../browser/browser-window';
+import { getCleanBrowserWebContents } from '../browser/browser-window';
 import { ADDRESS_FILL_SCRIPT, CHALLENGE_SCRIPT, OPEN_CHECKOUT_ADDRESS_EDITOR_SCRIPT, PURCHASE_LOOKUP_SCRIPT, REFUND_PREPARE_SCRIPT } from '../taobao/page-scripts';
 import { loadCleanTaobaoPage, sleep } from '../taobao/page-runtime';
 import type {
@@ -64,12 +64,12 @@ function mergePurchaseAssociation(
 export async function runPurchaseLookupAutomation(parent: BrowserWindow, input: PurchaseLookupAutomationInput, deps: TaobaoAutomationDeps): Promise<PurchaseLookupAutomationResult> {
   const url = new URL('https://trade.taobao.com/trade/detail/trade_order_detail.htm');
   url.searchParams.set('biz_order_id', input.platformOrderId);
-  const win = await loadCleanTaobaoPage(parent, 'baseline', url.toString());
-  const challenge = await win.webContents.executeJavaScript(CHALLENGE_SCRIPT) as TaobaoSecurityChallengeSnapshot;
+  const contents = await loadCleanTaobaoPage('baseline', url.toString());
+  const challenge = await contents.executeJavaScript(CHALLENGE_SCRIPT) as TaobaoSecurityChallengeSnapshot;
   if (challenge.detected && challenge.kind !== 'unknown') {
     throw new Error(`淘宝页面需要人工处理：${challenge.reason || challenge.kind}`);
   }
-  const snapshot = await win.webContents.executeJavaScript(PURCHASE_LOOKUP_SCRIPT) as TaobaoPurchaseOrderSnapshot;
+  const snapshot = await contents.executeJavaScript(PURCHASE_LOOKUP_SCRIPT) as TaobaoPurchaseOrderSnapshot;
   snapshot.platformOrderId ||= input.platformOrderId;
   if (!snapshot.platformOrderStatus && !snapshot.logisticsStatus && !snapshot.logisticsCompany && !snapshot.trackingNumber) {
     throw new Error('未能从淘宝订单页读取到有效订单状态');
@@ -82,12 +82,12 @@ export async function runTaobaoRefundAutomation(parent: BrowserWindow, input: Ta
   const url = new URL('https://refund2.taobao.com/dispute/apply.htm');
   url.searchParams.set('bizOrderId', input.platformOrderId);
   url.searchParams.set('type', '1');
-  const win = await loadCleanTaobaoPage(parent, 'baseline', url.toString());
-  const challenge = await win.webContents.executeJavaScript(CHALLENGE_SCRIPT) as TaobaoSecurityChallengeSnapshot;
+  const contents = await loadCleanTaobaoPage('baseline', url.toString());
+  const challenge = await contents.executeJavaScript(CHALLENGE_SCRIPT) as TaobaoSecurityChallengeSnapshot;
   if (challenge.detected && challenge.kind !== 'unknown') {
     throw new Error(`淘宝页面需要人工处理：${challenge.reason || challenge.kind}`);
   }
-  const snapshot = await win.webContents.executeJavaScript(`${REFUND_PREPARE_SCRIPT}(${JSON.stringify({
+  const snapshot = await contents.executeJavaScript(`${REFUND_PREPARE_SCRIPT}(${JSON.stringify({
     platformOrderId: input.platformOrderId,
     reason: input.reason || '不想要了',
     autoSubmit: !!input.autoSubmit,
@@ -96,9 +96,9 @@ export async function runTaobaoRefundAutomation(parent: BrowserWindow, input: Ta
 }
 
 export async function fillCurrentTaobaoCheckoutAddress(address: OrderAddressInfo): Promise<CheckoutAddressFillResult> {
-  const win = getCleanBrowserWindow();
-  if (!win) throw new Error('淘宝窗口未打开');
-  const openResult = await win.webContents.executeJavaScript(OPEN_CHECKOUT_ADDRESS_EDITOR_SCRIPT) as { opened: boolean; reason: string };
+  const contents = getCleanBrowserWebContents();
+  if (!contents) throw new Error('淘宝浏览器未打开');
+  const openResult = await contents.executeJavaScript(OPEN_CHECKOUT_ADDRESS_EDITOR_SCRIPT) as { opened: boolean; reason: string };
   if (!openResult.opened) {
     return { filledFields: [], warnings: [openResult.reason || '未找到新建地址表单'] };
   }
@@ -111,7 +111,7 @@ export async function fillCurrentTaobaoCheckoutAddress(address: OrderAddressInfo
 
   let addressFrame: FillFrame | undefined;
   for (let attempt = 0; attempt < 30; attempt++) {
-    const frames = collectFrames(win.webContents.mainFrame as unknown as FillFrame);
+    const frames = collectFrames(contents.mainFrame as unknown as FillFrame);
     addressFrame = frames.find(frame => frame.url.includes('/member/fresh/deliver_address_frame.htm'));
     if (addressFrame) break;
     await sleep(150);

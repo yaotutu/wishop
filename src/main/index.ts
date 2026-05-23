@@ -25,7 +25,21 @@ function createWindow(): void {
       preload: path.join(__dirname, '..', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
     },
+  });
+
+  mainWindow.webContents.on('will-attach-webview', (_event, webPreferences) => {
+    webPreferences.preload = path.join(__dirname, '..', 'preload', 'taobao-browser.js');
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+  });
+  mainWindow.webContents.on('did-attach-webview', (_event, webContents) => {
+    webContents.setWindowOpenHandler(({ url }) => {
+      if (url) webContents.loadURL(url);
+      return { action: 'deny' };
+    });
   });
 
   if (app.isPackaged) {
