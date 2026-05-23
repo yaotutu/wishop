@@ -5,1377 +5,751 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wishop 架构文档</title>
 <style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #232636;
-    --border: #2e3148;
-    --text: #e1e4ed;
-    --text2: #9da2b4;
-    --accent: #6c8cff;
-    --accent2: #8b5cf6;
-    --green: #34d399;
-    --orange: #fbbf24;
-    --red: #f87171;
-    --cyan: #22d3ee;
-    --pink: #f472b6;
-    --radius: 8px;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    padding: 0;
-  }
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-  /* Header */
-  .header {
-    background: linear-gradient(135deg, #1a1d27 0%, #232636 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 40px 48px 32px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    backdrop-filter: blur(12px);
-  }
-  .header h1 {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .header .subtitle {
-    color: var(--text2);
-    font-size: 14px;
-    margin-top: 6px;
-  }
-  .header .tech-badges {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-    flex-wrap: wrap;
-  }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text2);
-  }
-  .badge b { color: var(--text); }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f0f2f5;
+  color: #1d2129;
+  font-size: 16px;
+  line-height: 1.8;
+}
 
-  /* Nav */
-  .nav {
-    display: flex;
-    gap: 4px;
-    padding: 16px 48px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    overflow-x: auto;
-    position: sticky;
-    top: 88px;
-    z-index: 99;
-  }
-  .nav a {
-    color: var(--text2);
-    text-decoration: none;
-    padding: 6px 14px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: all 0.2s;
-  }
-  .nav a:hover { background: var(--surface2); color: var(--text); }
-  .nav a.active { background: var(--accent); color: #fff; }
+/* ---- Header ---- */
+.header {
+  background: #fff;
+  border-bottom: 1px solid #e5e6eb;
+  padding: 48px 0 40px;
+}
+.header-inner { max-width: 900px; margin: 0 auto; padding: 0 40px; }
+.header h1 { font-size: 32px; font-weight: 700; }
+.header .sub { font-size: 18px; color: #86909c; margin-top: 6px; }
+.badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.badge { padding: 4px 12px; background: #e8f3ff; color: #165dff; border-radius: 4px; font-size: 14px; }
 
-  /* Content */
-  .content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 32px 48px 80px;
-  }
-  .section {
-    margin-bottom: 48px;
-  }
-  .section-title {
-    font-size: 20px;
-    font-weight: 700;
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-    border-bottom: 2px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .section-title .icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-  }
+/* ---- Nav ---- */
+.nav {
+  background: #fff;
+  border-bottom: 1px solid #e5e6eb;
+  position: sticky; top: 0; z-index: 10;
+}
+.nav-inner { max-width: 900px; margin: 0 auto; padding: 0 40px; display: flex; gap: 0; }
+.nav a {
+  padding: 14px 18px; font-size: 15px; color: #86909c;
+  text-decoration: none; border-bottom: 2px solid transparent;
+}
+.nav a:hover { color: #165dff; }
+.nav a.active { color: #165dff; border-bottom-color: #165dff; }
 
-  /* Cards */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 12px;
-  }
-  .card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .card-header h3 {
-    font-size: 15px;
-    font-weight: 600;
-  }
-  .card-header .meta {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .card-body { display: none; }
-  .card.open .card-body { display: block; }
-  .card .toggle {
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text2);
-    transition: transform 0.2s;
-    font-size: 12px;
-  }
-  .card.open .toggle { transform: rotate(90deg); }
+/* ---- Content ---- */
+.wrap { max-width: 900px; margin: 0 auto; padding: 40px 40px 80px; }
+.section { margin-bottom: 56px; }
+.section h2 { font-size: 22px; font-weight: 700; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #e5e6eb; }
+.desc { color: #4e5969; margin-bottom: 20px; }
 
-  /* Layer diagram */
-  .layer-box {
-    border: 2px solid;
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 12px;
-    position: relative;
-  }
-  .layer-label {
-    position: absolute;
-    top: -11px;
-    left: 16px;
-    background: var(--bg);
-    padding: 0 8px;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
+/* ---- Card ---- */
+.card {
+  background: #fff; border: 1px solid #e5e6eb; border-radius: 8px;
+  padding: 24px 28px; margin-bottom: 16px;
+}
+.card h3 { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
+.card p { color: #4e5969; margin-bottom: 12px; }
 
-  /* Grid */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-  @media (max-width: 768px) {
-    .grid-2, .grid-3 { grid-template-columns: 1fr; }
-    .content { padding: 20px; }
-    .header { padding: 24px 20px 20px; }
-    .nav { padding: 12px 20px; }
-  }
+/* ---- Stats ---- */
+.stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 24px; }
+.stat {
+  background: #fff; border: 1px solid #e5e6eb; border-radius: 8px;
+  padding: 20px; text-align: center;
+}
+.stat .v { font-size: 32px; font-weight: 700; color: #165dff; }
+.stat .l { font-size: 14px; color: #86909c; margin-top: 2px; }
 
-  /* File tree */
-  .tree {
-    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-    font-size: 13px;
-    line-height: 1.8;
-    color: var(--text2);
-    padding: 16px;
-    background: var(--bg);
-    border-radius: 6px;
-    overflow-x: auto;
-  }
-  .tree .dir { color: var(--cyan); font-weight: 600; }
-  .tree .file { color: var(--text); }
-  .tree .desc { color: var(--text2); font-style: italic; }
-  .tree .lines { color: var(--accent); font-size: 11px; }
+/* ---- Tags ---- */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 13px; font-weight: 500; }
+.tag-blue { background: #e8f3ff; color: #165dff; }
+.tag-green { background: #e8ffea; color: #00b42a; }
+.tag-orange { background: #fff7e8; color: #ff7d00; }
+.tag-red { background: #ffece8; color: #f53f3f; }
+.tag-purple { background: #f5e8ff; color: #722ed1; }
+.tag-cyan { background: #e8fffb; color: #0fc6c2; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
-  /* Table */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  th, td {
-    text-align: left;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  th {
-    color: var(--text2);
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  td { color: var(--text); }
-  table code {
-    background: var(--surface2);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 12px;
-    color: var(--accent);
-  }
+/* ---- Table ---- */
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+th { text-align: left; padding: 10px 12px; background: #f7f8fa; color: #86909c; font-size: 13px; font-weight: 600; border-bottom: 2px solid #e5e6eb; }
+td { padding: 10px 12px; border-bottom: 1px solid #f2f3f5; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+code { background: #f2f3f5; padding: 1px 6px; border-radius: 3px; font-size: 14px; color: #165dff; }
 
-  /* Flow diagram */
-  .flow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 20px;
-    flex-wrap: wrap;
-  }
-  .flow-node {
-    padding: 12px 18px;
-    border-radius: var(--radius);
-    font-size: 13px;
-    font-weight: 600;
-    text-align: center;
-    border: 1px solid;
-    min-width: 120px;
-  }
-  .flow-arrow {
-    color: var(--text2);
-    font-size: 18px;
-    flex-shrink: 0;
-  }
+/* ---- Flow (pure CSS) ---- */
+.flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 16px 0; }
+.flow-node {
+  padding: 10px 18px; border-radius: 6px; font-size: 14px; font-weight: 600;
+  white-space: nowrap; text-align: center; border: 1px solid;
+}
+.flow-arrow { padding: 0 6px; color: #c9cdd4; font-size: 20px; flex-shrink: 0; }
+.fn-green { background: #e8ffea; border-color: #b9f5cb; color: #00874b; }
+.fn-blue { background: #e8f3ff; border-color: #bedaff; color: #165dff; }
+.fn-orange { background: #fff7e8; border-color: #ffe4ba; color: #d25f00; }
+.fn-red { background: #ffece8; border-color: #fdcdc5; color: #cb2634; }
+.fn-purple { background: #f5e8ff; border-color: #dbbfff; color: #722ed1; }
 
-  /* Stats */
-  .stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .stat-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    text-align: center;
-  }
-  .stat-value {
-    font-size: 28px;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .stat-label {
-    font-size: 12px;
-    color: var(--text2);
-    margin-top: 4px;
-  }
+/* ---- Layer ---- */
+.layer { border-left: 4px solid; border-radius: 0 8px 8px 0; padding: 18px 22px; margin-bottom: 12px; }
+.layer h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.layer p { font-size: 15px; color: #4e5969; }
+.layer-blue { border-color: #165dff; background: #f0f7ff; }
+.layer-blue h4 { color: #165dff; }
+.layer-green { border-color: #00b42a; background: #f0fff4; }
+.layer-green h4 { color: #00b42a; }
+.layer-purple { border-color: #722ed1; background: #faf0ff; }
+.layer-purple h4 { color: #722ed1; }
+.layer-cyan { border-color: #0fc6c2; background: #f0fffe; }
+.layer-cyan h4 { color: #0fc6c2; }
 
-  /* Color helpers */
-  .c-main { border-color: var(--accent); }
-  .c-main .layer-label { color: var(--accent); }
-  .c-preload { border-color: var(--orange); }
-  .c-preload .layer-label { color: var(--orange); }
-  .c-renderer { border-color: var(--green); }
-  .c-renderer .layer-label { color: var(--green); }
-  .c-shared { border-color: var(--cyan); }
-  .c-shared .layer-label { color: var(--cyan); }
-  .c-store { border-color: var(--pink); }
-  .c-store .layer-label { color: var(--pink); }
+/* ---- Tree (nested list, no ASCII art) ---- */
+.tree-list { list-style: none; padding-left: 0; }
+.tree-list ul { list-style: none; padding-left: 24px; margin-top: 0; }
+.tree-list li {
+  padding: 3px 0;
+  font-size: 15px;
+  position: relative;
+}
+.tree-list li::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #e5e6eb;
+}
+.tree-list li::after {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 14px;
+  width: 12px;
+  height: 1px;
+  background: #e5e6eb;
+}
+.tree-list > li::before,
+.tree-list > li::after { display: none; }
+.tree-list li:last-child::before { bottom: calc(100% - 14px); }
+.tree-dir { color: #165dff; font-weight: 600; }
+.tree-comment { color: #86909c; margin-left: 8px; }
+.tree-file { color: #1d2129; }
 
-  /* IPC diagram */
-  .ipc-flow {
-    background: var(--bg);
-    border-radius: 8px;
-    padding: 24px;
-    margin: 12px 0;
-  }
-  .ipc-row {
-    display: flex;
-    align-items: center;
-    margin: 8px 0;
-    font-size: 13px;
-    font-family: 'SF Mono', monospace;
-  }
-  .ipc-proc {
-    width: 110px;
-    text-align: center;
-    padding: 6px 8px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 11px;
-    letter-spacing: 0.3px;
-    flex-shrink: 0;
-  }
-  .ipc-connector {
-    flex: 1;
-    height: 2px;
-    background: var(--border);
-    position: relative;
-    margin: 0 4px;
-  }
-  .ipc-connector::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: -4px;
-    border: 5px solid transparent;
-    border-left-color: var(--text2);
-  }
-  .ipc-label {
-    flex-shrink: 0;
-    width: 180px;
-    font-size: 12px;
-    color: var(--text2);
-    padding: 0 8px;
-  }
-  .renderer-bg { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
-  .preload-bg { background: rgba(251,191,36,0.15); color: var(--orange); border: 1px solid rgba(251,191,36,0.3); }
-  .main-bg { background: rgba(108,140,255,0.15); color: var(--accent); border: 1px solid rgba(108,140,255,0.3); }
-  .external-bg { background: rgba(244,114,182,0.15); color: var(--pink); border: 1px solid rgba(244,114,182,0.3); }
+/* ---- Note ---- */
+.note {
+  background: #f0f7ff; border-left: 3px solid #165dff;
+  padding: 12px 18px; border-radius: 0 6px 6px 0;
+  color: #4e5969; font-size: 15px; margin: 16px 0;
+}
 
-  /* Tag */
-  .tag {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .tag-green { background: rgba(52,211,153,0.15); color: var(--green); }
-  .tag-blue { background: rgba(108,140,255,0.15); color: var(--accent); }
-  .tag-orange { background: rgba(251,191,36,0.15); color: var(--orange); }
-  .tag-red { background: rgba(248,113,113,0.15); color: var(--red); }
-  .tag-cyan { background: rgba(34,211,238,0.15); color: var(--cyan); }
-  .tag-pink { background: rgba(244,114,182,0.15); color: var(--pink); }
+/* ---- Grid ---- */
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
 
-  /* Big diagram */
-  .arch-diagram {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    overflow-x: auto;
-  }
-  .arch-column {
-    display: inline-block;
-    vertical-align: top;
-    width: 220px;
-    margin-right: 8px;
-  }
-  .arch-column-title {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 8px;
-    border-radius: 6px 6px 0 0;
-    margin-bottom: 2px;
-  }
-  .arch-item {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 6px 10px;
-    margin: 2px 0;
-    font-size: 12px;
-    cursor: default;
-    transition: border-color 0.2s;
-  }
-  .arch-item:hover {
-    border-color: var(--accent);
-  }
-  .arch-item .item-label {
-    color: var(--text);
-    font-weight: 500;
-  }
-  .arch-item .item-desc {
-    color: var(--text2);
-    font-size: 11px;
-  }
+/* ---- Collapse ---- */
+details { background: #fff; border: 1px solid #e5e6eb; border-radius: 8px; margin-bottom: 12px; }
+details summary {
+  padding: 18px 24px; font-size: 17px; font-weight: 600;
+  cursor: pointer; list-style: none; user-select: none;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; color: #c9cdd4; font-size: 14px; }
+details[open] summary::before { content: "▾ "; }
+details .detail-body { padding: 0 24px 24px; }
 
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  .p { color: var(--text2); font-size: 14px; margin-bottom: 16px; }
-  .note {
-    background: rgba(108,140,255,0.08);
-    border-left: 3px solid var(--accent);
-    padding: 12px 16px;
-    border-radius: 0 6px 6px 0;
-    font-size: 13px;
-    color: var(--text2);
-    margin: 12px 0;
-  }
+@media (max-width: 768px) {
+  .stats, .grid-3 { grid-template-columns: 1fr; }
+  .wrap, .header-inner, .nav-inner { padding-left: 16px; padding-right: 16px; }
+  .flow { gap: 4px; }
+}
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>Wishop Architecture</h1>
-  <div class="subtitle">微信小店上架助手 — Electron 桌面应用架构文档</div>
-  <div class="tech-badges">
-    <span class="badge"><b>Electron 42</b></span>
-    <span class="badge"><b>React 19</b></span>
-    <span class="badge"><b>TypeScript 6</b></span>
-    <span class="badge"><b>Vite 8</b></span>
-    <span class="badge"><b>Ant Design 6</b></span>
-    <span class="badge"><b>React Query 5</b></span>
-    <span class="badge"><b>Zustand 5</b></span>
-    <span class="badge"><b>electron-store 11</b></span>
-    <span class="badge"><b>Vitest</b></span>
+  <div class="header-inner">
+    <h1>Wishop 架构文档</h1>
+    <div class="sub">微信小店上架助手 — 项目架构概览</div>
+    <div class="badges">
+      <span class="badge">Electron 42</span>
+      <span class="badge">React 19</span>
+      <span class="badge">TypeScript 6</span>
+      <span class="badge">Ant Design 6</span>
+      <span class="badge">React Query 5</span>
+      <span class="badge">Vite 8</span>
+    </div>
   </div>
 </div>
 
-<div class="nav" id="nav">
-  <a href="#overview" class="active">概览</a>
-  <a href="#layers">三层分离</a>
-  <a href="#directory">目录结构</a>
-  <a href="#data-flow">数据流</a>
-  <a href="#ipc">IPC 通道</a>
-  <a href="#store">Store 层</a>
-  <a href="#renderer">Renderer 层</a>
-  <a href="#domains">业务域</a>
+<div class="nav">
+  <div class="nav-inner">
+    <a href="#overview">概览</a>
+    <a href="#layers">三层分离</a>
+    <a href="#structure">目录结构</a>
+    <a href="#flow">数据流</a>
+    <a href="#ipc">IPC 通道</a>
+    <a href="#store">Store</a>
+    <a href="#renderer">Renderer</a>
+    <a href="#business">业务域</a>
+  </div>
 </div>
 
-<div class="content">
+<div class="wrap">
 
-  <!-- ========== Overview ========== -->
-  <div class="section" id="overview">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(108,140,255,0.15);color:var(--accent);">📊</span>
-      项目概览
-    </div>
-    <p class="p">Wishop 是一个多账户微信小店管理桌面应用，支持商品提审、订单管理、违规词检测、淘宝采购自动化等核心功能。每个账户对应一个微信小店，账户上下文在基础设施层解析，业务逻辑与账户无关。</p>
+<!-- ======== Overview ======== -->
+<div class="section" id="overview">
+  <h2>项目概览</h2>
+  <p class="desc">Wishop 是一个多账户微信小店管理桌面应用。每个账户对应一个微信小店，支持商品提审、订单管理、违规词检测、淘宝采购自动化。账户上下文在基础设施层解析，业务逻辑与账户无关。</p>
 
-    <div class="stat-grid">
-      <div class="stat-item">
-        <div class="stat-value">~12.7K</div>
-        <div class="stat-label">源码行数</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">62</div>
-        <div class="stat-label">IPC 通道</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">9</div>
-        <div class="stat-label">Store Repository</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">10</div>
-        <div class="stat-label">Renderer Domain</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">6</div>
-        <div class="stat-label">IPC Domain 分组</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-value">21</div>
-        <div class="stat-label">测试文件</div>
-      </div>
-    </div>
-
-    <!-- Architecture overview diagram -->
-    <div class="arch-diagram">
-      <div style="text-align:center;margin-bottom:16px;font-size:13px;color:var(--text2);">应用进程架构</div>
-      <div style="display:flex;align-items:stretch;justify-content:center;gap:24px;flex-wrap:wrap;">
-        <!-- Renderer -->
-        <div style="border:2px solid var(--green);border-radius:8px;padding:16px;width:280px;">
-          <div style="text-align:center;color:var(--green);font-weight:700;font-size:13px;margin-bottom:12px;">Renderer Process (React)</div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">页面组件</div>
-          <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">
-            <div class="arch-item"><span class="item-label">OrdersPage</span> <span class="tag tag-green">652行</span></div>
-            <div class="arch-item"><span class="item-label">ListingPage</span> <span class="tag tag-green">587行</span></div>
-            <div class="arch-item"><span class="item-label">ViolationPage</span> <span class="tag tag-green">548行</span></div>
-            <div class="arch-item"><span class="item-label">SettingsPage</span> <span class="tag tag-green">520行</span></div>
-            <div class="arch-item"><span class="item-label">ScheduledJobsPage</span> <span class="tag tag-green">499行</span></div>
-            <div class="arch-item"><span class="item-label">StoreManagement</span> <span class="tag tag-green">405行</span></div>
-          </div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Domain 层 (client + hooks)</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">
-            <span class="tag tag-green">accounts</span>
-            <span class="tag tag-green">orders</span>
-            <span class="tag tag-green">listing</span>
-            <span class="tag tag-green">violations</span>
-            <span class="tag tag-green">scheduled-jobs</span>
-            <span class="tag tag-green">settings</span>
-            <span class="tag tag-green">notifications</span>
-            <span class="tag tag-green">browser</span>
-            <span class="tag tag-green">cloud</span>
-            <span class="tag tag-green">system</span>
-          </div>
-        </div>
-
-        <!-- Arrow -->
-        <div style="display:flex;align-items:center;color:var(--orange);font-size:24px;font-weight:700;letter-spacing:-2px;">
-          ⇌
-        </div>
-
-        <!-- Preload -->
-        <div style="border:2px solid var(--orange);border-radius:8px;padding:16px;width:200px;">
-          <div style="text-align:center;color:var(--orange);font-weight:700;font-size:13px;margin-bottom:12px;">Preload Bridge</div>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <div class="arch-item"><span class="item-label">window.wishop</span> <span class="tag tag-orange">22命名空间</span></div>
-            <div class="arch-item"><span class="item-label">window.updater</span> <span class="tag tag-orange">自动更新</span></div>
-            <div class="arch-item"><span class="item-label">window.shippingAssistant</span> <span class="tag tag-orange">发货助手</span></div>
-          </div>
-          <div style="margin-top:12px;font-size:11px;color:var(--text2);text-align:center;">
-            contextBridge<br>ipcRenderer.invoke / ipcRenderer.on
-          </div>
-        </div>
-
-        <!-- Arrow -->
-        <div style="display:flex;align-items:center;color:var(--orange);font-size:24px;font-weight:700;letter-spacing:-2px;">
-          ⇌
-        </div>
-
-        <!-- Main -->
-        <div style="border:2px solid var(--accent);border-radius:8px;padding:16px;width:320px;">
-          <div style="text-align:center;color:var(--accent);font-weight:700;font-size:13px;margin-bottom:12px;">Main Process (Node.js)</div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">IPC Handlers (6 个域)</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
-            <span class="tag tag-blue">settings-system</span>
-            <span class="tag tag-blue">listing</span>
-            <span class="tag tag-blue">orders</span>
-            <span class="tag tag-blue">violations</span>
-            <span class="tag tag-blue">sync-cloud</span>
-            <span class="tag tag-blue">browser-taobao</span>
-          </div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">业务层</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
-            <span class="tag tag-blue">task-cycle</span>
-            <span class="tag tag-blue">violation-detect</span>
-            <span class="tag tag-blue">fetch-draft</span>
-            <span class="tag tag-blue">delete-failed</span>
-            <span class="tag tag-blue">list-unreviewed</span>
-          </div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">服务层</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
-            <span class="tag tag-pink">taobao-automation</span>
-            <span class="tag tag-pink">order-delivery</span>
-            <span class="tag tag-pink">cloud-sync</span>
-          </div>
-          <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">基础设施</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">
-            <span class="tag tag-cyan">store (9 repos)</span>
-            <span class="tag tag-cyan">scheduler</span>
-            <span class="tag tag-cyan">wxshop client</span>
-            <span class="tag tag-cyan">browser</span>
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="stats">
+    <div class="stat"><div class="v">~12.7K</div><div class="l">源码行数</div></div>
+    <div class="stat"><div class="v">62</div><div class="l">IPC 通道</div></div>
+    <div class="stat"><div class="v">9</div><div class="l">Store Repository</div></div>
+    <div class="stat"><div class="v">10</div><div class="l">Renderer Domain</div></div>
+    <div class="stat"><div class="v">6</div><div class="l">IPC 域分组</div></div>
+    <div class="stat"><div class="v">21</div><div class="l">测试文件</div></div>
   </div>
 
-  <!-- ========== Layers ========== -->
-  <div class="section" id="layers">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(52,211,153,0.15);color:var(--green);">🏗️</span>
-      三层分离架构
+  <div class="card">
+    <h3>应用进程架构</h3>
+    <div class="flow" style="justify-content:center; margin: 24px 0 12px;">
+      <div class="flow-node fn-green">Renderer<br><small>React 19</small></div>
+      <div class="flow-arrow">⇄</div>
+      <div class="flow-node fn-orange">Preload Bridge<br><small>window.wishop</small></div>
+      <div class="flow-arrow">⇄</div>
+      <div class="flow-node fn-blue">Main Process<br><small>Node.js</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-red">External<br><small>微信/淘宝 API</small></div>
     </div>
-    <p class="p">核心设计原则：Business 层和 API 层不 import Store，依赖通过参数注入。</p>
-
-    <div class="layer-box c-main" style="margin-bottom:16px;">
-      <div class="layer-label">Infrastructure Layer (account-aware)</div>
-      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;">
-        <span class="tag tag-blue">store / repositories</span>
-        <span class="tag tag-blue">ipc handlers</span>
-        <span class="tag tag-blue">scheduler</span>
-        <span class="tag tag-blue">preload bridge</span>
-        <span class="tag tag-blue">browser windows</span>
-        <span class="tag tag-blue">logger</span>
-      </div>
-      <div style="margin-top:10px;font-size:13px;color:var(--text2);">
-        职责：解析 accountId → 创建 WxShopClient + scoped logger，注册 IPC 通道，管理持久化数据
-      </div>
-    </div>
-
-    <div class="layer-box c-renderer" style="margin-bottom:16px;">
-      <div class="layer-label">Business Layer (account-agnostic)</div>
-      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;">
-        <span class="tag tag-green">modules/*</span>
-        <span class="tag tag-green">services/*</span>
-        <span class="tag tag-green">jobs/*</span>
-      </div>
-      <div style="margin-top:10px;font-size:13px;color:var(--text2);">
-        职责：纯业务逻辑，通过参数接收 api + logger + config，不直接访问 Store
-      </div>
-      <div class="note" style="margin-top:10px;">
-        modules/: task-cycle, violation-detect, fetch-draft-products, delete-failed-products, list-unreviewed-products<br>
-        services/: taobao-automation-service, order-delivery-service, cloud-sync-service
-      </div>
-    </div>
-
-    <div class="layer-box c-pink" style="margin-bottom:16px;">
-      <div class="layer-label">API Layer (account-agnostic)</div>
-      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;">
-        <span class="tag tag-pink">wxshop/client.ts</span>
-        <span class="tag tag-pink">wxshop/client-registry.ts</span>
-      </div>
-      <div style="margin-top:10px;font-size:13px;color:var(--text2);">
-        职责：微信小店 API 客户端工厂，每个 accountId 一个实例，独立 token 缓存
-      </div>
-    </div>
-
-    <div class="layer-box c-shared">
-      <div class="layer-label">Shared Types</div>
-      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--text2);">
-        <code>accounts</code> <code>orders</code> <code>listing</code> <code>violations</code>
-        <code>scheduling</code> <code>credentials</code> <code>sync</code> <code>license</code>
-        <code>notification</code> <code>global-log</code> <code>errors</code> <code>settings</code>
-        <code>cloud-tasks</code> <code>address-format</code> <code>purchase-status</code>
-      </div>
-      <div style="margin-top:8px;font-size:13px;color:var(--text2);">
-        跨进程共享的类型定义和纯工具函数，按域拆分为独立文件，types.ts 作为 barrel re-export
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Directory ========== -->
-  <div class="section" id="directory">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(34,211,238,0.15);color:var(--cyan);">📁</span>
-      目录结构
-    </div>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3 style="color:var(--accent);">src/main/ — 主进程</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="tree">
-<span class="dir">src/main/</span>
-├── <span class="file">index.ts</span> <span class="desc">应用入口，引导序列</span> <span class="lines">114行</span>
-├── <span class="file">updater.ts</span> <span class="desc">electron-updater 自动更新</span> <span class="lines">63行</span>
-├── <span class="dir">browser/</span>
-│   ├── <span class="file">browser-window.ts</span> <span class="desc">公共 facade，re-export</span> <span class="lines">40行</span>
-│   ├── <span class="file">clean-taobao-window.ts</span> <span class="desc">隔离 partition 的淘宝窗口</span> <span class="lines">99行</span>
-│   ├── <span class="file">shipping-assistant-window.ts</span> <span class="desc">发货助手侧边栏窗口</span> <span class="lines">167行</span>
-│   └── <span class="file">shipping-assistant-page.ts</span> <span class="desc">助手页面 HTML 生成</span> <span class="lines">172行</span>
-├── <span class="dir">ipc/</span>
-│   ├── <span class="file">handler.ts</span> <span class="desc">顶层 IPC 注册入口</span> <span class="lines">37行</span>
-│   ├── <span class="dir">utils/</span>
-│   │   ├── <span class="file">handle-ipc.ts</span> <span class="desc">IPC 错误包装工具</span> <span class="lines">26行</span>
-│   │   ├── <span class="file">session-manager.ts</span> <span class="desc">AbortController 会话管理</span> <span class="lines">48行</span>
-│   │   └── <span class="file">log-forwarding.ts</span> <span class="desc">实时日志推送到 Renderer</span> <span class="lines">42行</span>
-│   ├── <span class="dir">handlers/</span> <span class="desc">24 个独立 handler 文件</span>
-│   └── <span class="dir">handlers/domains/</span> <span class="desc">6 个域注册器</span>
-├── <span class="dir">jobs/</span>
-│   └── <span class="file">job-runner.ts</span> <span class="desc">通用任务并发管理器</span> <span class="lines">92行</span>
-├── <span class="dir">modules/</span> <span class="desc">纯业务逻辑</span>
-│   ├── <span class="file">task-cycle.ts</span> <span class="desc">商品提审主循环</span> <span class="lines">154行</span>
-│   ├── <span class="file">violation-detect.ts</span> <span class="desc">违规词扫描</span> <span class="lines">116行</span>
-│   ├── <span class="file">fetch-draft-products.ts</span> <span class="desc">异步分页获取草稿</span> <span class="lines">27行</span>
-│   ├── <span class="file">list-unreviewed-products.ts</span> <span class="desc">单个商品提审</span> <span class="lines">110行</span>
-│   └── <span class="file">delete-failed-products.ts</span> <span class="desc">失败商品删除</span> <span class="lines">83行</span>
-├── <span class="dir">scheduler/</span>
-│   └── <span class="file">scheduled-job-runner.ts</span> <span class="desc">Cron 定时任务调度</span> <span class="lines">299行</span>
-├── <span class="dir">services/</span> <span class="desc">跨领域业务服务</span>
-│   ├── <span class="file">taobao-automation-service.ts</span> <span class="desc">淘宝页面自动化</span> <span class="lines">124行</span>
-│   ├── <span class="file">order-delivery-service.ts</span> <span class="desc">微信发货提交</span> <span class="lines">176行</span>
-│   └── <span class="file">cloud-sync-service.ts</span> <span class="desc">云端同步（当前 noop）</span> <span class="lines">57行</span>
-├── <span class="dir">store/</span>
-│   ├── <span class="file">container.ts</span> <span class="desc">组合根，创建 store + 9 个 repo</span> <span class="lines">123行</span>
-│   ├── <span class="file">index.ts</span> <span class="desc">Facade，平铺导出所有 repo 方法</span> <span class="lines">313行</span>
-│   └── <span class="dir">repositories/</span> <span class="desc">9 个 Repository（依赖注入）</span>
-├── <span class="dir">taobao/</span> <span class="desc">淘宝页面注入脚本</span>
-│   ├── <span class="file">page-runtime.ts</span> <span class="desc">页面加载工具</span> <span class="lines">37行</span>
-│   ├── <span class="file">challenge-script.ts</span> <span class="desc">检测验证码/滑块</span> <span class="lines">33行</span>
-│   ├── <span class="file">checkout-address-script.ts</span> <span class="desc">填充结账地址</span> <span class="lines">160行</span>
-│   ├── <span class="file">purchase-lookup-script.ts</span> <span class="desc">提取采购订单信息</span> <span class="lines">43行</span>
-│   └── <span class="file">refund-script.ts</span> <span class="desc">准备退款数据</span> <span class="lines">39行</span>
-├── <span class="dir">utils/</span>
-│   └── <span class="file">logger.ts</span> <span class="desc">scoped logger 封装</span> <span class="lines">13行</span>
-└── <span class="dir">wxshop/</span>
-    ├── <span class="file">client.ts</span> <span class="desc">微信小店 API 客户端</span> <span class="lines">298行</span>
-    └── <span class="file">client-registry.ts</span> <span class="desc">按账户管理 client 实例</span> <span class="lines">22行</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3 style="color:var(--green);">src/renderer/ — 渲染进程</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="tree">
-<span class="dir">src/renderer/</span>
-├── <span class="file">main.tsx</span> <span class="desc">React 入口 (QueryClientProvider)</span> <span class="lines">18行</span>
-├── <span class="file">App.tsx</span> <span class="desc">根组件，渲染 Layout</span> <span class="lines">8行</span>
-├── <span class="dir">components/</span>
-│   ├── <span class="file">Layout.tsx</span> <span class="desc">主布局：标签页 + 账户侧边栏 + 内容区</span> <span class="lines">279行</span>
-│   ├── <span class="file">NotificationCenter.tsx</span> <span class="desc">浮动通知抽屉</span> <span class="lines">245行</span>
-│   ├── <span class="file">GlobalLogDrawer.tsx</span> <span class="desc">全局日志查看器</span> <span class="lines">143行</span>
-│   └── <span class="file">StatCard.tsx</span> <span class="desc">统计卡片</span> <span class="lines">34行</span>
-├── <span class="dir">contexts/</span>
-│   └── <span class="file">CredentialErrorContext.tsx</span> <span class="desc">凭证错误全局处理</span> <span class="lines">58行</span>
-├── <span class="dir">state/</span>
-│   └── <span class="file">app-store.ts</span> <span class="desc">Zustand store（活跃模块/标签）</span> <span class="lines">39行</span>
-├── <span class="dir">query/</span>
-│   └── <span class="file">client.ts</span> <span class="desc">TanStack Query 配置</span> <span class="lines">15行</span>
-├── <span class="dir">utils/</span>
-│   └── <span class="file">cron.ts</span> <span class="desc">Cron 表达式预设</span> <span class="lines">60行</span>
-├── <span class="dir">domains/</span> <span class="desc">10 个业务域 (client.ts + hooks.ts)</span>
-│   ├── <span class="dir">accounts/</span>
-│   ├── <span class="dir">orders/</span>
-│   ├── <span class="dir">listing/</span>
-│   ├── <span class="dir">violations/</span>
-│   ├── <span class="dir">scheduled-jobs/</span>
-│   ├── <span class="dir">settings/</span>
-│   ├── <span class="dir">notifications/</span>
-│   ├── <span class="dir">browser/</span>
-│   ├── <span class="dir">cloud/</span>
-│   └── <span class="dir">system/</span>
-└── <span class="dir">pages/</span>
-    ├── <span class="dir">orders/</span> <span class="desc">订单管理（6个子组件）</span>
-    ├── <span class="dir">common-functions/</span> <span class="desc">商品提审</span>
-    ├── <span class="dir">violation/</span> <span class="desc">违规词检测</span>
-    ├── <span class="dir">scheduled-jobs/</span> <span class="desc">调度任务管理</span>
-    ├── <span class="dir">store-management/</span> <span class="desc">店铺/账户管理</span>
-    └── <span class="dir">settings/</span> <span class="desc">全局设置</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3 style="color:var(--orange);">src/preload/ + src/shared/</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="tree">
-<span class="dir">src/preload/</span>
-├── <span class="file">index.ts</span> <span class="desc">主 Preload：暴露 window.wishop (22命名空间, ~70方法)</span> <span class="lines">285行</span>
-└── <span class="file">shipping-assistant.ts</span> <span class="desc">发货助手窗口独立 Preload</span> <span class="lines">22行</span>
-
-<span class="dir">src/shared/</span> <span class="desc">跨进程共享类型和工具函数</span>
-├── <span class="file">types.ts</span> <span class="desc">Barrel re-export</span> <span class="lines">65行</span>
-├── <span class="file">accounts.ts</span> <span class="desc">Account, Config, FullAccount</span> <span class="lines">28行</span>
-├── <span class="file">orders.ts</span> <span class="desc">订单类型 + OrderStatus 枚举</span> <span class="lines">281行</span>
-├── <span class="file">listing.ts</span> <span class="desc">Task, Log, Product, Rule</span> <span class="lines">63行</span>
-├── <span class="file">violations.ts</span> <span class="desc">违规扫描类型</span> <span class="lines">18行</span>
-├── <span class="file">scheduling.ts</span> <span class="desc">定时任务类型</span> <span class="lines">35行</span>
-├── <span class="file">settings.ts</span> <span class="desc">AppSettings + normalization</span> <span class="lines">85行</span>
-├── <span class="file">credentials.ts</span> <span class="desc">凭证元数据 + Zod schema</span> <span class="lines">66行</span>
-├── <span class="file">sync.ts</span> <span class="desc">同步设置 + Zod schema</span> <span class="lines">99行</span>
-├── <span class="file">cloud-tasks.ts</span> <span class="desc">云端任务能力</span> <span class="lines">35行</span>
-├── <span class="file">license.ts</span> <span class="desc">License 状态</span> <span class="lines">18行</span>
-├── <span class="file">global-log.ts</span> <span class="desc">全局日志类型</span> <span class="lines">40行</span>
-├── <span class="file">notification.ts</span> <span class="desc">通知 + 偏好</span> <span class="lines">57行</span>
-├── <span class="file">errors.ts</span> <span class="desc">错误工具函数</span> <span class="lines">29行</span>
-├── <span class="file">address-format.ts</span> <span class="desc">地址格式化</span> <span class="lines">43行</span>
-└── <span class="file">purchase-status.ts</span> <span class="desc">采购订单状态归一化</span> <span class="lines">32行</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Data Flow ========== -->
-  <div class="section" id="data-flow">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(251,191,36,0.15);color:var(--orange);">🔄</span>
-      数据流模式
-    </div>
-
-    <h3 style="font-size:15px;margin:16px 0 12px;color:var(--text);">模式 A：标准 CRUD（大部分通道）</h3>
-    <div class="ipc-flow">
-      <div class="ipc-row">
-        <div class="ipc-proc renderer-bg">Renderer Hook</div>
-        <div class="ipc-label">useQuery / useMutation</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc renderer-bg">Client</div>
-        <div class="ipc-label">ordersClient.list()</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc preload-bg">Preload</div>
-        <div class="ipc-label">window.wishop.orders.list()</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">IPC Handler</div>
-      </div>
-      <div class="ipc-row" style="justify-content:center;">
-        <div class="ipc-proc main-bg">Handler</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">Store Facade</div>
-        <div class="ipc-label">getOrders()</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">Repository</div>
-        <div class="ipc-label">闭包注入 deps</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc external-bg">electron-store</div>
-      </div>
-    </div>
-
-    <h3 style="font-size:15px;margin:24px 0 12px;color:var(--text);">模式 B：API 代理（调用微信/淘宝 API）</h3>
-    <div class="ipc-flow">
-      <div class="ipc-row">
-        <div class="ipc-proc renderer-bg">Renderer</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc preload-bg">Preload</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">IPC Handler</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">getClient(id)</div>
-        <div class="ipc-label">ClientRegistry</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc external-bg">WxShopClient</div>
-        <div class="ipc-label">axios → api.weixin.qq.com</div>
-      </div>
-    </div>
-
-    <h3 style="font-size:15px;margin:24px 0 12px;color:var(--text);">模式 C：长任务 + 实时日志推送</h3>
-    <div class="ipc-flow">
-      <div class="ipc-row">
-        <div class="ipc-proc renderer-bg">Hook</div>
-        <div class="ipc-label">useMutation</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">task:run</div>
-        <div class="ipc-label">withLogForwarding</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">JobRunner</div>
-        <div class="ipc-label">run(id, work)</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">task-cycle</div>
-      </div>
-      <div class="ipc-row" style="margin-top:8px;">
-        <div style="width:110px;"></div>
-        <div style="color:var(--text2);font-size:12px;font-style:italic;">实时日志推送：</div>
-        <div class="ipc-proc main-bg" style="width:auto;">addLog → logEmitter.emit</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg" style="width:auto;">LogForwarder</div>
-        <div class="ipc-label">win.send('log:added:{id}')</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc preload-bg" style="width:auto;">ipcRenderer.on</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc renderer-bg" style="width:auto;">onLog callback</div>
-      </div>
-    </div>
-
-    <h3 style="font-size:15px;margin:24px 0 12px;color:var(--text);">模式 D：淘宝浏览器自动化</h3>
-    <div class="ipc-flow">
-      <div class="ipc-row">
-        <div class="ipc-proc renderer-bg">Renderer</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">taobaoAutomation</div>
-        <div class="ipc-label">handler</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc main-bg">clean-taobao-window</div>
-        <div class="ipc-label">隔离 partition</div>
-        <div class="ipc-connector"></div>
-        <div class="ipc-proc external-bg">executeJavaScript</div>
-        <div class="ipc-label">注入脚本</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== IPC ========== -->
-  <div class="section" id="ipc">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(108,140,255,0.15);color:var(--accent);">⚡</span>
-      IPC 通道与域注册
-    </div>
-
-    <p class="p">62 个 IPC 通道，按 6 个域分组注册。每个域注册器组合多个 handler 文件。</p>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>settings-system 域 <span class="tag tag-blue">7 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>accounts.ts</code></td><td>accounts:list/add/remove/update/getActive/setActive</td><td>账户 CRUD</td></tr>
-            <tr><td><code>config.ts</code></td><td>config:get/set</td><td>微信 API 配置</td></tr>
-            <tr><td><code>appSystem.ts</code></td><td>app:version, update:check/install</td><td>应用版本和更新</td></tr>
-            <tr><td><code>globalLogs.ts</code></td><td>globalLogs:list/add/clear</td><td>全局日志</td></tr>
-            <tr><td><code>license.ts</code></td><td>license:get/activate/refresh/clear</td><td>许可证管理</td></tr>
-            <tr><td><code>notifications.ts</code></td><td>notifications:list/markRead/markAllRead/clear/getPreference/updatePreference</td><td>通知系统</td></tr>
-            <tr><td><code>settings.ts</code></td><td>settings:get/update</td><td>应用设置</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>listing 域 <span class="tag tag-green">8 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>drafts.ts</code></td><td>drafts:fetch/list</td><td>草稿商品获取与提审</td></tr>
-            <tr><td><code>task.ts</code></td><td>task:run/stop/status, taskConfig:get/set</td><td>提审任务生命周期</td></tr>
-            <tr><td><code>quota.ts</code></td><td>quota:get</td><td>审核配额查询</td></tr>
-            <tr><td><code>logs.ts</code></td><td>logs:get/clear</td><td>账户级日志</td></tr>
-            <tr><td><code>scheduledJobs.ts</code></td><td>scheduledJobs:list/add/update/remove</td><td>定时任务 CRUD</td></tr>
-            <tr><td><code>blacklistRules.ts</code></td><td>blacklistRules:get/getDefaultCodes/set</td><td>黑名单规则</td></tr>
-            <tr><td><code>skipCodeRules.ts</code></td><td>skipKeywords:get/set</td><td>跳过关键词</td></tr>
-            <tr><td><code>statusRules.ts</code></td><td>statusRules:get/set/reset</td><td>状态规则</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>orders 域 <span class="tag tag-cyan">4 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>orders.ts</code></td><td>orders:list/detail/search/decodeAddress/listDeliveryCompanies/shipFromPurchase</td><td>订单全流程</td></tr>
-            <tr><td><code>orderAssociations.ts</code></td><td>orderAssociations:list/set</td><td>淘宝采购关联</td></tr>
-            <tr><td><code>productSources.ts</code></td><td>productSources:list/set/remove</td><td>商品货源管理</td></tr>
-            <tr><td><code>realAddresses.ts</code></td><td>orderRealAddresses:list/get/fetch/refresh</td><td>真实地址缓存</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>violations 域 <span class="tag tag-red">1 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>violation.ts</code></td><td>violation:getWords/setWords/batchScan/scanStep/batchDelete/stop</td><td>违规词扫描全流程</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>sync-cloud 域 <span class="tag tag-pink">3 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>sync.ts</code></td><td>sync:getSettings/updateModuleSetting/getStatus</td><td>同步设置</td></tr>
-            <tr><td><code>credentials.ts</code></td><td>credentials:getMeta/saveLocal/authorizeCloud/revokeCloud/getCloudStatus</td><td>凭证管理</td></tr>
-            <tr><td><code>cloudTasks.ts</code></td><td>cloudTasks:getCapabilities/getStatus</td><td>云端任务</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>browser-taobao 域 <span class="tag tag-orange">2 个 handler</span></h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <table>
-          <thead><tr><th>Handler 文件</th><th>通道</th><th>说明</th></tr></thead>
-          <tbody>
-            <tr><td><code>browser.ts</code></td><td>browser:open/openClean/openShippingAssistant/close</td><td>浏览器窗口管理</td></tr>
-            <tr><td><code>taobaoAutomation.ts</code></td><td>taobaoAutomation:lookupPurchase/prepareRefund/fillCheckoutAddress</td><td>淘宝自动化</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Store ========== -->
-  <div class="section" id="store">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(244,114,182,0.15);color:var(--pink);">💾</span>
-      Store 层 — Container + Repository 模式
-    </div>
-
-    <p class="p">单 electron-store 实例，9 个 Repository 通过闭包注入 getter/setter，可独立测试。</p>
-
-    <div class="note">数据流：Container 创建 electron-store 实例 → 每个 Repository 通过 Deps 接口只接收所需 accessor → Facade (index.ts) 平铺导出所有方法</div>
-
-    <div class="grid-2" style="margin-top:16px;">
-      <div class="card open">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>account-repository <span class="tag tag-pink">76行</span></h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text2);font-family:monospace;">
-            getAccounts()<br>
-            getAccount(id)<br>
-            addAccount(name, config)<br>
-            removeAccount(id)<br>
-            updateAccount(id, patch)<br>
-            getConfig(id)<br>
-            setConfig(id, config)
-          </div>
-        </div>
-      </div>
-
-      <div class="card open">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>order-repository <span class="tag tag-pink">157行</span></h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text2);font-family:monospace;">
-            getProductSources(id)<br>
-            setProductSources(id, productId, sources)<br>
-            removeProductSource(id, productId, sourceId)<br>
-            getOrderAssociations(id)<br>
-            setOrderAssociation(id, orderId, input)<br>
-            getRealAddressCaches(id)<br>
-            getRealAddressCache(id, orderId)<br>
-            setRealAddressCache(id, orderId, address)
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>listing-repository <span class="tag tag-pink">145行</span></h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text2);font-family:monospace;">
-            getTaskConfig(id) / setTaskConfig(id, config)<br>
-            getLogs(id) / addLog(id, log) / clearLogs(id)<br>
-            cleanOldLogs()<br>
-            getBlacklistRules() / setBlacklistRules()<br>
-            getDefaultBlacklistCodes()<br>
-            getSkipKeywords() / setSkipKeywords()<br>
-            getStatusRules() / setStatusRules()<br>
-            getDefaultStatusRules()
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>global-event-repository <span class="tag tag-pink">137行</span></h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text2);font-family:monospace;">
-            getGlobalLogs() / addGlobalLog(input)<br>
-            clearGlobalLogs()<br>
-            getNotifications() / markNotificationRead(id)<br>
-            markAllNotificationsRead()<br>
-            clearNotifications()<br>
-            getNotificationPreference()<br>
-            updateNotificationPreference(patch)
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>scheduled-job-repository <span class="tag tag-pink">77行</span></h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <div style="font-size:12px;color:var(--text2);font-family:monospace;">
-            getScheduledJobs()<br>
-            addScheduledJob(input)<br>
-            updateScheduledJob(jobId, patch)<br>
-            removeScheduledJob(jobId)<br>
-            removeScheduledJobsForAccount(accountId)<br>
-            updateScheduledJobStats(jobId, patch)<br>
-            updateScheduledJobAccountStats(jobId, accountId, patch)
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-          <h3>其他 Repository</h3>
-          <div class="meta"><span class="toggle">▶</span></div>
-        </div>
-        <div class="card-body">
-          <table>
-            <thead><tr><th>Repository</th><th>行数</th><th>职责</th></tr></thead>
-            <tbody>
-              <tr><td><code>violation-repository</code></td><td>~30</td><td>违规词 get/set</td></tr>
-              <tr><td><code>app-settings-repository</code></td><td>~20</td><td>应用设置 get/update</td></tr>
-              <tr><td><code>sync-credential-repository</code></td><td>79</td><td>同步设置 + 凭证元数据</td></tr>
-              <tr><td><code>license-repository</code></td><td>~30</td><td>License 状态管理</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Renderer ========== -->
-  <div class="section" id="renderer">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(52,211,153,0.15);color:var(--green);">🖥️</span>
-      Renderer 域驱动组织
-    </div>
-
-    <p class="p">每个域统一 <code>client.ts</code>（IPC 封装）+ <code>hooks.ts</code>（React Query），页面组件只消费 hooks。</p>
-
     <table>
-      <thead>
-        <tr>
-          <th>域</th>
-          <th>Client 方法数</th>
-          <th>Hooks</th>
-          <th>React Query</th>
-          <th>说明</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>orders</code></td>
-          <td>15</td>
-          <td>useOrders, useProductSources, useOrderAssociations, useRealAddressCaches, useOrderDelivery, useTaobaoOrderAutomation</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td>最完整的域</td>
-        </tr>
-        <tr>
-          <td><code>listing</code></td>
-          <td>12</td>
-          <td>useTaskConfig, useLogs, useQuota, useBlacklistRules, useSkipKeywords, useStatusRules</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>violations</code></td>
-          <td>7</td>
-          <td>useViolationWorkflow</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>settings</code></td>
-          <td>10</td>
-          <td>useLicenseSettings, useAutomationSettings, useCloudSyncSettings</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>scheduled-jobs</code></td>
-          <td>4</td>
-          <td>useScheduledJobs</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>notifications</code></td>
-          <td>6</td>
-          <td>useNotifications</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>system</code></td>
-          <td>2</td>
-          <td>useGlobalLogs</td>
-          <td><span class="tag tag-green">✓</span></td>
-          <td></td>
-        </tr>
-        <tr>
-          <td><code>accounts</code></td>
-          <td>5</td>
-          <td>useAccounts</td>
-          <td><span class="tag tag-orange">useState</span></td>
-          <td>小数据集，useState 够用</td>
-        </tr>
-        <tr>
-          <td><code>browser</code></td>
-          <td>3</td>
-          <td>useBrowser</td>
-          <td><span class="tag tag-orange">命令式</span></td>
-          <td>窗口操作无需缓存</td>
-        </tr>
-        <tr>
-          <td><code>cloud</code></td>
-          <td>1</td>
-          <td>无</td>
-          <td><span class="tag tag-orange">跨域调用</span></td>
-          <td>由 settings hooks 消费</td>
-        </tr>
-      </tbody>
+      <tr><td style="width:120px;font-weight:600;color:#00874b;">Renderer</td><td>Pages (6个页面) → Domains (10个域, client+hooks) → State (React Query + Zustand)</td></tr>
+      <tr><td style="font-weight:600;color:#d25f00;">Preload</td><td>contextBridge 暴露 <code>window.wishop</code>，22 个命名空间，约 70 个方法</td></tr>
+      <tr><td style="font-weight:600;color:#165dff;">Main</td><td>IPC Handlers (6域分组) → Business Layer (modules+services) → Store (9个 Repository)</td></tr>
+      <tr><td style="font-weight:600;color:#cb2634;">External</td><td>微信小店 API (api.weixin.qq.com) + 淘宝页面 (BrowserWindow 自动化)</td></tr>
     </table>
+  </div>
+</div>
 
-    <div style="margin-top:24px;">
-      <h3 style="font-size:15px;margin-bottom:12px;">状态管理</h3>
-      <div class="grid-3">
-        <div class="card">
-          <h3 style="font-size:14px;margin-bottom:8px;">Zustand <span class="tag tag-green">使用中</span></h3>
-          <div style="font-size:12px;color:var(--text2);">
-            <code>app-store.ts</code><br>
-            管理 activeModule 和 settingsTab<br>
-            Layout.tsx 消费
-          </div>
-        </div>
-        <div class="card">
-          <h3 style="font-size:14px;margin-bottom:8px;">React Query <span class="tag tag-blue">主要</span></h3>
-          <div style="font-size:12px;color:var(--text2);">
-            所有数据获取和变更<br>
-            staleTime: 10s, retry: 1<br>
-            refetchOnWindowFocus: false
-          </div>
-        </div>
-        <div class="card">
-          <h3 style="font-size:14px;margin-bottom:8px;">React Context <span class="tag tag-orange">辅助</span></h3>
-          <div style="font-size:12px;color:var(--text2);">
-            BrowserContext — 浏览器打开函数<br>
-            CredentialErrorContext — 凭证错误处理
-          </div>
-        </div>
-      </div>
+<!-- ======== Layers ======== -->
+<div class="section" id="layers">
+  <h2>三层分离架构</h2>
+  <p class="desc">核心原则：Business 层和 API 层不 import Store，依赖通过参数注入。</p>
+
+  <div class="layer layer-blue">
+    <h4>Infrastructure Layer — 账户感知层</h4>
+    <p>解析 accountId，创建 WxShopClient + scoped logger，注册 IPC 通道，管理持久化数据</p>
+    <div class="tags">
+      <span class="tag tag-blue">store / repositories</span>
+      <span class="tag tag-blue">ipc handlers</span>
+      <span class="tag tag-blue">scheduler</span>
+      <span class="tag tag-blue">preload bridge</span>
+      <span class="tag tag-blue">browser windows</span>
     </div>
   </div>
 
-  <!-- ========== Domains ========== -->
-  <div class="section" id="domains">
-    <div class="section-title">
-      <span class="icon" style="background:rgba(139,92,246,0.15);color:var(--accent2);">🎯</span>
-      核心业务域
+  <div class="layer layer-green">
+    <h4>Business Layer — 业务逻辑层</h4>
+    <p>纯业务逻辑，通过参数接收 api + logger + config，不直接访问 Store</p>
+    <div class="tags">
+      <span class="tag tag-green">modules/*</span>
+      <span class="tag tag-green">services/*</span>
+      <span class="tag tag-green">jobs/*</span>
     </div>
+  </div>
 
-    <div class="card open">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>商品提审流程</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="flow">
-          <div class="flow-node" style="background:rgba(108,140,255,0.1);border-color:var(--accent);color:var(--accent);">fetch-draft-products<br><small>AsyncGenerator 分页</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(52,211,153,0.1);border-color:var(--green);color:var(--green);">task-cycle<br><small>主循环：状态规则判定</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(251,191,36,0.1);border-color:var(--orange);color:var(--orange);">list-unreviewed<br><small>黑名单检测 → 提交</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(248,113,113,0.1);border-color:var(--red);color:var(--red);">delete-failed<br><small>失败商品删除</small></div>
-        </div>
-        <div class="note" style="margin-top:12px;">
-          <b>状态规则 (statusRules)</b>：editStatus → action 映射。默认：1/72→提审, 3→删除, 其他→跳过。<br>
-          <b>黑名单检测</b>：product_code 匹配黑名单规则 → 自动跳过。<br>
-          <b>跳过关键词</b>：标题包含关键词 → 跳过。<br>
-          <b>限速</b>：提审间隔 3s，删除间隔 1s。
-        </div>
-      </div>
+  <div class="layer layer-purple">
+    <h4>API Layer — 接口层</h4>
+    <p>微信小店 API 客户端工厂，每个 accountId 一个实例，独立 token 缓存</p>
+    <div class="tags">
+      <span class="tag tag-purple">wxshop/client.ts</span>
+      <span class="tag tag-purple">wxshop/client-registry.ts</span>
     </div>
+  </div>
 
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>违规词检测流程</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="flow">
-          <div class="flow-node" style="background:rgba(108,140,255,0.1);border-color:var(--accent);color:var(--accent);">getViolationWords<br><small>加载词库</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(52,211,153,0.1);border-color:var(--green);color:var(--green);">streamDraftProducts<br><small>分页获取草稿</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(248,113,113,0.1);border-color:var(--red);color:var(--red);">findMatches<br><small>标题匹配违规词</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(244,114,182,0.1);border-color:var(--pink);color:var(--pink);">batchDeleteViolations<br><small>批量删除违规商品</small></div>
-        </div>
-        <div class="note" style="margin-top:12px;">
-          支持两种模式：<b>批量扫描</b> (batchScan) 和 <b>逐个扫描</b> (scanStep AsyncGenerator)
-        </div>
-      </div>
+  <div class="layer layer-cyan">
+    <h4>Shared Types — 共享类型层</h4>
+    <p>跨进程共享的类型定义和纯工具函数，按域拆分为独立文件</p>
+    <div class="tags">
+      <span class="tag tag-cyan">accounts</span>
+      <span class="tag tag-cyan">orders</span>
+      <span class="tag tag-cyan">listing</span>
+      <span class="tag tag-cyan">violations</span>
+      <span class="tag tag-cyan">scheduling</span>
+      <span class="tag tag-cyan">settings</span>
+      <span class="tag tag-cyan">errors</span>
     </div>
+  </div>
+</div>
 
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>订单 + 淘宝自动化流程</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
-      </div>
-      <div class="card-body">
-        <div class="flow" style="flex-direction:column;align-items:stretch;">
-          <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;">
-            <div class="flow-node" style="background:rgba(108,140,255,0.1);border-color:var(--accent);color:var(--accent);">微信订单列表<br><small>orders:list API</small></div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-node" style="background:rgba(52,211,153,0.1);border-color:var(--green);color:var(--green);">商品货源绑定<br><small>productSources</small></div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-node" style="background:rgba(251,191,36,0.1);border-color:var(--orange);color:var(--orange);">淘宝采购关联<br><small>orderAssociations</small></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
-            <div class="flow-node" style="background:rgba(244,114,182,0.1);border-color:var(--pink);color:var(--pink);">淘宝自动化<br><small>taobaoAutomation</small></div>
-            <div class="flow-arrow">→</div>
-            <div style="display:flex;gap:6px;">
-              <span class="tag tag-pink">采购查询</span>
-              <span class="tag tag-pink">退款准备</span>
-              <span class="tag tag-pink">地址填充</span>
-            </div>
-            <div class="flow-arrow">→</div>
-            <div class="flow-node" style="background:rgba(34,211,238,0.1);border-color:var(--cyan);color:var(--cyan);">微信发货<br><small>order-delivery-service</small></div>
-          </div>
-        </div>
-      </div>
+<!-- ======== Structure ======== -->
+<div class="section" id="structure">
+  <h2>目录结构</h2>
+
+  <details open>
+    <summary>src/main/ — 主进程</summary>
+    <div class="detail-body">
+      <ul class="tree-list">
+        <li><span class="tree-file">index.ts</span> <span class="tree-comment">— 应用入口</span></li>
+        <li><span class="tree-file">updater.ts</span> <span class="tree-comment">— 自动更新</span></li>
+        <li>
+          <span class="tree-dir">browser/</span>
+          <ul>
+            <li><span class="tree-file">browser-window.ts</span> <span class="tree-comment">— 公共 facade</span></li>
+            <li><span class="tree-file">clean-taobao-window.ts</span> <span class="tree-comment">— 隔离 partition 淘宝窗口</span></li>
+            <li><span class="tree-file">shipping-assistant-window.ts</span> <span class="tree-comment">— 发货助手侧边栏</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">ipc/</span>
+          <ul>
+            <li><span class="tree-file">handler.ts</span> <span class="tree-comment">— IPC 注册入口</span></li>
+            <li><span class="tree-dir">utils/</span> <span class="tree-comment">— handle-ipc / session-manager / log-forwarding</span></li>
+            <li><span class="tree-dir">handlers/</span> <span class="tree-comment">— 24 个独立 handler 文件</span></li>
+            <li><span class="tree-dir">handlers/domains/</span> <span class="tree-comment">— 6 个域注册器</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">jobs/</span>
+          <ul>
+            <li><span class="tree-file">job-runner.ts</span> <span class="tree-comment">— 通用任务并发管理器</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">modules/</span> <span class="tree-comment">— 纯业务逻辑</span>
+          <ul>
+            <li><span class="tree-file">task-cycle.ts</span> <span class="tree-comment">— 商品提审主循环</span></li>
+            <li><span class="tree-file">violation-detect.ts</span> <span class="tree-comment">— 违规词扫描</span></li>
+            <li><span class="tree-file">fetch-draft-products.ts</span> <span class="tree-comment">— 异步分页获取草稿</span></li>
+            <li><span class="tree-file">list-unreviewed-products.ts</span> <span class="tree-comment">— 单个商品提审</span></li>
+            <li><span class="tree-file">delete-failed-products.ts</span> <span class="tree-comment">— 失败商品删除</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">scheduler/</span>
+          <ul>
+            <li><span class="tree-file">scheduled-job-runner.ts</span> <span class="tree-comment">— Cron 定时任务调度</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">services/</span> <span class="tree-comment">— 跨领域业务服务</span>
+          <ul>
+            <li><span class="tree-file">taobao-automation-service.ts</span> <span class="tree-comment">— 淘宝页面自动化</span></li>
+            <li><span class="tree-file">order-delivery-service.ts</span> <span class="tree-comment">— 微信发货提交</span></li>
+            <li><span class="tree-file">cloud-sync-service.ts</span> <span class="tree-comment">— 云端同步 (当前 noop)</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">store/</span>
+          <ul>
+            <li><span class="tree-file">container.ts</span> <span class="tree-comment">— 组合根：创建 store + 9 个 repo</span></li>
+            <li><span class="tree-file">index.ts</span> <span class="tree-comment">— Facade：平铺导出所有方法</span></li>
+            <li><span class="tree-dir">repositories/</span> <span class="tree-comment">— 9 个 Repository（依赖注入）</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">taobao/</span> <span class="tree-comment">— 淘宝页面注入脚本</span>
+        </li>
+        <li>
+          <span class="tree-dir">wxshop/</span>
+          <ul>
+            <li><span class="tree-file">client.ts</span> <span class="tree-comment">— 微信 API 客户端 (298行)</span></li>
+            <li><span class="tree-file">client-registry.ts</span> <span class="tree-comment">— 按账户管理 client 实例</span></li>
+          </ul>
+        </li>
+      </ul>
     </div>
+  </details>
 
-    <div class="card">
-      <div class="card-header" onclick="this.parentElement.classList.toggle('open')">
-        <h3>定时任务调度</h3>
-        <div class="meta"><span class="toggle">▶</span></div>
+  <details>
+    <summary>src/renderer/ — 渲染进程</summary>
+    <div class="detail-body">
+      <ul class="tree-list">
+        <li><span class="tree-file">main.tsx</span> <span class="tree-comment">— React 入口</span></li>
+        <li><span class="tree-file">App.tsx</span> <span class="tree-comment">— 根组件</span></li>
+        <li>
+          <span class="tree-dir">components/</span>
+          <ul>
+            <li><span class="tree-file">Layout.tsx</span> <span class="tree-comment">— 主布局：标签页 + 侧边栏</span></li>
+            <li><span class="tree-file">NotificationCenter.tsx</span> <span class="tree-comment">— 通知抽屉</span></li>
+            <li><span class="tree-file">GlobalLogDrawer.tsx</span> <span class="tree-comment">— 日志查看器</span></li>
+          </ul>
+        </li>
+        <li><span class="tree-dir">contexts/</span> <span class="tree-comment">— BrowserContext / CredentialErrorContext</span></li>
+        <li><span class="tree-dir">state/</span> <span class="tree-comment">— app-store.ts (Zustand)</span></li>
+        <li><span class="tree-dir">query/</span> <span class="tree-comment">— TanStack Query 配置</span></li>
+        <li>
+          <span class="tree-dir">domains/</span> <span class="tree-comment">— 10 个业务域</span>
+          <ul>
+            <li><span class="tree-dir">accounts/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">orders/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">listing/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">violations/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">scheduled-jobs/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">settings/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">notifications/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">browser/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+            <li><span class="tree-dir">cloud/</span> <span class="tree-comment">— client.ts (无 hooks)</span></li>
+            <li><span class="tree-dir">system/</span> <span class="tree-comment">— client.ts + hooks.ts</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">pages/</span>
+          <ul>
+            <li><span class="tree-dir">orders/</span> <span class="tree-comment">— 订单管理 (6个子组件)</span></li>
+            <li><span class="tree-dir">common-functions/</span> <span class="tree-comment">— 商品提审</span></li>
+            <li><span class="tree-dir">violation/</span> <span class="tree-comment">— 违规词检测</span></li>
+            <li><span class="tree-dir">scheduled-jobs/</span> <span class="tree-comment">— 调度任务管理</span></li>
+            <li><span class="tree-dir">store-management/</span> <span class="tree-comment">— 店铺/账户管理</span></li>
+            <li><span class="tree-dir">settings/</span> <span class="tree-comment">— 全局设置</span></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>src/shared/ + src/preload/</summary>
+    <div class="detail-body">
+      <ul class="tree-list">
+        <li>
+          <span class="tree-dir">src/shared/</span> <span class="tree-comment">— 跨进程共享类型</span>
+          <ul>
+            <li><span class="tree-file">types.ts</span> <span class="tree-comment">— Barrel re-export</span></li>
+            <li><span class="tree-file">accounts.ts</span> <span class="tree-comment">— Account / Config / FullAccount</span></li>
+            <li><span class="tree-file">orders.ts</span> <span class="tree-comment">— 订单类型 + OrderStatus 枚举</span></li>
+            <li><span class="tree-file">listing.ts</span> <span class="tree-comment">— Task / Log / Product / Rule</span></li>
+            <li><span class="tree-file">violations.ts</span> <span class="tree-comment">— 违规扫描类型</span></li>
+            <li><span class="tree-file">scheduling.ts</span> <span class="tree-comment">— 定时任务类型</span></li>
+            <li><span class="tree-file">settings.ts</span> <span class="tree-comment">— AppSettings + normalization</span></li>
+            <li><span class="tree-file">credentials.ts</span> <span class="tree-comment">— 凭证元数据 + Zod schema</span></li>
+            <li><span class="tree-file">sync.ts</span> <span class="tree-comment">— 同步设置 + Zod schema</span></li>
+            <li><span class="tree-file">errors.ts</span> <span class="tree-comment">— 错误工具函数</span></li>
+          </ul>
+        </li>
+        <li>
+          <span class="tree-dir">src/preload/</span>
+          <ul>
+            <li><span class="tree-file">index.ts</span> <span class="tree-comment">— 主 Preload, 暴露 window.wishop (285行)</span></li>
+            <li><span class="tree-file">shipping-assistant.ts</span> <span class="tree-comment">— 发货助手窗口独立 Preload</span></li>
+          </ul>
+        </li>
+      </ul>
+    </div>
+  </details>
+</div>
+
+<!-- ======== Data Flow ======== -->
+<div class="section" id="flow">
+  <h2>数据流</h2>
+
+  <div class="card">
+    <h3>标准 CRUD（大部分通道）</h3>
+    <div class="flow">
+      <div class="flow-node fn-green">Page 组件</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">Domain Hook</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">Client</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">Preload</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">IPC Handler</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">Store Facade</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">Repository</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>API 代理（调用微信 API）</h3>
+    <div class="flow">
+      <div class="flow-node fn-green">Renderer</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">Preload</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">IPC Handler</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">getClient(id)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">WxShopClient</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-red">api.weixin.qq.com</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>长任务 + 实时日志推送</h3>
+    <div class="flow">
+      <div class="flow-node fn-green">useMutation</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">task:run</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">JobRunner</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">task-cycle</div>
+    </div>
+    <div class="flow" style="margin-top:8px;">
+      <div class="flow-node fn-blue">addLog</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">logEmitter</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">Preload (ipcRenderer.on)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">onLog callback</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>淘宝浏览器自动化</h3>
+    <div class="flow">
+      <div class="flow-node fn-green">Renderer</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">taobaoAutomation handler</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">clean-taobao-window</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">executeJavaScript</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-red">淘宝页面</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== IPC ======== -->
+<div class="section" id="ipc">
+  <h2>IPC 通道</h2>
+  <p class="desc">62 个 IPC 通道，按 6 个域分组注册。使用原生 <code>&lt;details&gt;</code> 折叠，点击标题展开。</p>
+
+  <details open>
+    <summary>settings-system 域 (7 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>accounts.ts</code></td><td>accounts:list / add / remove / update / getActive / setActive</td><td>账户 CRUD</td></tr>
+        <tr><td><code>config.ts</code></td><td>config:get / set</td><td>微信 API 配置</td></tr>
+        <tr><td><code>appSystem.ts</code></td><td>app:version / update:check / update:install</td><td>版本和更新</td></tr>
+        <tr><td><code>globalLogs.ts</code></td><td>globalLogs:list / add / clear</td><td>全局日志</td></tr>
+        <tr><td><code>license.ts</code></td><td>license:get / activate / refresh / clear</td><td>许可证</td></tr>
+        <tr><td><code>notifications.ts</code></td><td>notifications:list / markRead / markAllRead / clear / ...</td><td>通知系统</td></tr>
+        <tr><td><code>settings.ts</code></td><td>settings:get / update</td><td>应用设置</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>listing 域 (8 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>drafts.ts</code></td><td>drafts:fetch / list</td><td>草稿商品</td></tr>
+        <tr><td><code>task.ts</code></td><td>task:run / stop / status / taskConfig:get / set</td><td>提审任务</td></tr>
+        <tr><td><code>quota.ts</code></td><td>quota:get</td><td>审核配额</td></tr>
+        <tr><td><code>logs.ts</code></td><td>logs:get / clear</td><td>账户日志</td></tr>
+        <tr><td><code>scheduledJobs.ts</code></td><td>scheduledJobs:list / add / update / remove</td><td>定时任务</td></tr>
+        <tr><td><code>blacklistRules.ts</code></td><td>blacklistRules:get / getDefaultCodes / set</td><td>黑名单规则</td></tr>
+        <tr><td><code>skipCodeRules.ts</code></td><td>skipKeywords:get / set</td><td>跳过关键词</td></tr>
+        <tr><td><code>statusRules.ts</code></td><td>statusRules:get / set / reset</td><td>状态规则</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>orders 域 (4 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>orders.ts</code></td><td>orders:list / detail / search / decodeAddress / listDeliveryCompanies / shipFromPurchase</td><td>订单全流程</td></tr>
+        <tr><td><code>orderAssociations.ts</code></td><td>orderAssociations:list / set</td><td>淘宝采购关联</td></tr>
+        <tr><td><code>productSources.ts</code></td><td>productSources:list / set / remove</td><td>商品货源</td></tr>
+        <tr><td><code>realAddresses.ts</code></td><td>orderRealAddresses:list / get / fetch / refresh</td><td>真实地址</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>violations 域 (1 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>violation.ts</code></td><td>violation:getWords / setWords / batchScan / scanStep / batchDelete / stop</td><td>违规词扫描</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>sync-cloud 域 (3 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>sync.ts</code></td><td>sync:getSettings / updateModuleSetting / getStatus</td><td>同步设置</td></tr>
+        <tr><td><code>credentials.ts</code></td><td>credentials:getMeta / saveLocal / authorizeCloud / revokeCloud / getCloudStatus</td><td>凭证管理</td></tr>
+        <tr><td><code>cloudTasks.ts</code></td><td>cloudTasks:getCapabilities / getStatus</td><td>云端任务</td></tr>
+      </table>
+    </div>
+  </details>
+
+  <details>
+    <summary>browser-taobao 域 (2 个 handler)</summary>
+    <div class="detail-body">
+      <table>
+        <tr><th style="width:160px;">Handler 文件</th><th>通道</th><th style="width:100px;">说明</th></tr>
+        <tr><td><code>browser.ts</code></td><td>browser:open / openClean / openShippingAssistant / close</td><td>浏览器窗口</td></tr>
+        <tr><td><code>taobaoAutomation.ts</code></td><td>taobaoAutomation:lookupPurchase / prepareRefund / fillCheckoutAddress</td><td>淘宝自动化</td></tr>
+      </table>
+    </div>
+  </details>
+</div>
+
+<!-- ======== Store ======== -->
+<div class="section" id="store">
+  <h2>Store 层</h2>
+  <p class="desc">单 electron-store 实例，9 个 Repository 通过闭包注入 getter/setter，可独立测试。Container 是组合根，index.ts 是 Facade。</p>
+
+  <div class="card">
+    <table>
+      <tr><th style="width:220px;">Repository</th><th>关键方法</th></tr>
+      <tr><td><code>account-repository</code></td><td>getAccounts / addAccount / removeAccount / updateAccount / getConfig / setConfig</td></tr>
+      <tr><td><code>order-repository</code></td><td>getProductSources / setProductSources / getOrderAssociations / setOrderAssociation / getRealAddressCaches / setRealAddressCache</td></tr>
+      <tr><td><code>listing-repository</code></td><td>getTaskConfig / setTaskConfig / getLogs / addLog / clearLogs / getBlacklistRules / getStatusRules</td></tr>
+      <tr><td><code>global-event-repository</code></td><td>getGlobalLogs / addGlobalLog / clearGlobalLogs / getNotifications / markNotificationRead</td></tr>
+      <tr><td><code>scheduled-job-repository</code></td><td>getScheduledJobs / addScheduledJob / updateScheduledJob / removeScheduledJob</td></tr>
+      <tr><td><code>violation-repository</code></td><td>getViolationWords / setViolationWords</td></tr>
+      <tr><td><code>app-settings-repository</code></td><td>getAppSettings / updateAppSettings</td></tr>
+      <tr><td><code>sync-credential-repository</code></td><td>getSyncSettings / updateSyncModuleSetting / getCredentialMetas / saveLocalCredentialMeta</td></tr>
+      <tr><td><code>license-repository</code></td><td>getLicenseState / setLicenseState</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ======== Renderer ======== -->
+<div class="section" id="renderer">
+  <h2>Renderer 层</h2>
+  <p class="desc">每个域统一 <code>client.ts</code> (IPC 封装) + <code>hooks.ts</code> (React Query)，页面组件只消费 hooks。</p>
+
+  <div class="card">
+    <h3>10 个 Domain</h3>
+    <table>
+      <tr><th style="width:120px;">域</th><th>Hooks</th><th style="width:110px;">状态管理</th></tr>
+      <tr><td><code>orders</code></td><td>useOrders / useProductSources / useOrderAssociations / useRealAddressCaches / useOrderDelivery / useTaobaoOrderAutomation</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>listing</code></td><td>useTaskConfig / useLogs / useQuota / useBlacklistRules / useSkipKeywords / useStatusRules</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>violations</code></td><td>useViolationWorkflow</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>settings</code></td><td>useLicenseSettings / useAutomationSettings / useCloudSyncSettings</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>scheduled-jobs</code></td><td>useScheduledJobs</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>notifications</code></td><td>useNotifications</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>system</code></td><td>useGlobalLogs</td><td><span class="tag tag-green">React Query</span></td></tr>
+      <tr><td><code>accounts</code></td><td>useAccounts</td><td><span class="tag tag-orange">useState</span></td></tr>
+      <tr><td><code>browser</code></td><td>useBrowser</td><td><span class="tag tag-orange">命令式</span></td></tr>
+      <tr><td><code>cloud</code></td><td>无 (由 settings 消费)</td><td><span class="tag tag-orange">跨域调用</span></td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>状态管理</h3>
+    <div class="grid-3">
+      <div style="padding:12px;">
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px;">React Query</div>
+        <div style="color:#4e5969;font-size:15px;">所有数据获取和变更<br>staleTime: 10s, retry: 1</div>
       </div>
-      <div class="card-body">
-        <div class="flow">
-          <div class="flow-node" style="background:rgba(108,140,255,0.1);border-color:var(--accent);color:var(--accent);">node-cron<br><small>调度器</small></div>
-          <div class="flow-arrow">→</div>
-          <div class="flow-node" style="background:rgba(52,211,153,0.1);border-color:var(--green);color:var(--green);">JobRunner<br><small>并发控制 + Abort</small></div>
-          <div class="flow-arrow">→</div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <span class="tag tag-blue">listing.submitDrafts → task-cycle</span>
-            <span class="tag tag-blue">orders.checkShipment → taobao-automation</span>
-            <span class="tag tag-blue">violation.scanProducts → violation-detect</span>
-          </div>
-        </div>
-        <div class="note" style="margin-top:12px;">
-          每个任务支持：Cron 表达式、全局/指定账户作用域、每日运行次数限制、per-account 统计
-        </div>
+      <div style="padding:12px;">
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px;">Zustand</div>
+        <div style="color:#4e5969;font-size:15px;">app-store.ts<br>activeModule / settingsTab</div>
+      </div>
+      <div style="padding:12px;">
+        <div style="font-size:16px;font-weight:600;margin-bottom:6px;">React Context</div>
+        <div style="color:#4e5969;font-size:15px;">BrowserContext<br>CredentialErrorContext</div>
       </div>
     </div>
   </div>
+</div>
+
+<!-- ======== Business ======== -->
+<div class="section" id="business">
+  <h2>核心业务域</h2>
+
+  <div class="card">
+    <h3>商品提审流程</h3>
+    <div class="flow">
+      <div class="flow-node fn-blue">fetch-draft-products<br><small>AsyncGenerator 分页</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">task-cycle<br><small>状态规则判定</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">list-unreviewed<br><small>黑名单检测→提交</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-red">delete-failed<br><small>失败商品删除</small></div>
+    </div>
+    <div class="note">
+      <b>状态规则</b>：editStatus → action 映射。默认：1/72 → 提审，3 → 删除，其他 → 跳过。<br>
+      <b>限速</b>：提审间隔 3s，删除间隔 1s。
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>违规词检测流程</h3>
+    <div class="flow">
+      <div class="flow-node fn-blue">getViolationWords<br><small>加载词库</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">streamDraftProducts<br><small>分页获取草稿</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-red">findMatches<br><small>标题匹配违规词</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">batchDeleteViolations<br><small>批量删除</small></div>
+    </div>
+    <div class="note">支持两种模式：批量扫描 (batchScan) 和逐个扫描 (scanStep AsyncGenerator)</div>
+  </div>
+
+  <div class="card">
+    <h3>订单 + 淘宝自动化</h3>
+    <div class="flow">
+      <div class="flow-node fn-blue">微信订单</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">商品货源绑定</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-orange">淘宝采购关联</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-purple">淘宝自动化<br><small>查询/退款/地址</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-blue">微信发货</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>定时任务调度</h3>
+    <div class="flow">
+      <div class="flow-node fn-blue">node-cron<br><small>调度器</small></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node fn-green">JobRunner<br><small>并发控制 + Abort</small></div>
+      <div class="flow-arrow">→</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="flow-node fn-orange" style="width:100%;">task-cycle (商品提审)</div>
+        <div class="flow-node fn-purple" style="width:100%;">taobao-automation (发货检查)</div>
+        <div class="flow-node fn-red" style="width:100%;">violation-detect (违规扫描)</div>
+      </div>
+    </div>
+    <div class="note">每个任务支持：Cron 表达式、全局/指定账户作用域、每日运行次数限制、per-account 统计</div>
+  </div>
+</div>
 
 </div>
 
 <script>
-// Nav active state
-const sections = document.querySelectorAll('.section');
-const navLinks = document.querySelectorAll('.nav a');
-const observer = new IntersectionObserver((entries) => {
+// Nav highlight on scroll
+const secs = document.querySelectorAll('.section');
+const links = document.querySelectorAll('.nav a');
+const obs = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting) {
-      navLinks.forEach(l => l.classList.remove('active'));
-      const link = document.querySelector(`.nav a[href="#${e.target.id}"]`);
-      if (link) link.classList.add('active');
+      links.forEach(l => l.classList.remove('active'));
+      const a = document.querySelector('.nav a[href="#'+e.target.id+'"]');
+      if (a) a.classList.add('active');
     }
   });
-}, { threshold: 0.2 });
-sections.forEach(s => observer.observe(s));
+}, { threshold: 0.1 });
+secs.forEach(s => obs.observe(s));
 </script>
 </body>
 </html>

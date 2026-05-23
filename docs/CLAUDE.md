@@ -7,6 +7,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #5875 | 4:52 PM | 🔵 | Architecture documentation exists and was previewed by user | ~160 |
 | #5871 | 4:46 PM | ✅ | Wishop项目架构分析HTML文档创建 | ~432 |
 | #5869 | " | 🟣 | Wishop项目架构分析HTML文档创建完成 | ~375 |
 | #5868 | 4:45 PM | 🟣 | Wishop项目架构分析HTML文档生成 | ~304 |
