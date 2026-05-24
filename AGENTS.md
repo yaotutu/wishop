@@ -18,29 +18,6 @@ npm run start
 
 Run `npm run build` before handing off changes that touch TypeScript, Electron main/preload, or renderer code.
 
-## Browser And Taobao Rules
-
-The Taobao browser strategy is intentional and must not be changed casually.
-
-- Taobao pages must open through `src/main/browser/browser-window.ts`.
-- The Taobao window is a clean Electron `BrowserWindow` using persistent partitions named `persist:taobao-clean-${profileId}`.
-- Do not add browser fingerprint spoofing.
-- Do not add `fingerprint-generator`, `fingerprint-injector`, or similar dependencies.
-- Do not change `navigator`, `webdriver`, canvas, WebGL, permissions, plugins, languages, or other browser fingerprint surfaces.
-- Do not set custom User-Agent or client hints.
-- Do not rewrite request headers such as `User-Agent`, `Accept-Language`, `Sec-CH-UA`, or `Accept`.
-- Do not add `disable-blink-features=AutomationControlled`.
-- Do not add preload scripts to Taobao pages for stealth, fingerprinting, or page patching.
-- `browser:open` is a compatibility alias and must continue to open the clean Taobao window.
-- User login state is expected to persist in the clean partition. Closing the Taobao window hides it unless the app is quitting.
-
-Taobao business automation is allowed only as explicit user-triggered operations, for example:
-
-- checking a linked Taobao purchase order's shipment status;
-- preparing/refund-submitting a Taobao refund page;
-- filling a checkout address from a decoded WeChat order address.
-
-Automation must stop and surface the raw error when a Taobao login, slider, captcha, access-denied page, or other verification challenge is detected. Do not implement hidden retries or anti-risk-control bypass logic.
 
 ## Current Taobao Automation Surface
 

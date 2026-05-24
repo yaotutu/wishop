@@ -22,7 +22,7 @@ export interface AppSettingsPatch {
 export const MAX_SHIPMENT_CHECK_ORDER_LOOKBACK_DAYS = 7;
 
 export const DEFAULT_SHIPMENT_CHECK_SETTINGS: ShipmentCheckSettings = {
-  enabled: true,
+  enabled: false,
   windowMinutes: 10,
   maxChecksPerAccountPerWindow: 3,
   minDispatchDelaySeconds: 30,

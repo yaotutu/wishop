@@ -40,6 +40,9 @@ export interface StoreSchema {
   appSettings?: AppSettings;
   syncSettings?: SyncSettings;
   credentialMetas?: CredentialMeta[];
+  localMigrations?: {
+    shipmentCheckDefaultOff20260523?: boolean;
+  };
 }
 
 let logCounter = 0;
@@ -112,6 +115,13 @@ export const globalEventRepository = createGlobalEventRepository({
 export const appSettingsRepository = createAppSettingsRepository({
   getSettings: () => store.get('appSettings'),
   setSettings: settings => store.set('appSettings', settings),
+  getShipmentCheckDefaultOffMigrationApplied: () => store.get('localMigrations')?.shipmentCheckDefaultOff20260523,
+  setShipmentCheckDefaultOffMigrationApplied: value => {
+    store.set('localMigrations', {
+      ...(store.get('localMigrations') || {}),
+      shipmentCheckDefaultOff20260523: value,
+    });
+  },
 });
 
 export const syncCredentialRepository = createSyncCredentialRepository({

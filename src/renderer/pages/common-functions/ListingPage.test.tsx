@@ -8,7 +8,10 @@ import type { ListingSettings } from '../../../shared/types';
 
 const mocks = vi.hoisted(() => ({
   scheduledJobsList: vi.fn(),
+  scheduledJobsAdd: vi.fn(),
   scheduledJobsUpsert: vi.fn(),
+  scheduledJobsUpdate: vi.fn(),
+  saveGlobalTaskConfig: vi.fn(),
   setAccountTaskConfigEnabled: vi.fn(),
   setAccountRulesEnabled: vi.fn(),
 }));
@@ -16,7 +19,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../domains/scheduled-jobs/client', () => ({
   scheduledJobsClient: {
     list: mocks.scheduledJobsList,
+    add: mocks.scheduledJobsAdd,
     upsert: mocks.scheduledJobsUpsert,
+    update: mocks.scheduledJobsUpdate,
   },
 }));
 
@@ -53,7 +58,7 @@ vi.mock('../../domains/listing/hooks', () => ({
   useListingSettings: () => ({
     settings: createSettings(),
     fetchSettings: vi.fn(),
-    saveGlobalTaskConfig: vi.fn(),
+    saveGlobalTaskConfig: mocks.saveGlobalTaskConfig,
     setAccountTaskConfigEnabled: mocks.setAccountTaskConfigEnabled,
     setGlobalScheduledEnabled: vi.fn(),
     setAccountRulesEnabled: mocks.setAccountRulesEnabled,
@@ -112,9 +117,11 @@ describe('ListingPage scheduling and inheritance UI', () => {
 
     expect(screen.queryByText('全局任务生效中')).toBeNull();
     expect(screen.queryByText('跟随全局任务配置')).toBeNull();
+    expect(screen.queryByText('单独设置此账号')).toBeNull();
     expect(screen.queryByText('使用全局规则')).toBeNull();
-    expect(screen.getByText('单独设置此账号')).toBeTruthy();
-    expect(screen.getByText('单独设置规则')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /定时任务/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /规则修改/ })).toBeTruthy();
+    expect(screen.queryByText('扫描商品时')).toBeNull();
   });
 
   it('opens a modal before creating the global listing scheduled job', async () => {
@@ -139,6 +146,54 @@ describe('ListingPage scheduling and inheritance UI', () => {
       enabled: true,
       jobType: 'listing.submitDrafts',
       scope: 'global',
+    })));
+    expect(mocks.saveGlobalTaskConfig).toHaveBeenCalledWith(expect.objectContaining({
+      listUnreviewed: true,
+      listUnreviewedQuantity: 2,
+      autoDeleteFailed: true,
+    }));
+  });
+
+  it('renders global scope as read-only and edits task config in the scheduled job modal', async () => {
+    mocks.scheduledJobsList.mockResolvedValueOnce([{
+      id: 'global-listing-job',
+      name: '商品提审 - 全账号',
+      enabled: true,
+      module: 'listing',
+      jobType: 'listing.submitDrafts',
+      scope: 'global',
+      cronExpression: '0 9 * * *',
+      staggerMinutes: 10,
+      payload: {},
+      stats: { lastRunDate: '', todayRunCount: 0 },
+      createdAt: 1,
+      updatedAt: 1,
+    }]);
+    render(<ListingPage accountId="account-1" scope="global" />);
+
+    await waitFor(() => expect(mocks.scheduledJobsList).toHaveBeenCalledOnce());
+
+    expect(screen.getByText('商品提审全局任务')).toBeTruthy();
+    expect(screen.getByText('开启，每次 2 条')).toBeTruthy();
+    expect(screen.getByText('全局运行规则')).toBeTruthy();
+    expect(screen.queryByText('已锁定')).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /提交未审核商品/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /修改任务配置/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /编辑全局定时任务/ }));
+
+    expect(screen.getByText('全局商品提审定时任务')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /提交未审核商品/ })).toBeTruthy();
+    expect(mocks.saveGlobalTaskConfig).not.toHaveBeenCalled();
+
+    const okButton = screen.getAllByRole('button', { name: /保存全局定时任务/ }).at(-1);
+    expect(okButton).toBeTruthy();
+    fireEvent.click(okButton!);
+
+    await waitFor(() => expect(mocks.saveGlobalTaskConfig).toHaveBeenCalledWith(expect.objectContaining({
+      listUnreviewed: true,
+      listUnreviewedQuantity: 2,
+      autoDeleteFailed: true,
     })));
   });
 });
