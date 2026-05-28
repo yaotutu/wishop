@@ -66,7 +66,6 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `skipCodeRules.ts` - 保留关键词管理
   - `statusRules.ts` - 处理规则管理（editStatus → action 映射）
   - `violation.ts` - 违规词检测
-  - `browser.ts` - 浏览器窗口控制
 - **ipc/utils/** - `log-forwarding.ts`（日志转发）、`session-manager.ts`（会话管理）
 - **modules/** - 业务逻辑模块：
   - `task-cycle.ts` - 任务周期编排，接收 `api: WeChatClient, addLog: AddLogFn, statusRules: StatusRule[]`。通过 statusRules 查表决定每个 editStatus 的处理方式（submit/delete/skip）
@@ -75,7 +74,6 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `list-unreviewed-products.ts` - 列出待审商品，接收 `api` + `addLog`
   - `violation-detect.ts` - 违规词扫描，接收 `api` + `addLog`
 - **scheduler/listing-scheduler.ts** - 每账户 cron 调度，`Map<accountId, ScheduledTask>`
-- **browser/browser-window.ts** - 浏览器窗口管理，独立 BrowserWindow（非内嵌），集成 fingerprint-generator/injector，支持 popup 窗口正常打开
 - **updater.ts** - 基于 electron-updater 的自动更新，支持进度和状态事件推送到 renderer
 
 ### Preload (`src/preload/`)
@@ -84,7 +82,7 @@ npm run push         # 版本号 patch + git push --follow-tags
 ### Renderer (`src/renderer/`)
 - **main.tsx** - Renderer 入口，挂载 App 组件
 - **App.tsx** - 根组件
-- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 右上角版本号（点击跳转设置关于页）+ 左侧账户侧边栏 + 内容区。`BrowserContext` 提供浏览器控制，`CredentialErrorProvider` 包裹全局拦截凭证错误弹窗。账户模块使用 `display:none/contents` 策略保持所有账户页面组件实例，切换账户不销毁组件。
+- **components/Layout.tsx** - 顶部模块标签（订单管理/店铺管理/商品提审/违规词检测/设置）+ 右上角版本号（点击跳转设置关于页）+ 左侧账户侧边栏 + 内容区。`CredentialErrorProvider` 包裹全局拦截凭证错误弹窗。账户模块使用 `display:none/contents` 策略保持所有账户页面组件实例，切换账户不销毁组件。
 - **components/AccountModals.tsx** - 账户添加/编辑/删除弹窗
 - **components/StatCard.tsx** - 统计卡片组件
 - **contexts/CredentialErrorContext.tsx** - 凭证错误上下文，拦截 `[CREDENTIAL]` 前缀错误并弹窗引导用户去店铺管理页
@@ -108,7 +106,6 @@ npm run push         # 版本号 patch + git push --follow-tags
   - `useBlacklistRules.ts` - 停止黑名单规则
   - `useSkipKeywords.ts` - 保留关键词
   - `useStatusRules.ts` - 处理规则（editStatus → action 映射）
-  - `useBrowser.ts` - 浏览器控制
 
 ### IPC Channels
 | Channel                                             | Direction     | Purpose                                      |
@@ -127,7 +124,6 @@ npm run push         # 版本号 patch + git push --follow-tags
 | skipKeywords:get/set                                | renderer→main | 保留关键词管理                               |
 | statusRules:get/set/reset                           | renderer→main | 处理规则管理（editStatus→action映射）        |
 | violation:getWords/setWords/batchScan/scanStep/batchDelete/stop | renderer→main | 违规词检测                       |
-| browser:open/close                                  | renderer→main | 浏览器窗口控制                               |
 | app:version                                         | renderer→main | 获取应用版本                                 |
 | update:check/install                                | renderer→main | 检查/安装更新                                |
 | update:available/progress/downloaded/not-available/error | main→renderer | 更新状态事件推送                       |
@@ -153,7 +149,6 @@ npm run push         # 版本号 patch + git push --follow-tags
 - electron-updater 6.x (auto-update)
 - node-cron 4 (scheduling)
 - axios (HTTP client)
-- fingerprint-generator/injector 2.x (浏览器指纹)
 
 ## Key Files
 - `src/shared/types.ts` - 所有层共享的 TypeScript 类型定义
@@ -164,7 +159,6 @@ npm run push         # 版本号 patch + git push --follow-tags
 - `src/main/store/index.ts` - Multi-account electron-store
 - `src/main/ipc/handler.ts` - IPC handler 注册入口
 - `src/main/ipc/handlers/*.ts` - 按 domain 拆分的 handler
-- `src/main/browser/browser-window.ts` - 浏览器窗口 + 指纹注入（独立 BrowserWindow）
 - `src/main/updater.ts` - 自动更新逻辑，支持进度和状态事件推送
 - `src/renderer/hooks/*.ts` - 按 domain 拆分的 React hooks
 - `src/renderer/components/Layout.tsx` - 主布局 + 路由（display:none/contents 账户切换策略）

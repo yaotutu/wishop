@@ -5,12 +5,10 @@ import { registerHandlers } from './ipc/handler';
 import { startAllTasks, stopAllTasks } from './scheduler/listing-scheduler';
 import { cleanOldLogs } from './store';
 import { initUpdater, quitAndInstall, checkForUpdates } from './updater';
-import { closeBrowserWindow, flushBrowserSession } from './browser/browser-window';
 import { log } from './utils/logger';
 
 dotenv.config();
 
-app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 let mainWindow: BrowserWindow | null = null;
@@ -106,16 +104,4 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   stopAllTasks();
-});
-
-app.on('before-quit', () => {
-  closeBrowserWindow();
-});
-
-app.on('will-quit', async (e) => {
-  e.preventDefault();
-  try {
-    await flushBrowserSession();
-  } catch {}
-  app.exit(0);
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Layout as AntLayout, Tabs, Empty } from 'antd';
 import StoreManagement from '../pages/store-management/StoreManagement';
 import SettingsPage from '../pages/settings/SettingsPage';
@@ -7,7 +7,6 @@ import ListingPage from '../pages/common-functions/ListingPage';
 import ViolationPage from '../pages/violation/ViolationPage';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
-import { useBrowser } from '../hooks/useBrowser';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 
 const { Header, Sider, Content } = AntLayout;
@@ -23,10 +22,6 @@ const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
-
-export const BrowserContext = React.createContext<{
-  openBrowser: (profileId?: string, url?: string) => Promise<void>;
-}>({ openBrowser: async () => {} });
 
 /** 账户侧边栏 */
 const AccountSider: React.FC<{
@@ -105,7 +100,6 @@ const Layout: React.FC = () => {
   const [version, setVersion] = useState('');
   const [settingsTab, setSettingsTab] = useState<string | undefined>(undefined);
   const { accounts, activeAccountId, fetchAccounts, addAccount, removeAccount, updateAccount, switchAccount } = useAccounts();
-  const { openBrowser } = useBrowser();
 
   useEffect(() => {
     fetchAccounts();
@@ -113,7 +107,6 @@ const Layout: React.FC = () => {
   }, []);
 
   const isAccountModule = ACCOUNT_MODULES.has(activeModule);
-  const browserValue = useMemo(() => ({ openBrowser }), [openBrowser]);
 
   const navigateToStoreManagement = useCallback(() => {
     setActiveModule('storeManagement');
@@ -126,53 +119,51 @@ const Layout: React.FC = () => {
 
   return (
     <CredentialErrorProvider onNavigateToSettings={navigateToStoreManagement}>
-      <BrowserContext.Provider value={browserValue}>
-        <AntLayout style={{ height: '100vh' }}>
-          <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
-            <Tabs
-              activeKey={activeModule}
-              onChange={(key) => setActiveModule(key as ModuleType)}
-              items={MODULES.map(m => ({ key: m.key, label: m.label }))}
-              size="small"
-              style={{ flex: 1, minWidth: 0 }}
-              tabBarStyle={{ margin: 0 }}
-            />
-            <span
-              onClick={handleVersionClick}
-              style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
-            >
-              v{version}
-            </span>
-          </Header>
-          <AntLayout>
-            {/* 账户侧边栏 — 仅账户模块显示 */}
-            {isAccountModule && (
-              <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
-            )}
-            <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
-              <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
-                <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
-              </div>
-              {/* 店铺管理 */}
-              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
-                <StoreManagement
-                  accounts={accounts}
-                  addAccount={addAccount}
-                  updateAccount={updateAccount}
-                  removeAccount={removeAccount}
-                  switchAccount={switchAccount}
-                  activeAccountId={activeAccountId}
-                />
-              </div>
-              {/* 设置 */}
-              <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
-                <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
-              </div>
-            </Content>
-          </AntLayout>
+      <AntLayout style={{ height: '100vh' }}>
+        <Header style={{ padding: '0 12px', height: 48, lineHeight: '48px', background: '#fafafa', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center' }}>
+          <Tabs
+            activeKey={activeModule}
+            onChange={(key) => setActiveModule(key as ModuleType)}
+            items={MODULES.map(m => ({ key: m.key, label: m.label }))}
+            size="small"
+            style={{ flex: 1, minWidth: 0 }}
+            tabBarStyle={{ margin: 0 }}
+          />
+          <span
+            onClick={handleVersionClick}
+            style={{ color: '#bbb', fontSize: 12, whiteSpace: 'nowrap', marginLeft: 8, cursor: 'pointer' }}
+          >
+            v{version}
+          </span>
+        </Header>
+        <AntLayout>
+          {/* 账户侧边栏 — 仅账户模块显示 */}
+          {isAccountModule && (
+            <AccountSider accounts={accounts} activeAccountId={activeAccountId} switchAccount={switchAccount} />
+          )}
+          <Content style={{ padding: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* 账户模块：所有页面同时挂载，切换 display 保留状态 */}
+            <div style={{ flex: 1, minHeight: 0, display: isAccountModule ? 'flex' : 'none', flexDirection: 'column' }}>
+              <AccountModuleContent accounts={accounts} activeAccountId={activeAccountId} activeModule={activeModule} />
+            </div>
+            {/* 店铺管理 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'storeManagement' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <StoreManagement
+                accounts={accounts}
+                addAccount={addAccount}
+                updateAccount={updateAccount}
+                removeAccount={removeAccount}
+                switchAccount={switchAccount}
+                activeAccountId={activeAccountId}
+              />
+            </div>
+            {/* 设置 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
+            </div>
+          </Content>
         </AntLayout>
-      </BrowserContext.Provider>
+      </AntLayout>
     </CredentialErrorProvider>
   );
 };

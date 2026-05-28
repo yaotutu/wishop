@@ -13,6 +13,6 @@
     "rootDir": "src",
     "declaration": false
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/browser/**/*"],
+  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*"],
   "exclude": ["node_modules", "src/renderer"]
 }

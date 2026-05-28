@@ -1,6 +1,5 @@
 export type { Config, ScheduledTask, LogEntry, DraftProduct, QuotaResult, TaskConfig, TaskCycleResult, Account, Order, OrderStatus, OrderSearchParams } from '../../shared/types';
 export { useAccounts } from './useAccounts';
-export { useBrowser } from './useBrowser';
 export { useConfig } from './useConfig';
 export { useSchedulers } from './useScheduler';
 export { useLogs } from './useLogs';
