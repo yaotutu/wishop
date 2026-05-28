@@ -6,10 +6,10 @@ interface AccountModalsProps {
   addAccount: (name: string, config: Config) => Promise<Account>;
   updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'config'>>) => Promise<void>;
   removeAccount: (id: string) => Promise<void>;
-  switchAccount: (id: string) => Promise<void>;
+  switchAccount: (id: string) => void | Promise<void>;
 }
 
-const AccountModals: React.FC<AccountModalsProps> = ({ addAccount, updateAccount, removeAccount, switchAccount }) => {
+const AccountModals = ({ addAccount, updateAccount, removeAccount, switchAccount }: AccountModalsProps) => {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);

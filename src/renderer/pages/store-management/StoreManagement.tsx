@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Card, Table, Button, Space, Modal, Input, message, Tag, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Alert, Card, Table, Button, Space, Modal, Input, message, Tag, Popconfirm, Upload } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import type { Account, Config } from '../../../shared/types';
+import { parseAccountImportJson, type AccountImportParseResult } from './import-accounts';
 
 interface StoreManagementProps {
   accounts: Account[];
   addAccount: (name: string, config: Config) => Promise<Account>;
   updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'config'>>) => Promise<void>;
   removeAccount: (id: string) => Promise<void>;
-  switchAccount: (id: string) => Promise<void>;
+  switchAccount: (id: string) => void | Promise<void>;
   activeAccountId?: string;
 }
 
@@ -19,6 +20,8 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [formState, setFormState] = useState({ name: '', appId: '', appSecret: '' });
+  const [importResult, setImportResult] = useState<AccountImportParseResult | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const handleAdd = async () => {
     if (!formState.name || !formState.appId || !formState.appSecret) {
@@ -56,6 +59,25 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
   const handleRemove = async (account: Account) => {
     await removeAccount(account.id);
     message.success('店铺已删除');
+  };
+
+  const handleImportText = async (text: string) => {
+    setImporting(true);
+    try {
+      const result = parseAccountImportJson(text, accounts.map(account => account.config.appId));
+      let firstAccount: Account | null = null;
+      for (const draft of result.accounts) {
+        const account = await addAccount(draft.name, { appId: draft.appId, appSecret: draft.appSecret });
+        firstAccount ||= account;
+      }
+      if (firstAccount) await switchAccount(firstAccount.id);
+      setImportResult(result);
+      message.success(`已导入 ${result.accounts.length} 个店铺，跳过 ${result.skipped.length} 条`);
+    } catch (error: any) {
+      message.error(error?.message || '导入失败');
+    } finally {
+      setImporting(false);
+    }
   };
 
   const columns = [
@@ -122,14 +144,36 @@ const StoreManagement: React.FC<StoreManagementProps> = ({
         size="small"
         title="店铺管理"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => {
-            setFormState({ name: '', appId: '', appSecret: '' });
-            setAddModalOpen(true);
-          }}>
-            添加店铺
-          </Button>
+          <Space>
+            <Upload
+              accept=".json,application/json"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                void file.text().then(handleImportText);
+                return Upload.LIST_IGNORE;
+              }}
+            >
+              <Button icon={<UploadOutlined />} loading={importing}>导入 JSON</Button>
+            </Upload>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+              setFormState({ name: '', appId: '', appSecret: '' });
+              setAddModalOpen(true);
+            }}>
+              添加店铺
+            </Button>
+          </Space>
         }
       >
+        {importResult && importResult.skipped.length > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title={`导入完成，跳过 ${importResult.skipped.length} 条`}
+            description={importResult.skipped.map(item => `第 ${item.row} 行：${item.reason}`).join('；')}
+            closable={{ onClose: () => setImportResult(null) }}
+          />
+        )}
         <Table
           dataSource={accounts}
           columns={columns}

@@ -10,6 +10,7 @@
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.main.json",
+    "test:migration": "node --test tests/*.test.mjs",
     "start": "electron .",
     "push": "npm version patch -m 'chore: v%s' && git push --follow-tags"
   },

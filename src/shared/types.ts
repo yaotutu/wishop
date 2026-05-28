@@ -16,6 +16,91 @@ export interface ScheduledTask {
   todayListedCount: number;
 }
 
+export type ScheduledJobModule = 'listing' | 'orders' | 'violation' | 'store' | 'system';
+export type ScheduledJobScope = 'account' | 'global' | 'system';
+export type ScheduledJobType =
+  | 'listing.submitDrafts'
+  | 'orders.syncRecent'
+  | 'orders.backfillHistory'
+  | 'violation.scanProducts';
+export type ScheduledJobStatus = 'idle' | 'running' | 'waiting_user' | 'completed' | 'failed' | 'skipped';
+export type ScheduledJobRunMode = 'recurring' | 'untilComplete';
+
+export interface ScheduledJobRunStats {
+  lastRunDate: string;
+  todayRunCount: number;
+  lastRunAt?: number;
+  lastFinishedAt?: number;
+  lastStatus?: ScheduledJobStatus;
+  lastMessage?: string;
+  lastListed?: number;
+  lastError?: string;
+}
+
+export interface ScheduledJobBase<TPayload = unknown> {
+  id: string;
+  name: string;
+  enabled: boolean;
+  module: ScheduledJobModule;
+  jobType: ScheduledJobType;
+  runMode: ScheduledJobRunMode;
+  cronExpression: string;
+  dailyLimit: number;
+  payload: TPayload;
+  completedAt: number | null;
+  stats: ScheduledJobRunStats;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AccountScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'account';
+  accountId: string;
+};
+
+export type GlobalScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'global';
+  excludedAccountIds: string[];
+  staggerMinutes: number;
+  accountStats: Record<string, ScheduledJobRunStats>;
+};
+
+export type SystemScheduledJob<TPayload = unknown> = ScheduledJobBase<TPayload> & {
+  scope: 'system';
+};
+
+export type ScheduledJob<TPayload = unknown> =
+  | AccountScheduledJob<TPayload>
+  | GlobalScheduledJob<TPayload>
+  | SystemScheduledJob<TPayload>;
+
+export type AccountScheduledJobInput<TPayload = unknown> = Omit<AccountScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type GlobalScheduledJobInput<TPayload = unknown> = Omit<GlobalScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type SystemScheduledJobInput<TPayload = unknown> = Omit<SystemScheduledJob<TPayload>, 'id' | 'stats' | 'createdAt' | 'updatedAt'>;
+export type ScheduledJobInput<TPayload = unknown> =
+  | AccountScheduledJobInput<TPayload>
+  | GlobalScheduledJobInput<TPayload>
+  | SystemScheduledJobInput<TPayload>;
+
+export type ScheduledJobView<TPayload = unknown> = ScheduledJob<TPayload> & {
+  nextRunAt: number | null;
+};
+
+export interface ScheduledJobExecutorResult {
+  listed: number;
+  status: ScheduledJobStatus;
+  message: string | null;
+  error: string | null;
+  completed: boolean;
+}
+
+export type ScheduledJobRunNowResult = ScheduledJobExecutorResult;
+
+export interface OrderHistoryBackfillPayload {
+  lookbackDays?: number;
+  cursorByAccountId?: Record<string, number>;
+}
+
 export interface LogEntry {
   id: string;
   timestamp: number;
@@ -45,6 +130,9 @@ export interface DraftProduct {
 export interface QuotaResult {
   quota: number;
   total: number;
+  source?: 'cache' | 'api';
+  fetchedAt?: number;
+  elapsedMs?: number;
 }
 
 export interface ErrorCodeSummary {
@@ -74,6 +162,73 @@ export interface Account {
 
 export type AddLogFn = (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
 
+export interface ProductSourceItem {
+  id: string;
+  url: string;
+  quantity: number;
+  remark: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductSourceBinding {
+  productId: string;
+  sources: ProductSourceItem[];
+}
+
+export type LinkedOrderPlatform = 'manual' | 'other';
+
+export interface LinkedPlatformOrder {
+  id: string;
+  platform: LinkedOrderPlatform;
+  platformOrderId: string;
+  platformOrderStatus: string;
+  logisticsStatus: string;
+  logisticsCompany?: string;
+  trackingNumber?: string;
+  remark?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface OrderAssociation {
+  orderId: string;
+  internalRemark: string;
+  linkedOrders: LinkedPlatformOrder[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DeliveryCompanyOption {
+  deliveryId: string;
+  deliveryName: string;
+}
+
+export interface OrderRealAddressCache {
+  orderId: string;
+  address: OrderAddressInfo;
+  fetchedAt: number;
+  updatedAt: number;
+}
+
+export type LicensedFeature = 'orders' | 'listing' | 'violation';
+
+export interface LicenseActivationInput {
+  licenseKey: string;
+}
+
+export interface LicenseState {
+  enforcementEnabled: boolean;
+  status: 'inactive' | 'active' | 'expired' | 'invalid' | 'grace';
+  plan: 'none' | 'paid';
+  licenseKey?: string;
+  deviceId: string;
+  activatedAt?: number;
+  expiresAt?: number;
+  checkedAt?: number;
+  lastError?: string;
+}
+
 // Order types
 
 export enum OrderStatus {
@@ -87,6 +242,8 @@ export enum OrderStatus {
   CancelledByAfterSale = 200,
   CancelledByUser = 250,
 }
+
+export type OrderTimeScope = 'all' | '7d' | '30d' | '90d';
 
 export interface OrderSkuAttr {
   attr_key: string;
@@ -110,6 +267,88 @@ export interface OrderProductInfo {
   delivery_deadline?: number;
 }
 
+export interface OrderAftersaleListItem {
+  aftersale_order_id: string;
+  /**
+   * 微信订单详情接口里的这个 status 官方已标记废弃。
+   * 这里只保留原始字段形状，业务展示必须以售后详情接口返回的 status 为准。
+   */
+  status?: number;
+}
+
+export interface OrderAftersaleDetail {
+  aftersale_order_list?: OrderAftersaleListItem[];
+  on_aftersale_order_cnt?: number;
+}
+
+export type AfterSaleOrderStatus =
+  | 'USER_CANCELD'
+  | 'MERCHANT_PROCESSING'
+  | 'MERCHANT_REJECT_REFUND'
+  | 'MERCHANT_REJECT_RETURN'
+  | 'USER_WAIT_RETURN'
+  | 'RETURN_CLOSED'
+  | 'MERCHANT_WAIT_RECEIPT'
+  | 'MERCHANT_OVERDUE_REFUND'
+  | 'MERCHANT_REFUND_SUCCESS'
+  | 'MERCHANT_RETURN_SUCCESS'
+  | 'PLATFORM_REFUNDING'
+  | 'PLATFORM_REFUND_FAIL'
+  | 'USER_WAIT_CONFIRM'
+  | 'MERCHANT_REFUND_RETRY_FAIL'
+  | 'MERCHANT_FAIL'
+  | 'USER_WAIT_CONFIRM_UPDATE'
+  | 'USER_WAIT_HANDLE_MERCHANT_AFTER_SALE'
+  | 'WAIT_PACKAGE_INTERCEPT'
+  | 'MERCHANT_REJECT_EXCHANGE'
+  | 'MERCHANT_REJECT_RESHIP'
+  | 'USER_WAIT_RECEIPT'
+  | 'MERCHANT_EXCHANGE_SUCCESS'
+  | (string & {});
+
+export type AfterSaleOrderType = 'REFUND' | 'RETURN' | 'EXCHANGE' | (string & {});
+
+export interface AfterSaleProductInfo {
+  product_id?: string;
+  sku_id?: string;
+  count?: number;
+}
+
+export interface WxAfterSaleOrder {
+  after_sale_order_id: string;
+  status: AfterSaleOrderStatus;
+  order_id?: string;
+  product_info?: AfterSaleProductInfo;
+  type?: AfterSaleOrderType;
+  reason_text?: string;
+  create_time?: number;
+  update_time?: number;
+  complete_time?: number;
+}
+
+export interface OrderAftersaleSummaryItem {
+  afterSaleOrderId: string;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  type?: AfterSaleOrderType;
+  productId?: string;
+  skuId?: string;
+  count?: number;
+  updateTime?: number;
+  completeTime?: number;
+}
+
+export interface OrderAftersaleSummary {
+  hasAftersale: true;
+  status?: AfterSaleOrderStatus;
+  statusText: string;
+  onAftersaleOrderCount: number;
+  onAftersaleSkuCount: number;
+  finishAftersaleSkuCount: number;
+  items: OrderAftersaleSummaryItem[];
+  detailFetchFailed?: boolean;
+}
+
 export interface OrderPriceInfo {
   product_price: number;
   order_price: number;
@@ -117,6 +356,11 @@ export interface OrderPriceInfo {
   discounted_price: number;
   original_order_price: number;
   merchant_receieve_price: number;
+}
+
+export interface OrderSettleInfo {
+  commission_fee?: number;
+  predict_commission_fee?: number;
 }
 
 export interface OrderAddressInfo {
@@ -127,7 +371,18 @@ export interface OrderAddressInfo {
   county_name: string;
   detail_info: string;
   tel_number: string;
+  purchaser_tel_number?: string;
+  virtual_order_tel_number?: string;
+  national_code?: string;
   house_number: string;
+  virtual_number_info?: OrderVirtualNumberInfo;
+}
+
+export interface OrderVirtualNumberInfo {
+  virtual_number: string;
+  extension: string;
+  expiration: number;
+  number_state: number;
 }
 
 export interface OrderDeliveryProductInfo {
@@ -159,6 +414,7 @@ export interface OrderPayInfo {
 export interface OrderDetail {
   product_infos: OrderProductInfo[];
   price_info: OrderPriceInfo;
+  settle_info?: OrderSettleInfo;
   pay_info: OrderPayInfo;
   delivery_info: OrderDeliveryInfo;
   ext_info: OrderExtInfo;
@@ -170,6 +426,8 @@ export interface Order {
   create_time: number;
   update_time: number;
   order_detail: OrderDetail;
+  aftersale_detail?: OrderAftersaleDetail;
+  aftersale_summary?: OrderAftersaleSummary;
 }
 
 export interface OrderListParams {
@@ -193,6 +451,74 @@ export interface OrderSearchParams {
   status?: OrderStatus;
   next_key?: string;
   page_size?: number;
+}
+
+export type OrderScope =
+  | { type: 'all' }
+  | { type: 'account'; accountId: string };
+
+export type OrderSearchSource = 'local' | 'remote';
+
+export type StoredOrderSource = 'autoSync' | 'manualRefresh' | 'historyBackfill' | 'remoteSearch' | 'detailRefresh';
+
+export interface StoredOrderSnapshot {
+  accountId: string;
+  accountName: string;
+  orderId: string;
+  order: Order;
+  indexedText: string;
+  lastFetchedAt: number;
+  lastChangedAt: number;
+  source: StoredOrderSource;
+}
+
+export interface OrderListFilters {
+  status?: OrderStatus;
+  search?: OrderSearchParams | null;
+  timeScope?: OrderTimeScope;
+  pageSize?: number;
+  cursor?: string;
+  nowSeconds?: number;
+}
+
+export interface LocalOrderListResult {
+  orders: StoredOrderSnapshot[];
+  hasMore: boolean;
+  total: number;
+  nextCursor?: string;
+}
+
+export interface OrderSyncAccountState {
+  accountId: string;
+  accountName?: string;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+}
+
+export interface OrderSyncState {
+  scope: OrderScope;
+  running: boolean;
+  lastStartedAt?: number;
+  lastFinishedAt?: number;
+  lastSuccessAt?: number;
+  lastError?: string;
+  nextSyncAt?: number;
+  accountStates: OrderSyncAccountState[];
+}
+
+export interface OrderRefreshResult {
+  status: 'completed' | 'partial_failed' | 'failed';
+  scope: OrderScope;
+  refreshedAccountIds: string[];
+  failedAccounts: Array<{ accountId: string; accountName?: string; error: string }>;
+  fetchedOrderCount: number;
+  updatedOrderCount: number;
+  startedAt: number;
+  finishedAt: number;
 }
 
 export interface ViolationMatch {
@@ -232,6 +558,11 @@ export interface FullAccount {
   schedulers: ScheduledTask[];
   taskConfig: TaskConfig;
   logs: LogEntry[];
+  listingLogs: LogEntry[];
+  violationLogs: LogEntry[];
   violationWords: string[];
+  productSources: ProductSourceBinding[];
+  orderAssociations: OrderAssociation[];
+  realAddressCaches: OrderRealAddressCache[];
   createdAt: number;
 }

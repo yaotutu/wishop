@@ -800,7 +800,7 @@ const Listing: React.FC<ListingProps> = ({ accountId }) => {
           </div>
           <div>
             <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500 }}>任务配置</div>
-            <Space direction="vertical">
+            <Space vertical>
               <Checkbox
                 checked={formData.taskConfig.listUnreviewed}
                 onChange={e => setFormData(prev => ({

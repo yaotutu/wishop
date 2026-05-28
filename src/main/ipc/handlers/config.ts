@@ -13,7 +13,7 @@ export function registerConfigHandlers(): void {
     setConfig(accountId, config);
     removeClient(accountId);
     try {
-      const api = createWxShopClient(config);
+      const api = createWxShopClient(accountId);
       await api.getAccessToken();
       return { success: true };
     } catch (error: any) {

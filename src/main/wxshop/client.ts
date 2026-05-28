@@ -1,14 +1,14 @@
 import axios from 'axios';
-import type { Config, DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import type { DraftProduct, QuotaResult, Order, OrderListParams, OrderListResult, OrderSearchParams, OrderAddressInfo, WxAfterSaleOrder } from '../../shared/types';
+import { normalizeOrderListPageSize, normalizeOrderListTimeRange } from '../../shared/order-time-range';
+import { createExternalApiError, normalizeExternalRequestError } from '../errors/external-error';
+import { createDiagnosticLogger } from '../logging/diagnostic-logger';
+import { getConfig } from '../store';
+import { getAccessToken, isAccessTokenInvalidError, removeAccessToken } from './access-token-service';
 
-export type { Config, DraftProduct, QuotaResult };
+export type { DraftProduct, QuotaResult };
 
 const BASE_URL = 'https://api.weixin.qq.com';
-
-interface TokenData {
-  accessToken: string;
-  expiresAt: number;
-}
 
 export interface ProductListResult {
   productIds: string[];
@@ -21,56 +21,84 @@ export interface ListingResult {
   errmsg: string;
 }
 
-export function createWxShopClient(config: Config) {
-  let tokenCache: TokenData | null = null;
+export interface DeliveryCompany {
+  delivery_id: string;
+  delivery_name: string;
+}
 
-  async function getAccessToken(): Promise<string> {
-    const now = Date.now();
-    if (tokenCache && tokenCache.expiresAt > now + 60000) {
-      return tokenCache.accessToken;
-    }
+export interface SendOrderDeliveryPayload {
+  order_id: string;
+  delivery_list: Array<{
+    delivery_id: string;
+    waybill_id: string;
+    deliver_type: 1;
+    product_infos: Array<{
+      product_cnt: number;
+      product_id: string;
+      sku_id: string;
+    }>;
+  }>;
+}
 
-    if (!config.appId || !config.appSecret) {
-      throw new Error('[CREDENTIAL] 请先配置 AppID 和 AppSecret');
-    }
+function normalizeOrder(order: Order): Order {
+  return {
+    ...order,
+    order_id: String(order.order_id || '').trim(),
+  };
+}
 
-    const url = `${BASE_URL}/cgi-bin/token?grant_type=client_credential&appid=${config.appId}&secret=${config.appSecret}`;
-    const response = await axios.get(url);
-    const data = response.data;
+function normalizeOrderIds(orderIds: Array<string | number> = []): string[] {
+  return orderIds.map(orderId => String(orderId).trim()).filter(Boolean);
+}
 
-    if (data.errcode) {
-      if (data.errcode === 40001 || data.errcode === 42001) {
-        tokenCache = null;
-        const msg = data.errcode === 40001
-          ? 'AppSecret 不正确或已失效，请前往店铺管理更新配置'
-          : 'access_token 已过期，请前往店铺管理更新配置';
-        throw new Error(`[CREDENTIAL] ${msg}`);
+export function createWxShopClient(accountId: string) {
+  const logger = createDiagnosticLogger({ domain: 'orders', component: 'WxShopClient', accountId });
+
+  function throwWxApiError(path: string, stage: string, data: { errcode?: number; errmsg?: string }): never {
+    throw createExternalApiError({
+      service: '微信小店',
+      method: 'POST',
+      path,
+      stage,
+    }, Number(data.errcode), data.errmsg || `${stage}失败`);
+  }
+
+  async function request<T>(path: string, body: unknown, stage: string): Promise<T> {
+    const send = async (forceRefresh = false) => {
+      const token = await getAccessToken(accountId, forceRefresh);
+      const url = `${BASE_URL}${path}?access_token=${token}`;
+      let response;
+      try {
+        response = await axios.post(url, body);
+      } catch (error) {
+        throw normalizeExternalRequestError(error, {
+          service: '微信小店',
+          method: 'POST',
+          path,
+          stage,
+        });
       }
-      throw new Error(data.errmsg || `获取 token 失败: ${data.errcode}`);
-    }
-
-    tokenCache = {
-      accessToken: data.access_token,
-      expiresAt: now + (data.expires_in - 120) * 1000,
+      return response.data as T & { errcode?: number };
     };
 
-    return data.access_token;
+    const data = await send(false);
+    if (!isAccessTokenInvalidError(data.errcode)) return data;
+
+    await removeAccessToken(accountId);
+    return send(true);
   }
 
   async function getDraftProducts(pageSize = 30, nextKey = ''): Promise<ProductListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/list/get?access_token=${token}`;
-
-    const response = await axios.post(url, {
+    const path = '/channels/ec/product/list/get';
+    const stage = '获取草稿商品列表';
+    const data = await request<any>(path, {
       page_size: Math.min(pageSize, 30),
       next_key: nextKey || undefined,
       status: 0,
-    });
-
-    const data = response.data;
+    }, stage);
 
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `获取草稿列表失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
 
     const productIds = data.product_ids || [];
@@ -83,18 +111,15 @@ export function createWxShopClient(config: Config) {
   }
 
   async function getProductDetail(productId: string): Promise<DraftProduct> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/get?access_token=${token}`;
-
-    const response = await axios.post(url, {
+    const path = '/channels/ec/product/get';
+    const stage = '获取商品详情';
+    const data = await request<any>(path, {
       product_id: productId,
       data_type: 2,
-    });
-
-    const data = response.data;
+    }, stage);
 
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `获取商品详情失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
 
     const product = data.edit_product;
@@ -112,20 +137,16 @@ export function createWxShopClient(config: Config) {
   }
 
   async function listProduct(productId: string): Promise<ListingResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/listing?access_token=${token}`;
-    const response = await axios.post(url, { product_id: productId });
-    return response.data;
+    return request<ListingResult>('/channels/ec/product/listing', { product_id: productId }, '提交商品提审');
   }
 
   async function getAuditQuota(): Promise<QuotaResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/getauditquota?access_token=${token}`;
-    const response = await axios.post(url, {});
-    const data = response.data;
+    const path = '/channels/ec/product/getauditquota';
+    const stage = '获取商品提审配额';
+    const data = await request<any>(path, {}, stage);
 
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `获取配额失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
 
     if (!data.audit_quota) {
@@ -139,50 +160,86 @@ export function createWxShopClient(config: Config) {
   }
 
   async function deleteProduct(productId: string): Promise<ListingResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/product/delete?access_token=${token}`;
-    const response = await axios.post(url, { product_id: productId });
-    return response.data;
+    return request<ListingResult>('/channels/ec/product/delete', { product_id: productId }, '删除商品草稿');
   }
 
   async function getOrderList(params: OrderListParams = {}): Promise<OrderListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/list/get?access_token=${token}`;
+    const path = '/channels/ec/order/list/get';
+    const stage = '获取订单列表';
+    const createTimeRange = normalizeOrderListTimeRange(params.create_time_range);
+    const updateTimeRange = normalizeOrderListTimeRange(params.update_time_range);
     const body: Record<string, unknown> = {
-      page_size: params.page_size || 10,
+      page_size: normalizeOrderListPageSize(params.page_size),
+      next_key: params.next_key || '',
     };
-    if (params.next_key) body.next_key = params.next_key;
     if (params.status !== undefined) body.status = params.status;
-    if (params.create_time_range) body.create_time_range = params.create_time_range;
-    if (params.update_time_range) body.update_time_range = params.update_time_range;
+    if (params.create_time_range && !createTimeRange) {
+      logger.error('订单列表 create_time_range 无效', params.create_time_range);
+    }
+    if (params.update_time_range && !updateTimeRange) {
+      logger.error('订单列表 update_time_range 无效', params.update_time_range);
+    }
+    if (createTimeRange) body.create_time_range = createTimeRange;
+    if (updateTimeRange) body.update_time_range = updateTimeRange;
     if (params.order_id) body.order_id = params.order_id;
+    if (!createTimeRange && !updateTimeRange) {
+      logger.error('订单列表请求缺少有效时间范围，已拦截', {
+        page_size: body.page_size,
+        status: body.status,
+        hasNextKey: Boolean(body.next_key),
+        order_id: body.order_id ? '[present]' : '',
+        rawCreateTimeRange: params.create_time_range,
+        rawUpdateTimeRange: params.update_time_range,
+      });
+      throw new Error('订单列表请求缺少有效时间范围，已在本地拦截，未发送到微信接口');
+    }
+    logger.info('订单列表请求', {
+      page_size: body.page_size,
+      status: body.status ?? 'all',
+      hasNextKey: Boolean(body.next_key),
+      create_time_range: body.create_time_range,
+      update_time_range: body.update_time_range,
+    });
 
-    const response = await axios.post(url, body);
-    const data = response.data;
+    const data = await request<any>(path, body, stage);
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `获取订单列表失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
     return {
-      order_id_list: data.order_id_list || [],
+      order_id_list: normalizeOrderIds(data.order_id_list),
       next_key: data.next_key || '',
       has_more: !!data.has_more,
     };
   }
 
   async function getOrderDetail(orderId: string): Promise<Order> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/get?access_token=${token}`;
-    const response = await axios.post(url, { order_id: orderId });
-    const data = response.data;
+    const path = '/channels/ec/order/get';
+    const stage = '获取订单详情';
+    const data = await request<any>(path, { order_id: orderId }, stage);
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `获取订单详情失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
-    return data.order;
+    return normalizeOrder(data.order);
+  }
+
+  async function getAfterSaleOrder(afterSaleOrderId: string): Promise<WxAfterSaleOrder> {
+    const path = '/channels/ec/aftersale/getaftersaleorder';
+    const stage = '获取售后详情';
+    const data = await request<any>(path, {
+      after_sale_order_id: afterSaleOrderId,
+    }, stage);
+    if (data.errcode && data.errcode !== 0) {
+      throwWxApiError(path, stage, data);
+    }
+    if (!data.after_sale_order) {
+      throw new Error(`售后单 ${afterSaleOrderId} 详情为空`);
+    }
+    return data.after_sale_order;
   }
 
   async function searchOrders(params: OrderSearchParams): Promise<OrderListResult> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/search?access_token=${token}`;
+    const path = '/channels/ec/order/search';
+    const stage = '搜索订单';
     const searchCondition: Record<string, string> = {};
     const fieldMap: Record<string, string> = {
       order_id: 'order_id',
@@ -204,36 +261,54 @@ export function createWxShopClient(config: Config) {
     };
     if (params.status !== undefined) body.status = params.status;
 
-    const response = await axios.post(url, body);
-    const data = response.data;
+    const data = await request<any>(path, body, stage);
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `搜索订单失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
     return {
-      order_id_list: data.order_id_list || [],
+      order_id_list: normalizeOrderIds(data.order_id_list),
       next_key: data.next_key || '',
       has_more: !!data.has_more,
     };
   }
 
   async function decodeOrderSensitiveInfo(orderId: string): Promise<OrderAddressInfo> {
-    const token = await getAccessToken();
-    const url = `${BASE_URL}/channels/ec/order/sensitiveinfo/decode?access_token=${token}`;
-    const response = await axios.post(url, { order_id: orderId });
-    const data = response.data;
+    const path = '/channels/ec/order/sensitiveinfo/decode';
+    const stage = '解密订单收货信息';
+    const data = await request<any>(path, { order_id: orderId }, stage);
     if (data.errcode && data.errcode !== 0) {
-      throw new Error(data.errmsg || `解密收货信息失败: ${data.errcode}`);
+      throwWxApiError(path, stage, data);
     }
-    return data.address_info;
+    return {
+      ...data.address_info,
+      virtual_number_info: data.virtual_number_info,
+    };
   }
 
-  function clearTokenCache(): void {
-    tokenCache = null;
+  async function getDeliveryCompanyList(ewaybillOnly = false): Promise<DeliveryCompany[]> {
+    const path = '/channels/ec/order/deliverycompanylist/new/get';
+    const stage = '获取快递公司列表';
+    const data = await request<any>(path, { ewaybill_only: ewaybillOnly }, stage);
+    if (data.errcode && data.errcode !== 0) {
+      throwWxApiError(path, stage, data);
+    }
+    return data.company_list || [];
+  }
+
+  async function sendOrderDelivery(payload: SendOrderDeliveryPayload): Promise<void> {
+    const path = '/channels/ec/order/delivery/send';
+    const stage = '提交订单发货';
+    const data = await request<any>(path, payload, stage);
+    if (data.errcode && data.errcode !== 0) {
+      throwWxApiError(path, stage, data);
+    }
   }
 
   return {
-    config,
-    getAccessToken,
+    get config() {
+      return getConfig(accountId);
+    },
+    getAccessToken: () => getAccessToken(accountId),
     getDraftProducts,
     getProductDetail,
     listProduct,
@@ -241,9 +316,11 @@ export function createWxShopClient(config: Config) {
     deleteProduct,
     getOrderList,
     getOrderDetail,
+    getAfterSaleOrder,
     searchOrders,
     decodeOrderSensitiveInfo,
-    clearTokenCache,
+    getDeliveryCompanyList,
+    sendOrderDelivery,
   };
 }
 

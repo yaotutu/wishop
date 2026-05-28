@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Table, Tag, Button, Input, Select, Modal, Descriptions, Image, Spin, Empty, Alert, Flex, Typography, Space, message } from 'antd';
-import { ReloadOutlined, EyeOutlined } from '@ant-design/icons';
+import { CloudSyncOutlined, ReloadOutlined, EyeOutlined, LinkOutlined, ShopOutlined } from '@ant-design/icons';
 import { useOrders } from '../../hooks/useIpc';
-import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo } from '../../../shared/types';
+import type { Order, OrderStatus, OrderProductInfo, OrderSearchParams, OrderAddressInfo, OrderAssociation, ProductSourceBinding, ProductSourceItem } from '../../../shared/types';
 import { OrderStatus as OrderStatusEnum } from '../../../shared/types';
+import ProductSourceModal from './ProductSourceModal';
+import OrderAssociationModal from './OrderAssociationModal';
 
 const { Text } = Typography;
 
@@ -60,7 +62,7 @@ const canDecodeAddress = (status: OrderStatus): boolean =>
   [OrderStatusEnum.PendingShipment, OrderStatusEnum.PartialShipment, OrderStatusEnum.PendingReceipt].includes(status);
 
 const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
-  const { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
+  const { orders, hasMore, loading, refreshing, error, clearError, fetchOrders, refreshOrders, fetchOrderDetail, searchOrders, decodeAddress } = useOrders(accountId);
   const [activeStatus, setActiveStatus] = useState<OrderStatus | undefined>(undefined);
   const [searchType, setSearchType] = useState<OrderSearchParams['search_type']>('order_id');
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -69,8 +71,27 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [decodedAddresses, setDecodedAddresses] = useState<Record<string, OrderAddressInfo>>({});
   const [decodingOrderIds, setDecodingOrderIds] = useState<Set<string>>(new Set());
+  const [productSources, setProductSources] = useState<Record<string, ProductSourceItem[]>>({});
+  const [orderAssociations, setOrderAssociations] = useState<Record<string, OrderAssociation>>({});
+  const [sourceTarget, setSourceTarget] = useState<{ order: Order; product: OrderProductInfo } | null>(null);
+  const [associationTarget, setAssociationTarget] = useState<Order | null>(null);
+  const [metadataSaving, setMetadataSaving] = useState(false);
   const tableAreaRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(400);
+
+  const loadOrderMetadata = useCallback(async () => {
+    if (!accountId) return;
+    try {
+      const [sources, associations] = await Promise.all([
+        window.electronAPI.productSources.list(accountId) as Promise<ProductSourceBinding[]>,
+        window.electronAPI.orderAssociations.list(accountId) as Promise<OrderAssociation[]>,
+      ]);
+      setProductSources(Object.fromEntries(sources.map(item => [item.productId, item.sources])));
+      setOrderAssociations(Object.fromEntries(associations.map(item => [item.orderId, item])));
+    } catch (err: any) {
+      message.error(err?.message || '加载订单辅助信息失败');
+    }
+  }, [accountId]);
 
   useEffect(() => {
     const el = tableAreaRef.current;
@@ -89,8 +110,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     if (accountId) {
       setActiveStatus(undefined);
       fetchOrders();
+      void loadOrderMetadata();
     }
-  }, [accountId, fetchOrders]);
+  }, [accountId, fetchOrders, loadOrderMetadata]);
 
   const handleStatusChange = useCallback((val: string | number | null) => {
     if (val === null) return;
@@ -111,6 +133,20 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
   const handleLoadMore = useCallback(() => {
     fetchOrders(activeStatus, true);
   }, [activeStatus, fetchOrders]);
+
+  const handleSyncOrders = useCallback(async () => {
+    const result = await refreshOrders(activeStatus);
+    if (!result) return;
+    if (result.status === 'failed') {
+      message.error(result.failedAccounts.map(item => `${item.accountName || item.accountId}: ${item.error}`).join('; ') || '同步订单失败');
+      return;
+    }
+    if (result.failedAccounts.length > 0) {
+      message.warning(`同步完成，更新 ${result.updatedOrderCount} 条，${result.failedAccounts.length} 个账号失败`);
+      return;
+    }
+    message.success(`同步完成，获取 ${result.fetchedOrderCount} 条，更新 ${result.updatedOrderCount} 条`);
+  }, [activeStatus, refreshOrders]);
 
   const handleViewDetail = useCallback(async (orderId: string) => {
     setDetailModalOpen(true);
@@ -136,6 +172,36 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     const text = `${addr.user_name} ${addr.tel_number}\n${addr.province_name || ''}${addr.city_name || ''}${addr.county_name || ''}${addr.detail_info || ''}`;
     navigator.clipboard.writeText(text).then(() => message.success('地址已复制')).catch(() => {});
   }, []);
+
+  const handleSaveSources = useCallback(async (sources: ProductSourceItem[]) => {
+    if (!accountId || !sourceTarget) return;
+    setMetadataSaving(true);
+    try {
+      const binding = await window.electronAPI.productSources.set(accountId, sourceTarget.product.product_id, sources) as ProductSourceBinding;
+      setProductSources(prev => ({ ...prev, [binding.productId]: binding.sources }));
+      setSourceTarget(null);
+      message.success('货源已保存');
+    } catch (err: any) {
+      message.error(err?.message || '保存货源失败');
+    } finally {
+      setMetadataSaving(false);
+    }
+  }, [accountId, sourceTarget]);
+
+  const handleSaveAssociation = useCallback(async (input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>) => {
+    if (!accountId || !associationTarget) return;
+    setMetadataSaving(true);
+    try {
+      const association = await window.electronAPI.orderAssociations.set(accountId, associationTarget.order_id, input) as OrderAssociation;
+      setOrderAssociations(prev => ({ ...prev, [association.orderId]: association }));
+      setAssociationTarget(null);
+      message.success('订单关联已保存');
+    } catch (err: any) {
+      message.error(err?.message || '保存订单关联失败');
+    } finally {
+      setMetadataSaving(false);
+    }
+  }, [accountId, associationTarget]);
 
   const columns = [
     {
@@ -302,12 +368,27 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
     {
       title: '操作',
       key: 'action',
-      width: 70,
-      render: (_: unknown, record: Order) => (
-        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
-          详情
-        </Button>
-      ),
+      width: 180,
+      render: (_: unknown, record: Order) => {
+        const product = firstProduct(record);
+        const sources = product ? productSources[product.product_id] || [] : [];
+        const association = orderAssociations[record.order_id];
+        return (
+          <Space size={2} wrap>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.order_id)}>
+              详情
+            </Button>
+            {product && (
+              <Button type="link" size="small" icon={<ShopOutlined />} onClick={() => setSourceTarget({ order: record, product })}>
+                货源{sources.length > 0 ? `(${sources.length})` : ''}
+              </Button>
+            )}
+            <Button type="link" size="small" icon={<LinkOutlined />} onClick={() => setAssociationTarget(record)}>
+              关联{association?.linkedOrders?.length ? `(${association.linkedOrders.length})` : ''}
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -333,8 +414,9 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
               enterButton="搜索"
             />
           </Space.Compact>
-          <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
-          <Text type="secondary" style={{ fontSize: 12 }}>仅显示近7天订单</Text>
+          <Button size="small" type="primary" icon={<CloudSyncOutlined />} loading={refreshing} onClick={handleSyncOrders}>同步订单</Button>
+          <Button size="small" icon={<ReloadOutlined />} loading={loading && !refreshing} onClick={() => fetchOrders(activeStatus)}>刷新</Button>
+          <Text type="secondary" style={{ fontSize: 12 }}>缓存 {orders.length} 条</Text>
         </Flex>
         {error && (
           <Alert type="error" title={error} showIcon closable={{ onClose: clearError }} />
@@ -498,6 +580,22 @@ const Orders: React.FC<{ accountId: string }> = ({ accountId }) => {
           <Empty description="获取订单详情失败" />
         )}
       </Modal>
+      <ProductSourceModal
+        open={!!sourceTarget}
+        product={sourceTarget?.product || null}
+        sources={sourceTarget ? productSources[sourceTarget.product.product_id] || [] : []}
+        saving={metadataSaving}
+        onCancel={() => setSourceTarget(null)}
+        onSave={handleSaveSources}
+      />
+      <OrderAssociationModal
+        open={!!associationTarget}
+        order={associationTarget}
+        association={associationTarget ? orderAssociations[associationTarget.order_id] : undefined}
+        saving={metadataSaving}
+        onCancel={() => setAssociationTarget(null)}
+        onSave={handleSaveAssociation}
+      />
     </div>
   );
 };

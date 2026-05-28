@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo } from '../../shared/types';
+import type { Order, OrderStatus, OrderSearchParams, OrderAddressInfo, OrderRefreshResult } from '../../shared/types';
 import { useIpcFetch } from './useIpcFetch';
 import { isCredentialError } from '../../shared/errors';
 import { useCredentialError } from '../contexts/CredentialErrorContext';
@@ -7,6 +7,7 @@ import { useCredentialError } from '../contexts/CredentialErrorContext';
 export function useOrders(accountId: string) {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { reportCredentialError } = useCredentialError();
 
   // 用 ref 传递 status 给 fetcher，避免 fetcher 频繁变化导致 fetch 重建
@@ -82,6 +83,28 @@ export function useOrders(accountId: string) {
     }
   }, [accountId, setOrders, reportCredentialError]);
 
+  const refreshOrders = useCallback(async (status?: OrderStatus): Promise<OrderRefreshResult | null> => {
+    if (!accountId) return null;
+    const fetchId = ++fetchIdRef.current;
+    setError(null);
+    setRefreshing(true);
+    try {
+      const result = await window.electronAPI.orders.refresh({ type: 'account', accountId });
+      const listResult = await window.electronAPI.orders.list(accountId, status) as { orders: Order[]; hasMore: boolean };
+      if (fetchIdRef.current !== fetchId) return result;
+      setOrders(listResult.orders);
+      setHasMore(listResult.hasMore);
+      return result;
+    } catch (err: any) {
+      if (fetchIdRef.current !== fetchId) return null;
+      if (isCredentialError(err)) reportCredentialError(err);
+      setError(err.message || '同步订单失败');
+      return null;
+    } finally {
+      setRefreshing(false);
+    }
+  }, [accountId, setOrders, reportCredentialError]);
+
   const decodeAddress = useCallback(async (orderId: string): Promise<OrderAddressInfo | null> => {
     try {
       return await window.electronAPI.orders.decodeAddress(accountId, orderId);
@@ -94,5 +117,5 @@ export function useOrders(accountId: string) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { orders, hasMore, loading, error, clearError, fetchOrders, fetchOrderDetail, searchOrders, decodeAddress };
+  return { orders, hasMore, loading, refreshing, error, clearError, fetchOrders, refreshOrders, fetchOrderDetail, searchOrders, decodeAddress };
 }

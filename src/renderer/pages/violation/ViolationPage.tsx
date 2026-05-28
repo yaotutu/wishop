@@ -380,7 +380,7 @@ const ViolationPage: React.FC<ViolationProps> = ({ accountId }) => {
             { key: 'logs', tab: <span>执行日志{logs.length > 0 ? ` (${logs.length})` : ''}</span> },
           ]}
           activeTabKey={activeResultTab}
-          onTabChange={setActiveResultTab}
+          onTabChange={(key) => setActiveResultTab(key as 'result' | 'logs')}
         >
           {/* 扫描结果 tab */}
           {activeResultTab === 'result' && (

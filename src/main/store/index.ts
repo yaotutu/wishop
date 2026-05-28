@@ -1,7 +1,10 @@
 import Store from 'electron-store';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule } from '../../shared/types';
+import type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, FullAccount, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule, StoredOrderSnapshot, OrderSyncAccountState, ScheduledJob, ProductSourceBinding, OrderAssociation, OrderRealAddressCache, LicenseState } from '../../shared/types';
+import type { ActivityLogEntry } from '../../shared/activity-log';
+import type { NotificationEntry, NotificationPreference } from '../../shared/notification';
+import type { AppSettings } from '../../shared/settings';
 import { createLogger } from '../utils/logger';
 
 export type { Config, ScheduledTask, LogEntry, TaskConfig, AddLogFn, ViolationMatch, ViolationScanResult, BlacklistRule, StatusRule };
@@ -16,6 +19,15 @@ export function createScopedAddLog(accountId: string): AddLogFn {
 export interface StoreSchema {
   accounts: FullAccount[];
   activeAccountId: string;
+  wxAccessTokens?: Record<string, StoredWxAccessToken>;
+  orderSnapshots?: StoredOrderSnapshot[];
+  orderSyncStates?: Record<string, OrderSyncAccountState>;
+  scheduledJobs?: ScheduledJob[];
+  activityLogs?: ActivityLogEntry[];
+  notifications?: NotificationEntry[];
+  notificationPreference?: NotificationPreference;
+  appSettings?: AppSettings;
+  licenseState?: LicenseState;
   config?: Config;
   scheduler?: { enabled: boolean; cronExpression: string; dailyLimit: number; lastRunDate: string; todayListedCount: number };
   taskConfig?: TaskConfig;
@@ -23,6 +35,14 @@ export interface StoreSchema {
   skipKeywords?: string[];
   blacklistRules?: BlacklistRule[];
   statusRules?: StatusRule[];
+}
+
+export interface StoredWxAccessToken {
+  accountId: string;
+  appId: string;
+  accessToken: string;
+  expiresAt: number;
+  updatedAt: number;
 }
 
 const store = new Store<StoreSchema>({
@@ -71,6 +91,26 @@ function migrateIfNeeded(): void {
         account.violationWords = [];
         changed = true;
       }
+      if (!('listingLogs' in account)) {
+        account.listingLogs = account.logs || [];
+        changed = true;
+      }
+      if (!('violationLogs' in account)) {
+        account.violationLogs = [];
+        changed = true;
+      }
+      if (!('productSources' in account)) {
+        account.productSources = [];
+        changed = true;
+      }
+      if (!('orderAssociations' in account)) {
+        account.orderAssociations = [];
+        changed = true;
+      }
+      if (!('realAddressCaches' in account)) {
+        account.realAddressCaches = [];
+        changed = true;
+      }
     }
     if (changed) store.set('accounts', rawAccounts as FullAccount[]);
     return;
@@ -99,6 +139,11 @@ function migrateIfNeeded(): void {
     taskConfig: oldTaskConfig,
     violationWords: [],
     logs: store.get('logs') || [],
+    listingLogs: store.get('logs') || [],
+    violationLogs: [],
+    productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
     createdAt: Date.now(),
   };
 
@@ -134,6 +179,11 @@ export function addAccount(name: string, config: Config): FullAccount {
     taskConfig: { listUnreviewed: true, listUnreviewedQuantity: 2, autoDeleteFailed: true },
     violationWords: [],
     logs: [],
+    listingLogs: [],
+    violationLogs: [],
+    productSources: [],
+    orderAssociations: [],
+    realAddressCaches: [],
     createdAt: Date.now(),
   };
   accounts.push(account);
@@ -370,6 +420,112 @@ export function setStatusRules(rules: StatusRule[]): void {
 
 export function getDefaultStatusRules(): StatusRule[] {
   return DEFAULT_STATUS_RULES;
+}
+
+// --- Desktop key-value helpers for migrated services ---
+
+export function readStore(): StoreSchema {
+  return store.store as StoreSchema;
+}
+
+export function writeStore(patch: Partial<StoreSchema>): void {
+  for (const [key, value] of Object.entries(patch)) {
+    store.set(key as keyof StoreSchema, value as never);
+  }
+}
+
+// --- Per-account product sources ---
+
+export function getProductSources(accountId: string): ProductSourceBinding[] {
+  return getAccount(accountId)?.productSources || [];
+}
+
+export function setProductSources(accountId: string, productId: string, sources: ProductSourceBinding['sources']): ProductSourceBinding {
+  const now = Date.now();
+  const binding: ProductSourceBinding = { productId, sources };
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return binding;
+  accounts[idx].productSources = accounts[idx].productSources || [];
+  const existingIdx = accounts[idx].productSources.findIndex(item => item.productId === productId);
+  const normalized = {
+    productId,
+    sources: sources.map(item => ({
+      ...item,
+      createdAt: item.createdAt || now,
+      updatedAt: now,
+    })),
+  };
+  if (existingIdx >= 0) accounts[idx].productSources[existingIdx] = normalized;
+  else accounts[idx].productSources.push(normalized);
+  store.set('accounts', accounts);
+  return normalized;
+}
+
+export function removeProductSource(accountId: string, productId: string, sourceId: string): ProductSourceBinding {
+  const current = getProductSources(accountId).find(item => item.productId === productId);
+  return setProductSources(accountId, productId, (current?.sources || []).filter(item => item.id !== sourceId));
+}
+
+// --- Per-account order associations ---
+
+export function getOrderAssociations(accountId: string): OrderAssociation[] {
+  return getAccount(accountId)?.orderAssociations || [];
+}
+
+export function setOrderAssociation(
+  accountId: string,
+  orderId: string,
+  input: Pick<OrderAssociation, 'internalRemark' | 'linkedOrders'>,
+): OrderAssociation {
+  const now = Date.now();
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  const previous = idx >= 0 ? accounts[idx].orderAssociations?.find(item => item.orderId === orderId) : undefined;
+  const association: OrderAssociation = {
+    orderId,
+    internalRemark: input.internalRemark,
+    linkedOrders: input.linkedOrders,
+    createdAt: previous?.createdAt || now,
+    updatedAt: now,
+  };
+  if (idx === -1) return association;
+  accounts[idx].orderAssociations = accounts[idx].orderAssociations || [];
+  const existingIdx = accounts[idx].orderAssociations.findIndex(item => item.orderId === orderId);
+  if (existingIdx >= 0) accounts[idx].orderAssociations[existingIdx] = association;
+  else accounts[idx].orderAssociations.push(association);
+  store.set('accounts', accounts);
+  return association;
+}
+
+// --- Per-account real address cache ---
+
+export function getRealAddressCaches(accountId: string): OrderRealAddressCache[] {
+  return getAccount(accountId)?.realAddressCaches || [];
+}
+
+export function getRealAddressCache(accountId: string, orderId: string): OrderRealAddressCache | null {
+  return getRealAddressCaches(accountId).find(item => item.orderId === orderId) || null;
+}
+
+export function setRealAddressCache(accountId: string, orderId: string, address: OrderRealAddressCache['address']): OrderRealAddressCache {
+  const now = Date.now();
+  const previous = getRealAddressCache(accountId, orderId);
+  const cache: OrderRealAddressCache = {
+    orderId,
+    address,
+    fetchedAt: previous?.fetchedAt || now,
+    updatedAt: now,
+  };
+  const accounts = store.get('accounts');
+  const idx = accounts.findIndex(a => a.id === accountId);
+  if (idx === -1) return cache;
+  accounts[idx].realAddressCaches = accounts[idx].realAddressCaches || [];
+  const existingIdx = accounts[idx].realAddressCaches.findIndex(item => item.orderId === orderId);
+  if (existingIdx >= 0) accounts[idx].realAddressCaches[existingIdx] = cache;
+  else accounts[idx].realAddressCaches.push(cache);
+  store.set('accounts', accounts);
+  return cache;
 }
 
 export default store;

@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Layout as AntLayout, Tabs, Empty } from 'antd';
+import { Layout as AntLayout, Tabs, Empty, Space } from 'antd';
 import StoreManagement from '../pages/store-management/StoreManagement';
 import SettingsPage from '../pages/settings/SettingsPage';
 import OrdersPage from '../pages/orders/OrdersPage';
 import ListingPage from '../pages/common-functions/ListingPage';
 import ViolationPage from '../pages/violation/ViolationPage';
+import ScheduledJobsPage from '../pages/scheduled-jobs/ScheduledJobsPage';
+import NotificationCenter from './NotificationCenter';
+import ActivityLogDrawer from './ActivityLogDrawer';
 import { useAccounts } from '../hooks/useAccounts';
 import type { Account } from '../../shared/types';
 import { CredentialErrorProvider } from '../contexts/CredentialErrorContext';
 
 const { Header, Sider, Content } = AntLayout;
 
-type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'violation' | 'settings';
+type ModuleType = 'orders' | 'storeManagement' | 'commonFunctions' | 'scheduledJobs' | 'violation' | 'settings';
 
 const ACCOUNT_MODULES = new Set<string>(['orders', 'commonFunctions', 'violation']);
 
@@ -19,6 +22,7 @@ const MODULES: { key: ModuleType; label: string }[] = [
   { key: 'orders', label: '订单管理' },
   { key: 'storeManagement', label: '店铺管理' },
   { key: 'commonFunctions', label: '商品提审' },
+  { key: 'scheduledJobs', label: '调度任务' },
   { key: 'violation', label: '违规词检测' },
   { key: 'settings', label: '设置' },
 ];
@@ -135,6 +139,10 @@ const Layout: React.FC = () => {
           >
             v{version}
           </span>
+          <Space size={8} style={{ marginLeft: 12 }}>
+            <NotificationCenter />
+            <ActivityLogDrawer />
+          </Space>
         </Header>
         <AntLayout>
           {/* 账户侧边栏 — 仅账户模块显示 */}
@@ -158,6 +166,9 @@ const Layout: React.FC = () => {
               />
             </div>
             {/* 设置 */}
+            <div style={{ flex: 1, minHeight: 0, display: activeModule === 'scheduledJobs' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <ScheduledJobsPage accounts={accounts} />
+            </div>
             <div style={{ flex: 1, minHeight: 0, display: activeModule === 'settings' ? 'flex' : 'none', flexDirection: 'column' }}>
               <SettingsPage defaultTab={settingsTab as 'about' | 'product' | 'contact'} />
             </div>

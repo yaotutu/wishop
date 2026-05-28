@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Menu, Button, Progress, Space, Descriptions, Typography, Image } from 'antd';
+import { Alert, Card, Menu, Button, Progress, Space, Descriptions, Typography, Image, Input, Tag, message } from 'antd';
 import {
   CheckCircleOutlined,
   CloudDownloadOutlined,
@@ -7,13 +7,15 @@ import {
   AppstoreOutlined,
   CustomerServiceOutlined,
   ReloadOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
+import type { LicenseState } from '../../../shared/types';
 import wechatQrcode from '../../assets/wechat-qrcode.png';
 import douyinQrcode from '../../assets/douyin-qrcode.png';
 
 const { Title, Paragraph, Text } = Typography;
 
-type SettingsTab = 'about' | 'product' | 'contact';
+type SettingsTab = 'about' | 'product' | 'license' | 'contact';
 type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error';
 
 interface SettingsPageProps {
@@ -23,6 +25,7 @@ interface SettingsPageProps {
 const MENU_ITEMS = [
   { key: 'about', label: '关于/更新', icon: <InfoCircleOutlined /> },
   { key: 'product', label: '产品介绍', icon: <AppstoreOutlined /> },
+  { key: 'license', label: '授权状态', icon: <SafetyCertificateOutlined /> },
   { key: 'contact', label: '联系我们', icon: <CustomerServiceOutlined /> },
 ];
 
@@ -107,7 +110,7 @@ const AboutPanel: React.FC = () => {
       </Descriptions>
       <Space style={{ marginTop: 16 }}>
         {(updateStatus === 'idle' || updateStatus === 'not-available' || updateStatus === 'error') && (
-          <Button type="primary" onClick={handleCheck} disabled={updateStatus === 'checking'}>
+          <Button type="primary" onClick={handleCheck}>
             检查更新
           </Button>
         )}
@@ -142,6 +145,83 @@ const ProductPanel: React.FC = () => {
             <Text type="secondary">{f.desc}</Text>
           </div>
         ))}
+      </div>
+    </Card>
+  );
+};
+
+const LicensePanel: React.FC = () => {
+  const [license, setLicense] = useState<LicenseState | null>(null);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const loadLicense = async () => {
+    const state = await window.electronAPI.license.get();
+    setLicense(state);
+    setLicenseKey(state.licenseKey || '');
+  };
+
+  useEffect(() => {
+    void loadLicense();
+  }, []);
+
+  const activate = async () => {
+    setLoading(true);
+    try {
+      const state = await window.electronAPI.license.activate({ licenseKey });
+      setLicense(state);
+      message.success('授权信息已保存');
+    } catch (error: any) {
+      message.error(error?.message || '保存授权失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clear = async () => {
+    setLoading(true);
+    try {
+      const state = await window.electronAPI.license.clear();
+      setLicense(state);
+      setLicenseKey('');
+      message.success('授权信息已清除');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card title="授权状态">
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 16 }}
+        title="授权拦截暂未启用"
+        description="桌面端先保留授权状态和激活码结构，不会阻断订单、提审或违规检测流程。后续接入服务端后只需要打开统一授权开关。"
+      />
+      <Descriptions column={1} style={{ maxWidth: 640 }}>
+        <Descriptions.Item label="授权开关">
+          <Tag color={license?.enforcementEnabled ? 'red' : 'default'}>
+            {license?.enforcementEnabled ? '已启用' : '未启用'}
+          </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="授权状态">{license?.status || '-'}</Descriptions.Item>
+        <Descriptions.Item label="套餐">{license?.plan || '-'}</Descriptions.Item>
+        <Descriptions.Item label="设备 ID">{license?.deviceId || '-'}</Descriptions.Item>
+        <Descriptions.Item label="最近检查">
+          {license?.checkedAt ? new Date(license.checkedAt).toLocaleString('zh-CN') : '-'}
+        </Descriptions.Item>
+      </Descriptions>
+      <Space.Compact style={{ marginTop: 16, width: '100%', maxWidth: 560 }}>
+        <Input.Password
+          placeholder="输入激活码"
+          value={licenseKey}
+          onChange={(event) => setLicenseKey(event.target.value)}
+        />
+        <Button type="primary" loading={loading} onClick={activate}>保存</Button>
+      </Space.Compact>
+      <div style={{ marginTop: 12 }}>
+        <Button danger loading={loading} onClick={clear}>清除授权信息</Button>
       </div>
     </Card>
   );
@@ -200,6 +280,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ defaultTab = 'about' }) => 
       <div style={{ flex: 1, padding: 24, overflow: 'auto' }}>
         {activeTab === 'about' && <AboutPanel />}
         {activeTab === 'product' && <ProductPanel />}
+        {activeTab === 'license' && <LicensePanel />}
         {activeTab === 'contact' && <ContactPanel />}
       </div>
     </div>
